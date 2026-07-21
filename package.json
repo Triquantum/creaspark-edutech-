@@ -1,0 +1,20 @@
+{
+  "name": "creaspark-educore",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CREASPARK EDUCORE™ — Multi-tenant School ERP & LMS platform",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "db:migrate": "pnpm --filter @educore/database migrate:dev",
+    "db:seed": "pnpm --filter @educore/database seed",
+    "db:studio": "pnpm --filter @educore/database studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.0"
+  }
+}

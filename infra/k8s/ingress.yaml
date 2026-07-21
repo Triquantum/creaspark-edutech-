@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: educore
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-body-size: 25m
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["*.educore.in", "educore.in"]
+      secretName: educore-wildcard-tls
+  rules:
+    - host: "*.educore.in"
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: educore-api, port: { number: 4000 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: educore-web, port: { number: 3000 } } }

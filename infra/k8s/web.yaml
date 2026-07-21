@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: educore-web, labels: { app: educore-web } }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: educore-web } }
+  template:
+    metadata: { labels: { app: educore-web } }
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/creaspark/educore-web:latest
+          ports: [{ containerPort: 3000 }]
+          env:
+            - { name: NEXT_PUBLIC_API_URL, value: "https://api.educore.in" }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          readinessProbe:
+            httpGet: { path: /, port: 3000 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: educore-web }
+spec:
+  selector: { app: educore-web }
+  ports: [{ port: 3000, targetPort: 3000 }]

@@ -1,0 +1,398 @@
+// CREASPARK EDUCORE™ — Core multi-tenant schema
+// Tenancy model: shared database, row-level isolation via tenantId
+// on every tenant-scoped table, enforced by API middleware + Prisma
+// client extension (see apps/api/src/common/tenancy).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ────────────────────────── Tenancy ──────────────────────────
+
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String                       // e.g. "Sunrise Education Trust"
+  slug        String   @unique             // subdomain: sunrise.educore.in
+  logoUrl     String?
+  brandColor  String   @default("#2F6FB8")
+  plan        Plan     @default(STARTER)
+  status      TenantStatus @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schools     School[]
+  users       User[]
+}
+
+enum Plan { STARTER GROWTH ENTERPRISE }
+enum TenantStatus { ACTIVE SUSPENDED TRIAL }
+
+model School {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  code      String                          // school short-code, unique per tenant
+  board     Board    @default(CBSE)
+  address   String?
+  city      String?
+  state     String?
+  phone     String?
+  email     String?
+  academicYearStart Int @default(4)         // April (Indian AY)
+  createdAt DateTime @default(now())
+
+  classes       Class[]
+  students      Student[]
+  staff         StaffProfile[]
+  feePlans      FeePlan[]
+  announcements Announcement[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+enum Board { CBSE ICSE IB IGCSE STATE OTHER }
+
+// ────────────────────────── Identity & RBAC ──────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  email        String
+  phone        String?
+  passwordHash String
+  fullName     String
+  avatarUrl    String?
+  role         Role     @default(STUDENT)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+  staffProfile  StaffProfile?
+  studentLink   Student?       @relation("StudentUser")
+  guardianLinks Guardian[]
+  auditLogs     AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+}
+
+// Coarse roles; fine-grained permissions live in Permission/RolePermission
+enum Role {
+  SUPER_ADMIN
+  ORG_ADMIN
+  SCHOOL_ADMIN
+  PRINCIPAL
+  VICE_PRINCIPAL
+  COORDINATOR
+  TEACHER
+  TRAINER
+  ACCOUNTANT
+  RECEPTION
+  LIBRARIAN
+  TRANSPORT_MANAGER
+  HR
+  INVENTORY_MANAGER
+  HOSTEL_WARDEN
+  SECURITY
+  PARENT
+  STUDENT
+  GUEST
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String                          // e.g. "student.create"
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+// ────────────────────────── Academics ──────────────────────────
+
+model Class {
+  id       String @id @default(cuid())
+  tenantId String
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id])
+  name     String                           // "Grade 6"
+  sections Section[]
+
+  @@unique([schoolId, name])
+  @@index([tenantId])
+}
+
+model Section {
+  id       String @id @default(cuid())
+  tenantId String
+  classId  String
+  class    Class  @relation(fields: [classId], references: [id])
+  name     String                           // "A"
+  classTeacherId String?
+
+  students    Student[]
+  attendance  AttendanceRecord[]
+
+  @@unique([classId, name])
+  @@index([tenantId])
+}
+
+model Department {
+  id       String @id @default(cuid())
+  tenantId String
+  schoolId String
+  name     String
+
+  @@unique([schoolId, name])
+  @@index([tenantId])
+}
+
+model Subject {
+  id       String @id @default(cuid())
+  tenantId String
+  schoolIdRef String?
+  name     String
+  code     String?
+  exams    ExamSubject[]
+
+  @@index([tenantId])
+}
+
+// ────────────────────────── People ──────────────────────────
+
+model Student {
+  id             String   @id @default(cuid())
+  tenantId       String
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id])
+  sectionId      String?
+  section        Section? @relation(fields: [sectionId], references: [id])
+  userId         String?  @unique
+  user           User?    @relation("StudentUser", fields: [userId], references: [id])
+  admissionNo    String
+  rollNo         String?
+  firstName      String
+  lastName       String
+  gender         Gender?
+  dob            DateTime?
+  bloodGroup     String?
+  house          String?
+  photoUrl       String?
+  admissionDate  DateTime @default(now())
+  status         StudentStatus @default(ACTIVE)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  guardians   Guardian[]
+  attendance  AttendanceRecord[]
+  invoices    FeeInvoice[]
+  examResults ExamResult[]
+
+  @@unique([schoolId, admissionNo])
+  @@index([tenantId, schoolId, sectionId])
+  @@index([tenantId, lastName, firstName])
+}
+
+enum Gender { MALE FEMALE OTHER }
+enum StudentStatus { ACTIVE TRANSFERRED ALUMNI SUSPENDED }
+
+model Guardian {
+  id        String  @id @default(cuid())
+  tenantId  String
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id])
+  relation  String                          // Father / Mother / Guardian
+  fullName  String
+  phone     String
+  email     String?
+  isPrimary Boolean @default(false)
+
+  @@index([tenantId, studentId])
+}
+
+model StaffProfile {
+  id         String  @id @default(cuid())
+  tenantId   String
+  schoolId   String
+  school     School  @relation(fields: [schoolId], references: [id])
+  userId     String  @unique
+  user       User    @relation(fields: [userId], references: [id])
+  employeeNo String
+  designation String
+  department String?
+  joinDate   DateTime @default(now())
+
+  @@unique([schoolId, employeeNo])
+  @@index([tenantId])
+}
+
+// ────────────────────────── Attendance ──────────────────────────
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  tenantId  String
+  sectionId String
+  section   Section  @relation(fields: [sectionId], references: [id])
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  date      DateTime @db.Date
+  status    AttendanceStatus
+  method    AttendanceMethod @default(MANUAL)
+  markedBy  String?                          // userId of teacher
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, date])
+  @@index([tenantId, sectionId, date])
+}
+
+enum AttendanceStatus { PRESENT ABSENT LATE HALF_DAY LEAVE }
+enum AttendanceMethod { MANUAL RFID QR BIOMETRIC FACE GPS }
+
+// ────────────────────────── Fees ──────────────────────────
+
+model FeePlan {
+  id        String  @id @default(cuid())
+  tenantId  String
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id])
+  name      String                          // "Grade 6 Annual Plan 2026-27"
+  academicYear String                       // "2026-27"
+  items     FeePlanItem[]
+  invoices  FeeInvoice[]
+
+  @@index([tenantId, schoolId])
+}
+
+model FeePlanItem {
+  id        String  @id @default(cuid())
+  planId    String
+  plan      FeePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  label     String                          // Tuition / Transport / Lab
+  amount    Decimal @db.Decimal(12, 2)
+  dueMonth  Int?                            // 1–12, null = one-time
+}
+
+model FeeInvoice {
+  id          String   @id @default(cuid())
+  tenantId    String
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id])
+  planId      String?
+  plan        FeePlan? @relation(fields: [planId], references: [id])
+  invoiceNo   String
+  amount      Decimal  @db.Decimal(12, 2)
+  discount    Decimal  @default(0) @db.Decimal(12, 2)
+  fine        Decimal  @default(0) @db.Decimal(12, 2)
+  dueDate     DateTime
+  status      InvoiceStatus @default(PENDING)
+  payments    Payment[]
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, invoiceNo])
+  @@index([tenantId, studentId, status])
+}
+
+enum InvoiceStatus { PENDING PARTIAL PAID OVERDUE CANCELLED }
+
+model Payment {
+  id         String   @id @default(cuid())
+  tenantId   String
+  invoiceId  String
+  invoice    FeeInvoice @relation(fields: [invoiceId], references: [id])
+  amount     Decimal  @db.Decimal(12, 2)
+  mode       PaymentMode
+  reference  String?                        // gateway txn id / cheque no
+  paidAt     DateTime @default(now())
+  receivedBy String?                        // userId
+
+  @@index([tenantId, invoiceId])
+}
+
+enum PaymentMode { CASH UPI CARD NETBANKING CHEQUE RAZORPAY STRIPE }
+
+// ────────────────────────── Exams ──────────────────────────
+
+model Exam {
+  id        String @id @default(cuid())
+  tenantId  String
+  schoolIdRef String
+  name      String                          // "Term 1 2026"
+  startDate DateTime?
+  endDate   DateTime?
+  subjects  ExamSubject[]
+
+  @@index([tenantId, schoolIdRef])
+}
+
+model ExamSubject {
+  id        String  @id @default(cuid())
+  examId    String
+  exam      Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id])
+  maxMarks  Int     @default(100)
+  results   ExamResult[]
+}
+
+model ExamResult {
+  id            String      @id @default(cuid())
+  tenantId      String
+  examSubjectId String
+  examSubject   ExamSubject @relation(fields: [examSubjectId], references: [id])
+  studentId     String
+  student       Student     @relation(fields: [studentId], references: [id])
+  marks         Decimal     @db.Decimal(6, 2)
+  grade         String?
+  remark        String?
+
+  @@unique([examSubjectId, studentId])
+  @@index([tenantId, studentId])
+}
+
+// ────────────────────────── Communication ──────────────────────────
+
+model Announcement {
+  id        String   @id @default(cuid())
+  tenantId  String
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id])
+  title     String
+  body      String
+  audience  Role[]                           // which roles see it
+  pinned    Boolean  @default(false)
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, schoolId, createdAt])
+}

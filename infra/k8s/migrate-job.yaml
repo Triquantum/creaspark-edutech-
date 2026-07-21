@@ -1,0 +1,13 @@
+apiVersion: batch/v1
+kind: Job
+metadata: { name: educore-migrate }
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/creaspark/educore-api:latest
+          command: ["npx", "prisma", "migrate", "deploy", "--schema=node_modules/@educore/database/prisma/schema.prisma"]
+          envFrom: [{ secretRef: { name: educore-secrets } }]

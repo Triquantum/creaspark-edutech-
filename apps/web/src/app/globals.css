@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Sora";
+  --font-body: "Inter";
+  --bg: #f5f8fc;
+  --card: #ffffff;
+  --text: #334155;
+}
+.dark {
+  --bg: #0f172a;
+  --card: #16213a;
+  --text: #cbd5e1;
+}
+
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Glass card used on login */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+.dark .glass {
+  background: rgba(22, 33, 58, 0.72);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Ambient floating orbs (login / landing hero) */
+@keyframes drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(30px, -40px) scale(1.08); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.orb { position: absolute; border-radius: 9999px; filter: blur(60px); opacity: 0.5; animation: drift 14s ease-in-out infinite; }

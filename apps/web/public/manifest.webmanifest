@@ -1,0 +1,13 @@
+{
+  "name": "Creaspark",
+  "short_name": "Creaspark",
+  "description": "Creaspark — Empowering Future Ready Education. School ERP & LMS.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#F5F8FC",
+  "theme_color": "#2F6FB8",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

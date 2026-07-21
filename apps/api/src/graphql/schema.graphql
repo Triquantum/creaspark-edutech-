@@ -1,0 +1,35 @@
+"""
+CREASPARK EDUCORE — GraphQL read gateway (companion to REST /api/v1).
+Served at /graphql; same JWT + X-Tenant context as REST. Mutations stay
+in REST where transactional guarantees (payments, attendance) matter.
+"""
+type Query {
+  me: User!
+  students(q: String, sectionId: ID, first: Int = 25, after: String): StudentConnection!
+  student(id: ID!): Student
+  attendanceSummary(sectionId: ID!, from: Date!, to: Date!): [StatusCount!]!
+  feeSummary: FeeSummary!
+  announcements: [Announcement!]!
+}
+
+type User { id: ID!  fullName: String!  email: String!  role: Role! }
+type Student {
+  id: ID!  admissionNo: String!  firstName: String!  lastName: String!
+  section: Section  guardians: [Guardian!]!  invoices: [FeeInvoice!]!
+}
+type Section { id: ID!  name: String!  class: Class! }
+type Class { id: ID!  name: String! }
+type Guardian { fullName: String!  relation: String!  phone: String!  isPrimary: Boolean! }
+type FeeInvoice { id: ID!  invoiceNo: String!  amount: Decimal!  status: InvoiceStatus!  dueDate: Date! }
+type StatusCount { status: AttendanceStatus!  count: Int! }
+type FeeSummary { collected: Decimal!  outstanding: Decimal! }
+type Announcement { id: ID!  title: String!  body: String!  pinned: Boolean!  createdAt: DateTime! }
+
+type StudentConnection { edges: [Student!]!  nextCursor: String }
+
+enum Role { SUPER_ADMIN ORG_ADMIN SCHOOL_ADMIN PRINCIPAL VICE_PRINCIPAL COORDINATOR TEACHER TRAINER ACCOUNTANT RECEPTION LIBRARIAN TRANSPORT_MANAGER HR INVENTORY_MANAGER HOSTEL_WARDEN SECURITY PARENT STUDENT GUEST }
+enum InvoiceStatus { PENDING PARTIAL PAID OVERDUE CANCELLED }
+enum AttendanceStatus { PRESENT ABSENT LATE HALF_DAY LEAVE }
+scalar Date
+scalar DateTime
+scalar Decimal
