@@ -25,4 +25,10 @@ export class AttendanceController {
   summary(@Query("sectionId") sectionId: string, @Query("from") from: string, @Query("to") to: string) {
     return this.attendance.sectionSummary(sectionId, from, to);
   }
+
+  @Get("today")
+  @Roles(Role.TEACHER, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR)
+  today() {
+    return this.attendance.todaySummary();
+  }
 }

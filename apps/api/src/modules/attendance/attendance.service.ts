@@ -37,4 +37,18 @@ export class AttendanceService {
     });
     return grouped.map((g) => ({ status: g.status, count: g._count }));
   }
+
+  /** Tenant-wide attendance for today, across every section — used by the dashboard. */
+  async todaySummary() {
+    const { tenantId } = currentTenant();
+    const today = new Date(new Date().toISOString().slice(0, 10));
+    const grouped = await this.prisma.attendanceRecord.groupBy({
+      by: ["status"],
+      where: { tenantId, date: today },
+      _count: true,
+    });
+    const total = grouped.reduce((sum, g) => sum + g._count, 0);
+    const present = grouped.find((g) => g.status === "PRESENT")?._count ?? 0;
+    return { total, present, percentage: total > 0 ? Math.round((present / total) * 100) : null };
+  }
 }

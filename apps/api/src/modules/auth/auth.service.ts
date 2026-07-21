@@ -2,11 +2,20 @@ import { BadRequestException, ConflictException, Injectable } from "@nestjs/comm
 import { Role } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
+import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { RegisterSchoolDto } from "./dto/login.dto";
 
 @Injectable()
 export class AuthService {
   constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
+
+  async me(user: AuthUser) {
+    const [dbUser, tenant] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: user.id }, select: { fullName: true } }),
+      this.prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } }),
+    ]);
+    return { ...user, fullName: dbUser?.fullName, tenantName: tenant?.name };
+  }
 
   /**
    * Self-service tenant signup: creates an isolated Tenant + School, then

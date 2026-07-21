@@ -22,15 +22,18 @@ export class StudentsService {
         ],
       }),
     };
-    const items = await this.prisma.student.findMany({
-      where,
-      take: PAGE + 1,
-      ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
-      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-      include: { section: { include: { class: true } }, guardians: { where: { isPrimary: true } } },
-    });
+    const [items, total] = await Promise.all([
+      this.prisma.student.findMany({
+        where,
+        take: PAGE + 1,
+        ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
+        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        include: { section: { include: { class: true } }, guardians: { where: { isPrimary: true } } },
+      }),
+      this.prisma.student.count({ where: { tenantId } }),
+    ]);
     const nextCursor = items.length > PAGE ? items.pop()!.id : null;
-    return { items, nextCursor };
+    return { items, nextCursor, total };
   }
 
   async get(id: string) {
