@@ -29,10 +29,25 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+interface AuthSession {
+  accessToken: string; refreshToken: string; user: { fullName: string; role: string };
+}
+
 export const auth = {
   login: (email: string, password: string) =>
-    api<{ accessToken: string; refreshToken: string; user: { fullName: string; role: string } }>(
-      "/auth/login",
-      { method: "POST", body: JSON.stringify({ email, password }) },
+    api<AuthSession>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+
+  registerSchool: (body: {
+    schoolName: string; schoolCode: string; adminFullName: string; adminEmail: string; adminPassword: string;
+  }) =>
+    api<AuthSession & { tenant: { id: string; slug: string; name: string } }>(
+      "/auth/register-school",
+      { method: "POST", body: JSON.stringify(body) },
     ),
+
+  requestReset: (email: string) =>
+    api<{ message: string; resetToken?: string }>("/auth/request-reset", { method: "POST", body: JSON.stringify({ email }) }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
 };

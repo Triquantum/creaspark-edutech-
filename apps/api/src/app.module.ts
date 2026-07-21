@@ -10,6 +10,8 @@ import { FeesModule } from "./modules/fees/fees.module";
 import { AnnouncementsModule } from "./modules/announcements/announcements.module";
 import { AcademicModule } from "./modules/academic/academic.module";
 import { TeachersModule } from "./modules/teachers/teachers.module";
+import { UsersModule } from "./modules/users/users.module";
+import { RecordsModule } from "./modules/records/records.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -25,6 +27,8 @@ import { HealthController } from "./modules/health.controller";
     AnnouncementsModule,
     AcademicModule,
     TeachersModule,
+    UsersModule,
+    RecordsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

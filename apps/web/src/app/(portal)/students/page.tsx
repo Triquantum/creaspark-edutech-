@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -175,9 +176,18 @@ function ViewStudent({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 export default function StudentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudentsPageInner />
+    </Suspense>
+  );
+}
+
+function StudentsPageInner() {
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [sections, setSections] = useState<SectionOpt[]>([]);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: StudentRow } | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);

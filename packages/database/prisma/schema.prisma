@@ -29,8 +29,17 @@ model Tenant {
   users       User[]
 }
 
-enum Plan { STARTER GROWTH ENTERPRISE }
-enum TenantStatus { ACTIVE SUSPENDED TRIAL }
+enum Plan {
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
 
 model School {
   id        String   @id @default(cuid())
@@ -57,7 +66,14 @@ model School {
   @@index([tenantId])
 }
 
-enum Board { CBSE ICSE IB IGCSE STATE OTHER }
+enum Board {
+  CBSE
+  ICSE
+  IB
+  IGCSE
+  STATE
+  OTHER
+}
 
 // ────────────────────────── Identity & RBAC ──────────────────────────
 
@@ -77,6 +93,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   refreshTokens RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   staffProfile  StaffProfile?
   studentLink   Student?       @relation("StudentUser")
   guardianLinks Guardian[]
@@ -117,6 +134,18 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
@@ -221,8 +250,18 @@ model Student {
   @@index([tenantId, lastName, firstName])
 }
 
-enum Gender { MALE FEMALE OTHER }
-enum StudentStatus { ACTIVE TRANSFERRED ALUMNI SUSPENDED }
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum StudentStatus {
+  ACTIVE
+  TRANSFERRED
+  ALUMNI
+  SUSPENDED
+}
 
 model Guardian {
   id        String  @id @default(cuid())
@@ -276,8 +315,22 @@ model AttendanceRecord {
   @@index([tenantId, sectionId, date])
 }
 
-enum AttendanceStatus { PRESENT ABSENT LATE HALF_DAY LEAVE }
-enum AttendanceMethod { MANUAL RFID QR BIOMETRIC FACE GPS }
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+}
+
+enum AttendanceMethod {
+  MANUAL
+  RFID
+  QR
+  BIOMETRIC
+  FACE
+  GPS
+}
 
 // ────────────────────────── Fees ──────────────────────────
 
@@ -323,7 +376,13 @@ model FeeInvoice {
   @@index([tenantId, studentId, status])
 }
 
-enum InvoiceStatus { PENDING PARTIAL PAID OVERDUE CANCELLED }
+enum InvoiceStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
 
 model Payment {
   id         String   @id @default(cuid())
@@ -339,7 +398,15 @@ model Payment {
   @@index([tenantId, invoiceId])
 }
 
-enum PaymentMode { CASH UPI CARD NETBANKING CHEQUE RAZORPAY STRIPE }
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  NETBANKING
+  CHEQUE
+  RAZORPAY
+  STRIPE
+}
 
 // ────────────────────────── Exams ──────────────────────────
 
@@ -378,6 +445,23 @@ model ExamResult {
 
   @@unique([examSubjectId, studentId])
   @@index([tenantId, studentId])
+}
+
+// ────────────────────────── Generic module records ──────────────────────────
+// Backs every sidebar leaf that doesn't have a dedicated model yet (Library,
+// Transport, Inventory, ...). Once a module graduates to a real schema, its
+// records can be migrated out and this table drops out of use for that key.
+
+model GenericRecord {
+  id        String   @id @default(cuid())
+  tenantId  String
+  module    String                          // e.g. "library-books", "transport-routes"
+  data      Json
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, module])
 }
 
 // ────────────────────────── Communication ──────────────────────────

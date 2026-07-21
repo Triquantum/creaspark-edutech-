@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, type LucideIcon } from "lucide-react";
 import {
   Home, User, Users, UserCheck, Shield, Book, CalendarCheck2, ClipboardList, Percent,
   MessageSquare, Image as ImageIcon, Mail, Monitor, Wallet, Box, Package, LogOut, Heart,
@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { NAV, NavGroup } from "@/lib/nav-config";
 
-const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
+const ICONS: Record<string, LucideIcon> = {
   home: Home, user: User, users: Users, "user-check": UserCheck, shield: Shield, book: Book,
   "calendar-check": CalendarCheck2, clipboard: ClipboardList, percent: Percent, message: MessageSquare,
   image: ImageIcon, mail: Mail, monitor: Monitor, wallet: Wallet, box: Box, package: Package,

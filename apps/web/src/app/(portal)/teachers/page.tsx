@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -116,9 +117,18 @@ function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
 }
 
 export default function TeachersPage() {
+  return (
+    <Suspense fallback={null}>
+      <TeachersPageInner />
+    </Suspense>
+  );
+}
+
+function TeachersPageInner() {
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState<TeacherRow[]>([]);
   const [schools, setSchools] = useState<SchoolOpt[]>([]);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: TeacherRow } | null>(null);
   const [viewing, setViewing] = useState<TeacherRow | null>(null);
