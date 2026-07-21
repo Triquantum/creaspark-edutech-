@@ -77,13 +77,14 @@ enum Board {
 
 // ────────────────────────── Identity & RBAC ──────────────────────────
 
+// id is the Supabase auth.users UUID — this row mirrors identity for
+// relational queries; Supabase Auth is the source of truth for credentials.
 model User {
-  id           String   @id @default(cuid())
+  id           String   @id
   tenantId     String
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  email        String
+  email        String   @unique
   phone        String?
-  passwordHash String
   fullName     String
   avatarUrl    String?
   role         Role     @default(STUDENT)
@@ -92,14 +93,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  refreshTokens RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
   staffProfile  StaffProfile?
   studentLink   Student?       @relation("StudentUser")
   guardianLinks Guardian[]
   auditLogs     AuditLog[]
 
-  @@unique([tenantId, email])
   @@index([tenantId, role])
 }
 
@@ -124,30 +122,6 @@ enum Role {
   PARENT
   STUDENT
   GUEST
-}
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([userId])
 }
 
 model AuditLog {

@@ -1,18 +1,14 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@educore/database";
-import { randomBytes, scryptSync } from "crypto";
+import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
+import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { CreateTeacherDto, UpdateTeacherDto } from "./teachers.dto";
-
-function hashPassword(pw: string) {
-  const salt = randomBytes(16).toString("hex");
-  return `${salt}:${scryptSync(pw, salt, 64).toString("hex")}`;
-}
 
 @Injectable()
 export class TeachersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
 
   async list(q?: string) {
     const { tenantId } = currentTenant();
@@ -37,25 +33,23 @@ export class TeachersService {
     });
   }
 
-  /** Creates the login user and staff profile atomically; returns a temp password once if none was supplied. */
+  /** Creates the login and staff profile; returns a temp password once if none was supplied. */
   async create(dto: CreateTeacherDto, actorId: string) {
     const { tenantId } = currentTenant();
 
     const [emailTaken, empTaken] = await Promise.all([
-      this.prisma.user.findUnique({ where: { tenantId_email: { tenantId, email: dto.email } } }),
+      this.prisma.user.findUnique({ where: { email: dto.email } }),
       this.prisma.staffProfile.findUnique({ where: { schoolId_employeeNo: { schoolId: dto.schoolId, employeeNo: dto.employeeNo } } }),
     ]);
     if (emailTaken) throw new ConflictException(`A user with email ${dto.email} already exists`);
     if (empTaken) throw new ConflictException(`Employee no. ${dto.employeeNo} already exists in this school`);
 
     const tempPassword = dto.password ?? `Cs@${randomBytes(4).toString("hex")}`;
+    const authUser = await this.supabaseAdmin.createUser(dto.email, tempPassword, { role: Role.TEACHER, tenantId });
 
     const user = await this.prisma.$transaction(async (tx) => {
       const u = await tx.user.create({
-        data: {
-          tenantId, email: dto.email, phone: dto.phone, fullName: dto.fullName,
-          role: Role.TEACHER, passwordHash: hashPassword(tempPassword),
-        },
+        data: { id: authUser.id, tenantId, email: dto.email, phone: dto.phone, fullName: dto.fullName, role: Role.TEACHER },
       });
       await tx.staffProfile.create({
         data: {
@@ -91,14 +85,18 @@ export class TeachersService {
     const user = await this.findTeacher(id);
 
     if (dto.email && dto.email !== user.email) {
-      const clash = await this.prisma.user.findUnique({ where: { tenantId_email: { tenantId, email: dto.email } } });
+      const clash = await this.prisma.user.findUnique({ where: { email: dto.email } });
       if (clash) throw new ConflictException(`A user with email ${dto.email} already exists`);
+      await this.supabaseAdmin.updateEmail(id, dto.email);
     }
     if (dto.employeeNo && user.staffProfile && dto.employeeNo !== user.staffProfile.employeeNo) {
       const clash = await this.prisma.staffProfile.findUnique({
         where: { schoolId_employeeNo: { schoolId: user.staffProfile.schoolId, employeeNo: dto.employeeNo } },
       });
       if (clash) throw new ConflictException(`Employee no. ${dto.employeeNo} already exists in this school`);
+    }
+    if (dto.isActive !== undefined) {
+      await this.supabaseAdmin.setBanned(id, !dto.isActive);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -132,9 +130,11 @@ export class TeachersService {
   async remove(id: string, actorId: string) {
     const { tenantId } = currentTenant();
     const user = await this.findTeacher(id);
+
+    await this.supabaseAdmin.deleteUser(id);
     await this.prisma.$transaction([
       this.prisma.staffProfile.deleteMany({ where: { userId: id } }),
-      this.prisma.user.delete({ where: { id } }), // refresh tokens cascade
+      this.prisma.user.delete({ where: { id } }),
       this.prisma.auditLog.create({
         data: {
           tenantId, userId: actorId, action: "teacher.delete", entity: "User", entityId: id,

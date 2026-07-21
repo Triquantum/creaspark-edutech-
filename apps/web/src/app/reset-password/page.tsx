@@ -1,26 +1,36 @@
 "use client";
-import { use, useState } from "react";
-import { auth } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 
 const fieldCls = "h-11 w-full rounded-xl border border-slate-200 bg-white/80 px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/25";
 
-export default function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
-  const { token } = use(searchParams);
+export default function ResetPasswordPage() {
+  const [ready, setReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    // Supabase's SDK exchanges the recovery link's URL fragment for a
+    // session automatically; PASSWORD_RECOVERY fires once that's done.
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setReady(true);
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => { if (session) setReady(true); });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     if (password !== confirm) { setError("Passwords don't match"); return; }
-    if (!token) { setError("Missing or invalid reset link"); return; }
     setLoading(true);
     try {
-      await auth.resetPassword(token, password);
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw new Error(updateError.message);
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset password");
@@ -36,8 +46,10 @@ export default function ResetPasswordPage({ searchParams }: { searchParams: Prom
           <h1 className="font-display text-2xl font-semibold text-night dark:text-white">Set a new password</h1>
         </div>
 
-        {!token && !done && (
-          <p className="text-sm text-danger">This reset link is missing its token. Request a new one from the sign-in page.</p>
+        {!ready && !done && (
+          <p className="text-sm text-slate-500">
+            Waiting for the reset link to verify… if this doesn&apos;t update, request a new link from the sign-in page.
+          </p>
         )}
 
         {done ? (
@@ -46,7 +58,7 @@ export default function ResetPasswordPage({ searchParams }: { searchParams: Prom
             <a href="/login"><Button className="w-full">Go to sign in</Button></a>
           </div>
         ) : (
-          token && (
+          ready && (
             <form onSubmit={submit} className="space-y-4">
               <div>
                 <label htmlFor="rp-pw" className="mb-1.5 block text-sm font-medium">New password</label>

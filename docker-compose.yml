@@ -1,19 +1,6 @@
 version: "3.9"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: educore
-      POSTGRES_PASSWORD: educore
-      POSTGRES_DB: educore
-    ports: ["5432:5432"]
-    volumes: [pgdata:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U educore"]
-      interval: 5s
-      retries: 10
-
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
@@ -25,13 +12,13 @@ services:
   api:
     build: { context: ., dockerfile: apps/api/Dockerfile }
     environment:
-      DATABASE_URL: postgresql://educore:educore@postgres:5432/educore?schema=public
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to your Supabase Postgres connection string}
       REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: dev-secret
-      JWT_REFRESH_SECRET: dev-refresh-secret
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL}
     ports: ["4000:4000"]
     depends_on:
-      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: sh -c "npx prisma migrate deploy --schema=node_modules/@educore/database/prisma/schema.prisma && node dist/main.js"
 
@@ -41,6 +28,3 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:4000
     ports: ["3000:3000"]
     depends_on: [api]
-
-volumes:
-  pgdata:

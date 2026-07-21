@@ -1,13 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { randomBytes, scryptSync } from "crypto";
+import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
+import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { CreateUserDto, QueryUsersDto, UpdateUserDto } from "./users.dto";
-
-function hashPassword(pw: string) {
-  const salt = randomBytes(16).toString("hex");
-  return `${salt}:${scryptSync(pw, salt, 64).toString("hex")}`;
-}
 
 const USER_LIST_SELECT = {
   id: true, fullName: true, email: true, phone: true, role: true,
@@ -16,7 +12,7 @@ const USER_LIST_SELECT = {
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
 
   async list(query: QueryUsersDto) {
     const { tenantId } = currentTenant();
@@ -42,17 +38,15 @@ export class UsersService {
     const { tenantId } = currentTenant();
     const email = dto.email.trim().toLowerCase();
 
-    const taken = await this.prisma.user.findUnique({ where: { tenantId_email: { tenantId, email } } });
+    const taken = await this.prisma.user.findUnique({ where: { email } });
     if (taken) throw new ConflictException(`A user with email ${email} already exists`);
 
     const tempPassword = dto.password ?? `Cs@${randomBytes(4).toString("hex")}`;
+    const authUser = await this.supabaseAdmin.createUser(email, tempPassword, { role: dto.role, tenantId });
 
     const user = await this.prisma.$transaction(async (tx) => {
       const u = await tx.user.create({
-        data: {
-          tenantId, email, fullName: dto.fullName.trim(), phone: dto.phone,
-          role: dto.role, passwordHash: hashPassword(tempPassword),
-        },
+        data: { id: authUser.id, tenantId, email, fullName: dto.fullName.trim(), phone: dto.phone, role: dto.role },
         select: USER_LIST_SELECT,
       });
       await tx.auditLog.create({
@@ -79,6 +73,13 @@ export class UsersService {
     const { tenantId } = currentTenant();
     await this.findUser(id);
 
+    if (dto.role !== undefined) {
+      await this.supabaseAdmin.updateAppMetadata(id, { role: dto.role });
+    }
+    if (dto.isActive !== undefined) {
+      await this.supabaseAdmin.setBanned(id, !dto.isActive);
+    }
+
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id },
@@ -96,19 +97,16 @@ export class UsersService {
     return this.findUser(id);
   }
 
-  /** Generates a fresh temp password so a locked-out user can sign in again. */
+  /** Sets a fresh temp password via Supabase so a locked-out user can sign in again. */
   async resetPassword(id: string, actorId: string) {
     const { tenantId } = currentTenant();
     await this.findUser(id);
     const tempPassword = `Cs@${randomBytes(4).toString("hex")}`;
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id }, data: { passwordHash: hashPassword(tempPassword) } }),
-      this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } }),
-      this.prisma.auditLog.create({
-        data: { tenantId, userId: actorId, action: "user.reset-password", entity: "User", entityId: id },
-      }),
-    ]);
+    await this.supabaseAdmin.setPassword(id, tempPassword);
+    await this.prisma.auditLog.create({
+      data: { tenantId, userId: actorId, action: "user.reset-password", entity: "User", entityId: id },
+    });
     return { tempPassword };
   }
 
@@ -117,8 +115,9 @@ export class UsersService {
     const { tenantId } = currentTenant();
     const user = await this.findUser(id);
 
+    await this.supabaseAdmin.deleteUser(id);
     await this.prisma.$transaction([
-      this.prisma.user.delete({ where: { id } }), // refresh + reset tokens cascade
+      this.prisma.user.delete({ where: { id } }),
       this.prisma.auditLog.create({
         data: {
           tenantId, userId: actorId, action: "user.delete", entity: "User", entityId: id,

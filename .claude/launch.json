@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@educore/web", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@educore/api", "dev"],
+      "port": 4000
+    },
+    {
+      "name": "database-studio",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@educore/database", "studio"],
+      "port": 5555
+    }
+  ]
+}

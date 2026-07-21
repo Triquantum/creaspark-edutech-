@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 
 const fieldCls = "h-11 w-full rounded-xl border border-slate-200 bg-white/80 px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/25";
@@ -12,10 +13,7 @@ function label(htmlFor: string, text: string) {
 
 function SignInForm() {
   const router = useRouter();
-  const [schoolCode, setSchoolCode] = useState(
-    typeof window !== "undefined" ? localStorage.getItem("tenant") ?? "demo" : "demo",
-  );
-  const [email, setEmail] = useState("admin@demo.educore.in");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,10 +23,8 @@ function SignInForm() {
     setError(null);
     setLoading(true);
     try {
-      localStorage.setItem("tenant", schoolCode.trim().toLowerCase());
-      const res = await auth.login(email, password);
-      localStorage.setItem("accessToken", res.accessToken);
-      localStorage.setItem("refreshToken", res.refreshToken);
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) throw new Error(signInError.message);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
@@ -39,10 +35,6 @@ function SignInForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div>
-        {label("school-code", "School code")}
-        <input id="school-code" required value={schoolCode} onChange={(e) => setSchoolCode(e.target.value)} className={fieldCls} />
-      </div>
       <div>
         {label("email", "Email")}
         <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={fieldCls} />
@@ -63,8 +55,6 @@ function SignInForm() {
         </label>
         <a href="/forgot-password" className="text-primary hover:underline">Forgot password?</a>
       </div>
-
-      <p className="text-center text-xs text-slate-400">Demo login: school code &quot;demo&quot;, admin@demo.educore.in / Educore@123</p>
     </form>
   );
 }
@@ -86,16 +76,17 @@ function RegisterSchoolForm() {
     }
     setLoading(true);
     try {
-      const res = await auth.registerSchool({
+      const email = form.adminEmail.trim().toLowerCase();
+      await auth.registerSchool({
         schoolName: form.schoolName.trim(),
         schoolCode: form.schoolCode.trim(),
         adminFullName: form.adminFullName.trim(),
-        adminEmail: form.adminEmail.trim().toLowerCase(),
+        adminEmail: email,
         adminPassword: form.adminPassword,
       });
-      localStorage.setItem("tenant", res.tenant.slug);
-      localStorage.setItem("accessToken", res.accessToken);
-      localStorage.setItem("refreshToken", res.refreshToken);
+      // Creating the admin identity doesn't issue a session — sign in now with the same credentials.
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: form.adminPassword });
+      if (signInError) throw new Error(signInError.message);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not register school");
@@ -114,7 +105,7 @@ function RegisterSchoolForm() {
         {label("sc-code", "School code")}
         <input id="sc-code" required value={form.schoolCode} onChange={set("schoolCode")}
           placeholder="e.g. sunrise-public" className={fieldCls} />
-        <p className="mt-1 text-xs text-slate-400">Letters, numbers and dashes — this is what you and your staff will sign in with.</p>
+        <p className="mt-1 text-xs text-slate-400">Letters, numbers and dashes — identifies your school internally.</p>
       </div>
       <div>
         {label("sc-admin-name", "Your name")}

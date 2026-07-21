@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { PrismaModule } from "./prisma/prisma.module";
+import { SupabaseModule } from "./common/supabase/supabase.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { StudentsModule } from "./modules/students/students.module";
 import { AttendanceModule } from "./modules/attendance/attendance.module";
@@ -20,6 +21,7 @@ import { HealthController } from "./modules/health.controller";
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
+    SupabaseModule,
     AuthModule,
     StudentsModule,
     AttendanceModule,

@@ -3,6 +3,7 @@ import { Bell, LogOut, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 interface SearchHit { id: string; label: string; sub: string; type: "Student" | "Teacher"; href: string }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
@@ -65,9 +66,8 @@ export function Topbar() {
   const avatarRef = useClickOutside(() => setAvatarOpen(false));
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
 
-  function signOut() {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
+  async function signOut() {
+    await supabase.auth.signOut();
     router.push("/login");
   }
 
