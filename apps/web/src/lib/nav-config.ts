@@ -45,7 +45,7 @@ export const NAV: NavGroup[] = [
     ]) },
   { label: "Online Admission", icon: "file-plus", href: "/online-admission" },
   { label: "Visitor Information", icon: "id-card", href: "/visitors" },
-  { label: "Administrator", icon: "settings-2", children: kids("admin", ["Academic Year", "Certificate Template", "Admins", "Role", "Permission", "Backup", "Update"]) },
+  { label: "Administrator", icon: "settings-2", children: kids("admin", ["Register School", "Academic Year", "Certificate Template", "Admins", "Role", "Permission", "Backup", "Update"]) },
   { label: "Frontend", icon: "globe", children: kids("frontend", ["Pages", "Menu", "Photo Gallery", "News"]) },
   { label: "Settings", icon: "settings", children: kids("settings", ["General Settings", "Payment Settings", "SMS Settings", "Email Settings", "Language", "Theme"]) },
 ];
