@@ -10,8 +10,10 @@ import { SupabaseJwtVerifier } from "../supabase/verify-jwt";
  *      client-suppliable. Closes a cross-tenant leak where a spoofed
  *      X-Tenant header could otherwise point a valid session at
  *      another school's data.
- *   2. Falls back to X-Tenant header / subdomain, used only when no
+ *   2. Falls back to an explicit X-Tenant header, used only when no
  *      session exists yet (e.g. registering a brand new school).
+ *      Deliberately NOT inferred from the request hostname — this API
+ *      is served from one shared domain, not per-tenant subdomains.
  */
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
@@ -30,9 +32,7 @@ export class TenantMiddleware implements NestMiddleware {
       return tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug }, next);
     }
 
-    const headerSlug = (req.headers["x-tenant"] as string | undefined)?.toLowerCase();
-    const hostSlug = req.hostname?.split(".")[0];
-    const slug = headerSlug || (hostSlug && hostSlug !== "localhost" && hostSlug !== "www" ? hostSlug : undefined);
+    const slug = (req.headers["x-tenant"] as string | undefined)?.toLowerCase();
     if (!slug) return next(); // public/unscoped route
 
     const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true, slug: true, status: true } });
