@@ -34,4 +34,16 @@ export class FeesController {
   summary() {
     return this.fees.collectionsSummary();
   }
+
+  /** No @Roles: service scopes to the caller's own/child student, or the requested one for staff. */
+  @Get("my")
+  my(@CurrentUser() user: AuthUser, @Query("studentId") studentId?: string) {
+    return this.fees.myFees(user, studentId);
+  }
+
+  @Get("payments")
+  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.PRINCIPAL)
+  payments(@Query("studentId") studentId?: string) {
+    return this.fees.paymentHistory(studentId);
+  }
 }

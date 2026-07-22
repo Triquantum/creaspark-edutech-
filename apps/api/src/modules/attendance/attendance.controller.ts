@@ -31,4 +31,14 @@ export class AttendanceController {
   today() {
     return this.attendance.todaySummary();
   }
+
+  /** No @Roles: service scopes to the caller's own/child student, or the requested one for staff. */
+  @Get("student/monthly")
+  studentMonthly(
+    @CurrentUser() user: AuthUser,
+    @Query("studentId") studentId?: string,
+    @Query("month") month?: string,
+  ) {
+    return this.attendance.studentMonthly(user, studentId, month);
+  }
 }

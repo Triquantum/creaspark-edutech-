@@ -14,6 +14,9 @@ import { TeachersModule } from "./modules/teachers/teachers.module";
 import { ParentsModule } from "./modules/parents/parents.module";
 import { UsersModule } from "./modules/users/users.module";
 import { RecordsModule } from "./modules/records/records.module";
+import { EventsModule } from "./modules/events/events.module";
+import { MessagesModule } from "./modules/messages/messages.module";
+import { ExamsModule } from "./modules/exams/exams.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -33,6 +36,9 @@ import { HealthController } from "./modules/health.controller";
     ParentsModule,
     UsersModule,
     RecordsModule,
+    EventsModule,
+    MessagesModule,
+    ExamsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

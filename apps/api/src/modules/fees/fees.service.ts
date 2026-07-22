@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PaymentMode, Prisma } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
+import { AuthUser } from "../../common/decorators/current-user.decorator";
+import { resolveViewableStudentId } from "../../common/access/student-access";
 
 @Injectable()
 export class FeesService {
@@ -52,5 +54,43 @@ export class FeesService {
       this.prisma.feeInvoice.aggregate({ where: { tenantId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } }, _sum: { amount: true } }),
     ]);
     return { collected: collected._sum.amount ?? 0, outstanding: pending._sum.amount ?? 0 };
+  }
+
+  /** Self-service: a student/parent's own invoices with fee-plan breakdown + payment history. */
+  async myFees(user: AuthUser, requestedStudentId?: string) {
+    const studentId = await resolveViewableStudentId(this.prisma, user, requestedStudentId);
+    const { tenantId } = currentTenant();
+
+    const invoices = await this.prisma.feeInvoice.findMany({
+      where: { tenantId, studentId },
+      include: { plan: { include: { items: true } }, payments: { orderBy: { paidAt: "desc" } } },
+      orderBy: { dueDate: "desc" },
+    });
+
+    const outstanding = invoices.filter((i) => i.status !== "PAID" && i.status !== "CANCELLED");
+    const nextDue = outstanding.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())[0] ?? null;
+    const totalDue = outstanding.reduce((sum, i) => {
+      const paid = i.payments.reduce((s, p) => s.add(p.amount), new Prisma.Decimal(0));
+      return sum.add(i.amount.add(i.fine).sub(i.discount).sub(paid));
+    }, new Prisma.Decimal(0));
+
+    return {
+      studentId,
+      totalDue,
+      nextDue: nextDue ? { invoiceNo: nextDue.invoiceNo, dueDate: nextDue.dueDate, amount: nextDue.amount } : null,
+      invoices,
+      payments: invoices.flatMap((i) => i.payments.map((p) => ({ ...p, invoiceNo: i.invoiceNo }))),
+    };
+  }
+
+  /** Staff-facing payment history across the whole tenant, most recent first. */
+  paymentHistory(studentId?: string) {
+    const { tenantId } = currentTenant();
+    return this.prisma.payment.findMany({
+      where: { tenantId, ...(studentId && { invoice: { studentId } }) },
+      include: { invoice: { select: { invoiceNo: true, student: { select: { firstName: true, lastName: true, admissionNo: true } } } } },
+      orderBy: { paidAt: "desc" },
+      take: 100,
+    });
   }
 }
