@@ -15,6 +15,7 @@ export class QueryStudentsDto {
   @IsOptional() @IsString() q?: string;
   @IsOptional() @IsString() sectionId?: string;
   @IsOptional() @IsString() cursor?: string;
+  @IsOptional() @IsString() schoolId?: string;
 }
 
 export class UpdateStudentDto {

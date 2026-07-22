@@ -16,27 +16,27 @@ export class TeachersController {
   constructor(private teachers: TeachersService) {}
 
   @Get()
-  @Roles(Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR)
-  list(@Query("q") q?: string) {
-    return this.teachers.list(q);
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR)
+  list(@CurrentUser() user: AuthUser, @Query("q") q?: string, @Query("schoolId") schoolId?: string) {
+    return this.teachers.list(user, q, schoolId);
   }
 
   @Post()
-  @Roles(Role.SCHOOL_ADMIN, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR)
   create(@Body() dto: CreateTeacherDto, @CurrentUser() user: AuthUser) {
-    return this.teachers.create(dto, user.id);
+    return this.teachers.create(dto, user, user.id);
   }
 
   @Patch(":id")
-  @Roles(Role.SCHOOL_ADMIN, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR)
   update(@Param("id") id: string, @Body() dto: UpdateTeacherDto, @CurrentUser() user: AuthUser) {
-    return this.teachers.update(id, dto, user.id);
+    return this.teachers.update(id, dto, user, user.id);
   }
 
   @Delete(":id")
-  @Roles(Role.SCHOOL_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN)
   remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
-    return this.teachers.remove(id, user.id);
+    return this.teachers.remove(id, user, user.id);
   }
 }
 

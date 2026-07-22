@@ -18,32 +18,37 @@ interface StudentDetail extends StudentRow {
   attendance: { date: string; status: string }[];
 }
 interface SectionOpt { id: string; label: string; schoolId: string }
+interface SchoolOpt { id: string; name: string; tenantName?: string }
 
-function StudentDialog({ mode, initial, sections, onClose, onSaved }: {
-  mode: "add" | "edit"; initial?: StudentRow; sections: SectionOpt[];
+function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
+  mode: "add" | "edit"; initial?: StudentRow; schools: SchoolOpt[]; sections: SectionOpt[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const initialSchoolId = initial?.sectionId
+    ? sections.find((s) => s.id === initial.sectionId)?.schoolId ?? schools[0]?.id ?? ""
+    : schools[0]?.id ?? "";
   const [form, setForm] = useState({
     admissionNo: initial?.admissionNo ?? "",
     firstName: initial?.firstName ?? "",
     lastName: initial?.lastName ?? "",
-    sectionId: initial?.sectionId ?? sections[0]?.id ?? "",
+    schoolId: initialSchoolId,
+    sectionId: initial?.sectionId ?? "",
     gender: initial?.gender ?? "",
     dob: initial?.dob ? initial.dob.slice(0, 10) : "",
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+    setForm((f) => ({ ...f, [k]: e.target.value, ...(k === "schoolId" && { sectionId: "" }) }));
+  const sectionsForSchool = sections.filter((s) => s.schoolId === form.schoolId);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const section = sections.find((s) => s.id === form.sectionId);
     setSaving(true);
     try {
       const body = {
-        ...(mode === "add" && section && { schoolId: section.schoolId }),
+        ...(mode === "add" && { schoolId: form.schoolId }),
         sectionId: form.sectionId || undefined,
         admissionNo: form.admissionNo.trim(),
         firstName: form.firstName.trim(),
@@ -79,9 +84,17 @@ function StudentDialog({ mode, initial, sections, onClose, onSaved }: {
         <Field id="fs-adm" label="Admission no.">
           <input id="fs-adm" required value={form.admissionNo} onChange={set("admissionNo")} placeholder="ADM-1041" className={inputCls} />
         </Field>
+        {mode === "add" && (
+          <Field id="fs-school" label="School">
+            <select id="fs-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` (${s.tenantName})` : ""}</option>)}
+            </select>
+          </Field>
+        )}
         <Field id="fs-sec" label="Class & section">
           <select id="fs-sec" required value={form.sectionId} onChange={set("sectionId")} className={inputCls}>
-            {sections.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            <option value="" disabled>Select a division</option>
+            {sectionsForSchool.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -186,6 +199,7 @@ export default function StudentsPage() {
 function StudentsPageInner() {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState<StudentRow[]>([]);
+  const [schools, setSchools] = useState<SchoolOpt[]>([]);
   const [sections, setSections] = useState<SectionOpt[]>([]);
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -203,6 +217,7 @@ function StudentsPageInner() {
   }, [q]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
   useEffect(() => { api<SectionOpt[]>("/academic/sections").then(setSections).catch(() => setSections([])); }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
@@ -285,6 +300,7 @@ function StudentsPageInner() {
         <StudentDialog
           mode={dialog.mode}
           initial={dialog.mode === "edit" ? dialog.row : undefined}
+          schools={schools}
           sections={sections}
           onClose={() => setDialog(null)}
           onSaved={() => { setToast(dialog.mode === "add" ? "Student added" : "Changes saved"); setQ(""); load(); }}

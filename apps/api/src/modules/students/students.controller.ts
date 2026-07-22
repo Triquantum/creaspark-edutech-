@@ -18,9 +18,9 @@ export class StudentsController {
   constructor(private students: StudentsService, private prisma: PrismaService) {}
 
   @Get()
-  @Roles(Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.RECEPTION)
-  list(@Query() query: QueryStudentsDto) {
-    return this.students.list(query);
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.RECEPTION)
+  list(@Query() query: QueryStudentsDto, @CurrentUser() user: AuthUser) {
+    return this.students.list(user, query);
   }
 
   /** No @Roles: every student a STUDENT/PARENT account may view — powers the frontend child picker. */
@@ -30,26 +30,26 @@ export class StudentsController {
   }
 
   @Get(":id")
-  @Roles(Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR)
-  get(@Param("id") id: string) {
-    return this.students.get(id);
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR)
+  get(@Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.students.get(user, id);
   }
 
   @Post()
-  @Roles(Role.SCHOOL_ADMIN, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
   create(@Body() dto: CreateStudentDto, @CurrentUser() user: AuthUser) {
-    return this.students.create(dto, user.id);
+    return this.students.create(dto, user, user.id);
   }
 
   @Patch(":id")
-  @Roles(Role.SCHOOL_ADMIN, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
   update(@Param("id") id: string, @Body() dto: UpdateStudentDto, @CurrentUser() user: AuthUser) {
-    return this.students.update(id, dto, user.id);
+    return this.students.update(id, dto, user, user.id);
   }
 
   @Delete(":id")
-  @Roles(Role.SCHOOL_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN)
   remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
-    return this.students.remove(id, user.id);
+    return this.students.remove(id, user, user.id);
   }
 }
