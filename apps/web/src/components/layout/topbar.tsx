@@ -6,15 +6,13 @@ import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 
 interface SearchHit { id: string; label: string; sub: string; type: "Student" | "Teacher"; href: string }
-interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
+interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string; isRead: boolean }
 interface InboxMessage {
   id: string; body: string; createdAt: string; readAt?: string | null;
   sender?: { fullName: string; role: string };
   section?: { name: string; class: { name: string } } | null;
 }
 interface Me { fullName?: string; email: string; role: string }
-
-const LAST_SEEN_KEY = "notif:lastSeenAnnouncementAt";
 
 function useClickOutside(onOutside: () => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -66,7 +64,6 @@ export function Topbar() {
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [unreadMessages, setUnreadMessages] = useState<InboxMessage[]>([]);
-  const [lastSeenAnnouncementAt, setLastSeenAnnouncementAt] = useState<string | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useClickOutside(() => setNotifOpen(false));
 
@@ -74,10 +71,7 @@ export function Topbar() {
     api<Announcement[]>("/announcements").then(setAnnouncements).catch(() => setAnnouncements([]));
     api<InboxMessage[]>("/messages/inbox").then((r) => setUnreadMessages(r.filter((m) => !m.readAt))).catch(() => setUnreadMessages([]));
   }
-  useEffect(() => {
-    setLastSeenAnnouncementAt(localStorage.getItem(LAST_SEEN_KEY));
-    reloadNotifications();
-  }, []);
+  useEffect(() => { reloadNotifications(); }, []);
   // Route changes elsewhere (e.g. reading messages on /message directly) can
   // change the unread count without the bell's own click handlers running.
   useEffect(() => { reloadNotifications(); }, [pathname]);
@@ -88,28 +82,21 @@ export function Topbar() {
     return () => clearInterval(id);
   }, []);
 
-  const unseenAnnouncements = announcements.filter(
-    (a) => !lastSeenAnnouncementAt || new Date(a.createdAt) > new Date(lastSeenAnnouncementAt),
-  );
-  const unreadCount = unreadMessages.length + unseenAnnouncements.length;
-
-  function openNotifications() {
-    setNotifOpen((o) => {
-      const next = !o;
-      if (next) {
-        const now = new Date().toISOString();
-        localStorage.setItem(LAST_SEEN_KEY, now);
-        setLastSeenAnnouncementAt(now);
-      }
-      return next;
-    });
-  }
+  const unreadAnnouncements = announcements.filter((a) => !a.isRead);
+  const unreadCount = unreadMessages.length + unreadAnnouncements.length;
 
   async function openMessage(m: InboxMessage) {
     setUnreadMessages((prev) => prev.filter((x) => x.id !== m.id));
     setNotifOpen(false);
     router.push("/message");
     if (!m.readAt) await api(`/messages/${m.id}/read`, { method: "PATCH" }).catch(() => {});
+  }
+
+  async function openAnnouncement(a: Announcement) {
+    setAnnouncements((prev) => prev.map((x) => (x.id === a.id ? { ...x, isRead: true } : x)));
+    setNotifOpen(false);
+    router.push("/announcement/notice");
+    if (!a.isRead) await api(`/announcements/${a.id}/read`, { method: "PATCH" }).catch(() => {});
   }
 
   const [me, setMe] = useState<Me | null>(null);
@@ -163,7 +150,7 @@ export function Topbar() {
         </button>
 
         <div ref={notifRef} className="relative">
-          <button aria-label="Notifications" onClick={openNotifications}
+          <button aria-label="Notifications" onClick={() => setNotifOpen((o) => !o)}
             className="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-black/5 dark:hover:bg-white/10">
             <Bell size={18} />
             {unreadCount > 0 && (
@@ -190,9 +177,9 @@ export function Topbar() {
               ))}
 
               <p className="border-b border-t border-slate-100 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-400 dark:border-white/10">Announcements</p>
-              {announcements.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">Nothing new.</p>}
-              {announcements.map((a) => (
-                <button key={a.id} onClick={() => { setNotifOpen(false); router.push("/announcement/notice"); }}
+              {unreadAnnouncements.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">Nothing new.</p>}
+              {unreadAnnouncements.map((a) => (
+                <button key={a.id} onClick={() => openAnnouncement(a)}
                   className="block w-full border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-surface dark:border-white/5 dark:hover:bg-white/5">
                   <p className="text-sm font-medium text-night dark:text-white">{a.title}</p>
                   <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{a.body}</p>

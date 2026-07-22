@@ -95,12 +95,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  staffProfile     StaffProfile?
-  studentLink      Student?       @relation("StudentUser")
-  guardianLinks    Guardian[]
-  auditLogs        AuditLog[]
-  messagesSent     Message[]      @relation("MessagesSent")
-  messagesReceived Message[]      @relation("MessagesReceived")
+  staffProfile      StaffProfile?
+  studentLink       Student?       @relation("StudentUser")
+  guardianLinks     Guardian[]
+  auditLogs         AuditLog[]
+  messagesSent      Message[]      @relation("MessagesSent")
+  messagesReceived  Message[]      @relation("MessagesReceived")
+  announcementReads AnnouncementRead[]
 
   @@index([tenantId, role])
 }
@@ -457,7 +458,24 @@ model Announcement {
   createdBy String?
   createdAt DateTime @default(now())
 
+  reads     AnnouncementRead[]
+
   @@index([tenantId, schoolId, createdAt])
+}
+
+// Per-user read receipt — Announcement is a broadcast (audience: Role[]),
+// so "read" can't live on the Announcement row itself.
+model AnnouncementRead {
+  id             String   @id @default(cuid())
+  tenantId       String
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime @default(now())
+
+  @@unique([announcementId, userId])
+  @@index([tenantId, userId])
 }
 
 model Event {

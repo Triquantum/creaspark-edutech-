@@ -25,11 +25,11 @@ const SCHOOL_MANAGEMENT: Role[] = ["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "
 
 export const NAV: NavGroup[] = [
   { label: "Dashboard", icon: "home", href: "/dashboard" },
-  { label: "Student", icon: "user", href: "/students" },
-  { label: "Parents", icon: "users", href: "/parents" },
+  { label: "Student", icon: "user", href: "/students", hiddenFrom: ["PARENT"] },
+  { label: "Parents", icon: "users", href: "/parents", hiddenFrom: ["PARENT"] },
   { label: "Teacher", icon: "user-check", href: "/teachers", hiddenFrom: ["TEACHER"] },
-  { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER"] },
-  { label: "Academic", icon: "book", children: kids("academic", ["Class", "Division", "Subject", "Department", "Syllabus", "Assignment", "Routine"]) },
+  { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER", "PARENT"] },
+  { label: "Academic", icon: "book", hiddenFrom: ["PARENT"], children: kids("academic", ["Class", "Division", "Subject", "Department", "Syllabus", "Assignment", "Routine"]) },
   { label: "Attendance", icon: "calendar-check", children: kids("attendance", ["Student Attendance", "Teacher Attendance", "Exam Attendance"]) },
   { label: "Exam", icon: "clipboard", children: kids("exam", ["Exam", "Exam Schedule", "Exam Grade", "Admit Card"]) },
   { label: "Mark", icon: "percent", children: kids("mark", ["Mark Entry", "Mark Distribution", "Promotion"]) },
@@ -37,9 +37,9 @@ export const NAV: NavGroup[] = [
   { label: "Media", icon: "image", href: "/media" },
   { label: "Mail / SMS", icon: "mail", href: "/mail-sms" },
   { label: "Online Exam", icon: "monitor", children: kids("online-exam", ["Question Group", "Question Level", "Question Bank", "Online Exam", "Instruction"]) },
-  { label: "Payroll", icon: "wallet", children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
-  { label: "Asset Management", icon: "box", children: kids("assets", ["Vendor", "Location", "Asset Category", "Asset", "Asset Assignment", "Purchase"]) },
-  { label: "Inventory", icon: "package", children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
+  { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
+  { label: "Asset Management", icon: "box", hiddenFrom: ["PARENT"], children: kids("assets", ["Vendor", "Location", "Asset Category", "Asset", "Asset Assignment", "Purchase"]) },
+  { label: "Inventory", icon: "package", hiddenFrom: ["PARENT"], children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
   {
     label: "Leave Application", icon: "log-out",
     // Category/Assign are admin config (define leave types, grant balances);

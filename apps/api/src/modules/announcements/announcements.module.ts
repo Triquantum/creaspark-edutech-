@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Module, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Module, NotFoundException, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
 import { Injectable } from "@nestjs/common";
@@ -13,18 +13,32 @@ import { AuthUser, CurrentUser } from "../../common/decorators/current-user.deco
 export class AnnouncementsService {
   constructor(private prisma: PrismaService) {}
 
-  list(role: Role) {
+  async list(role: Role, userId: string) {
     const { tenantId } = currentTenant();
-    return this.prisma.announcement.findMany({
+    const rows = await this.prisma.announcement.findMany({
       where: { tenantId, audience: { has: role } },
       orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
       take: 20,
+      include: { reads: { where: { userId }, select: { id: true } } },
     });
+    return rows.map(({ reads, ...a }) => ({ ...a, isRead: reads.length > 0 }));
   }
 
   create(data: { schoolId: string; title: string; body: string; audience: Role[] }, userId: string) {
     const { tenantId } = currentTenant();
     return this.prisma.announcement.create({ data: { ...data, tenantId, createdBy: userId } });
+  }
+
+  async markRead(id: string, userId: string) {
+    const { tenantId } = currentTenant();
+    const announcement = await this.prisma.announcement.findFirst({ where: { id, tenantId } });
+    if (!announcement) throw new NotFoundException("Announcement not found");
+    await this.prisma.announcementRead.upsert({
+      where: { announcementId_userId: { announcementId: id, userId } },
+      update: {},
+      create: { tenantId, announcementId: id, userId },
+    });
+    return { read: true };
   }
 }
 
@@ -37,7 +51,7 @@ export class AnnouncementsController {
 
   @Get()
   list(@CurrentUser() user: AuthUser) {
-    return this.svc.list(user.role as Role);
+    return this.svc.list(user.role as Role, user.id);
   }
 
   @Post()
@@ -47,6 +61,11 @@ export class AnnouncementsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.create(body, user.id);
+  }
+
+  @Patch(":id/read")
+  markRead(@Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.svc.markRead(id, user.id);
   }
 }
 
