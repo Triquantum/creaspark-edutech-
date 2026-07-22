@@ -1,6 +1,6 @@
 {
   "name": "@educore/api",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
