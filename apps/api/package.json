@@ -1,6 +1,6 @@
 {
   "name": "@educore/api",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "scripts": {
     "dev": "nest start --watch",
     "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma && nest build",
