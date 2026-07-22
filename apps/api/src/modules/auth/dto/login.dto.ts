@@ -7,3 +7,8 @@ export class RegisterSchoolDto {
   @IsEmail() adminEmail: string;
   @IsString() @MinLength(8) adminPassword: string;
 }
+
+export class LoginWithTokenDto {
+  @IsString() token: string;
+  @IsString() password: string;
+}

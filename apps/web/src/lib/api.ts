@@ -2,17 +2,21 @@ import { supabase } from "./supabase";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+/** skipAuthRedirect: opts out of the 401 -> /login redirect, for calls (like
+ * the admission-number password check) where a 401 means "wrong password",
+ * not "your session expired". */
+export async function api<T>(path: string, init?: RequestInit & { skipAuthRedirect?: boolean }): Promise<T> {
+  const { skipAuthRedirect, ...requestInit } = init ?? {};
   const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch(`${BASE}/api/v1${path}`, {
-    ...init,
+    ...requestInit,
     headers: {
       "Content-Type": "application/json",
       ...(session && { Authorization: `Bearer ${session.access_token}` }),
-      ...init?.headers,
+      ...requestInit.headers,
     },
   });
-  if (res.status === 401 && typeof window !== "undefined") {
+  if (res.status === 401 && !skipAuthRedirect && typeof window !== "undefined") {
     window.location.href = "/login";
   }
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.message ?? res.statusText);

@@ -1,7 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@educore/database";
+import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
+import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateStudentDto, QueryStudentsDto, UpdateStudentDto } from "./dto/create-student.dto";
 
@@ -9,7 +11,7 @@ const PAGE = 25;
 
 @Injectable()
 export class StudentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
 
   /** SUPER_ADMIN has no real school of their own; tenantId is resolved from
    * an explicit schoolId instead of currentTenant(). Writes always require
@@ -159,5 +161,42 @@ export class StudentsService {
       }),
     ]);
     return { deleted: true };
+  }
+
+  /** Creates a real, standalone login for the student themselves (role
+   * STUDENT), separate from any guardian's account. Students don't have
+   * real email addresses, so the login uses a synthetic one derived from
+   * the school code + admission number — the pair is globally unique
+   * (schools' codes are unique per tenant, admission numbers per school),
+   * which is what actually lets a parent/student sign in "with the
+   * admission number": /auth/lookup-admission resolves it back to this
+   * email. Returns the temp password once, same as every other
+   * login-creation flow. */
+  async createLogin(id: string, user: AuthUser, actorId: string) {
+    const student = await this.prisma.student.findUnique({ where: { id }, include: { school: true } });
+    if (!student) throw new NotFoundException("Student not found");
+    const { tenantId } = await this.resolveTenant(user, student.schoolId);
+    if (student.tenantId !== tenantId) throw new NotFoundException("Student not found");
+    if (student.userId) throw new ConflictException("This student already has a login");
+
+    const email = `${student.school.code}.${student.admissionNo}@students.creaspark.internal`
+      .toLowerCase().replace(/[^a-z0-9.@-]+/g, "-");
+    const taken = await this.prisma.user.findUnique({ where: { email } });
+    if (taken) throw new ConflictException("A login already exists for this admission number");
+
+    const tempPassword = `Cs@${randomBytes(4).toString("hex")}`;
+    const authUser = await this.supabaseAdmin.createUser(email, tempPassword, { role: Role.STUDENT, tenantId });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.create({
+        data: { id: authUser.id, tenantId, email, fullName: `${student.firstName} ${student.lastName}`, role: Role.STUDENT },
+      });
+      await tx.student.update({ where: { id }, data: { userId: authUser.id } });
+      await tx.auditLog.create({
+        data: { tenantId, userId: actorId, action: "student.create-login", entity: "Student", entityId: id },
+      });
+    });
+
+    return { email, tempPassword };
   }
 }

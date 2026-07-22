@@ -9,7 +9,7 @@ import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/
 interface StudentRow {
   id: string; admissionNo: string; firstName: string; lastName: string;
   gender?: string | null; dob?: string | null; rollNo?: string | null; status?: string;
-  sectionId?: string | null;
+  sectionId?: string | null; userId?: string | null;
   section?: { name: string; class: { name: string } } | null;
   guardians: { fullName: string; phone: string; relation?: string }[];
 }
@@ -120,9 +120,25 @@ function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
 function ViewStudent({ id, onClose }: { id: string; onClose: () => void }) {
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [failed, setFailed] = useState(false);
+  const [creatingLogin, setCreatingLogin] = useState(false);
+  const [loginResult, setLoginResult] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
   useEffect(() => {
     api<StudentDetail>(`/students/${id}`).then(setDetail).catch(() => setFailed(true));
   }, [id]);
+
+  async function createLogin() {
+    setCreatingLogin(true);
+    setLoginError(null);
+    try {
+      const res = await api<{ email: string; tempPassword: string }>(`/students/${id}/login`, { method: "POST" });
+      setLoginResult(res);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Could not create login");
+    } finally {
+      setCreatingLogin(false);
+    }
+  }
 
   const statusColor: Record<string, string> = {
     PAID: "bg-success/10 text-success", PENDING: "bg-warning/10 text-warning",
@@ -150,6 +166,28 @@ function ViewStudent({ id, onClose }: { id: string; onClose: () => void }) {
               </div>
             ))}
           </dl>
+
+          <div>
+            <h3 className="mb-2 font-medium text-night dark:text-white">Student login</h3>
+            {detail.userId ? (
+              <p className="text-slate-500">This student can sign in with admission no. {detail.admissionNo}.</p>
+            ) : loginResult ? (
+              <p className="text-night dark:text-white">
+                Login created — temporary password: <span className="font-mono font-semibold">{loginResult.tempPassword}</span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  Shown once — the student can now sign in with admission no. {detail.admissionNo} and this password.
+                </span>
+              </p>
+            ) : (
+              <div>
+                <button type="button" onClick={createLogin} disabled={creatingLogin}
+                  className="text-sm font-medium text-primary hover:underline disabled:opacity-50">
+                  {creatingLogin ? "Creating…" : "Create student login"}
+                </button>
+                {loginError && <p className="mt-1 text-sm text-danger">{loginError}</p>}
+              </div>
+            )}
+          </div>
 
           <div>
             <h3 className="mb-2 font-medium text-night dark:text-white">Guardians</h3>

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Role } from "@educore/database";
 
@@ -51,5 +51,15 @@ export class SupabaseAdminService {
   async deleteUser(userId: string) {
     const { error } = await this.client.auth.admin.deleteUser(userId);
     if (error) throw new Error(error.message);
+  }
+
+  /** Checks a password server-side (used by the admission-number login
+   * flow, where the frontend never sees the real email to sign in with
+   * directly). Supabase itself still verifies the credential — this just
+   * relays the standard password grant. */
+  async verifyPassword(email: string, password: string) {
+    const { data, error } = await this.client.auth.signInWithPassword({ email, password });
+    if (error || !data.session) throw new UnauthorizedException("Invalid email/admission number or password");
+    return { access_token: data.session.access_token, refresh_token: data.session.refresh_token };
   }
 }

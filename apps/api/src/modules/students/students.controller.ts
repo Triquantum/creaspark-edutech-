@@ -52,4 +52,10 @@ export class StudentsController {
   remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
     return this.students.remove(id, user, user.id);
   }
+
+  @Post(":id/login")
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
+  createLogin(@Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.students.createLogin(id, user, user.id);
+  }
 }
