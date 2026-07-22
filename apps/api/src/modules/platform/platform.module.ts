@@ -48,6 +48,15 @@ export class PlatformService {
       })),
     };
   }
+
+  /** Every physical school (not tenant) across the platform, for cross-tenant pickers. */
+  async schools() {
+    const rows = await this.prisma.school.findMany({
+      select: { id: true, name: true, code: true, tenant: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    });
+    return rows.map((r) => ({ id: r.id, name: r.name, code: r.code, tenantName: r.tenant.name }));
+  }
 }
 
 @ApiTags("platform")
@@ -61,6 +70,12 @@ export class PlatformController {
   @Roles(Role.SUPER_ADMIN)
   summary() {
     return this.svc.summary();
+  }
+
+  @Get("schools")
+  @Roles(Role.SUPER_ADMIN)
+  schools() {
+    return this.svc.schools();
   }
 }
 

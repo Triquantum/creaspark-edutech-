@@ -63,6 +63,7 @@ model School {
   feePlans      FeePlan[]
   announcements Announcement[]
   events        Event[]
+  visitors      Visitor[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -493,6 +494,25 @@ model Event {
   createdAt   DateTime @default(now())
 
   @@index([tenantId, schoolId, startAt])
+}
+
+model Visitor {
+  id            String    @id @default(cuid())
+  tenantId      String
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id])
+  visitorName   String
+  phone         String
+  purpose       String
+  personToMeet  String?
+  idProofType   String?
+  idProofNumber String?
+  checkInAt     DateTime  @default(now())
+  checkOutAt    DateTime?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([tenantId, schoolId, checkInAt])
 }
 
 // A row is either a direct message (recipientId set, sectionId null) or a
