@@ -11,6 +11,7 @@ export default function SubjectsPage() {
         { key: "code", label: "Code", muted: true },
       ]}
       fields={[
+        { name: "schoolId", label: "School", type: "select", optionsUrl: "/academic/schools", required: true, editable: false },
         { name: "name", label: "Subject name", required: true, placeholder: "Mathematics" },
         { name: "code", label: "Code", placeholder: "MATH" },
       ]}

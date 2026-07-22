@@ -64,6 +64,7 @@ model School {
   announcements Announcement[]
   events        Event[]
   visitors      Visitor[]
+  academicYears AcademicYear[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -183,6 +184,21 @@ model Department {
 
   @@unique([schoolId, name])
   @@index([tenantId])
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  tenantId  String
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id])
+  label     String                          // "2026-27"
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, label])
+  @@index([tenantId, schoolId])
 }
 
 model Subject {

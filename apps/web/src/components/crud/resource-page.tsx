@@ -7,8 +7,8 @@ import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/
 
 export interface FieldDef {
   name: string; label: string; required?: boolean; placeholder?: string;
-  /** "text" (default) or "select" fed by optionsUrl */
-  type?: "text" | "select";
+  /** "text" (default), "select" fed by optionsUrl, or "date" */
+  type?: "text" | "select" | "date";
   optionsUrl?: string;             // endpoint returning array of objects
   optionValue?: string;            // default "id"
   optionLabel?: string;            // default "name"
@@ -171,7 +171,8 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
                     {(options[f.name] ?? []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 ) : (
-                  <input id={`rf-${f.name}`} required={f.required} value={form[f.name] ?? ""} placeholder={f.placeholder} className={inputCls}
+                  <input id={`rf-${f.name}`} type={f.type === "date" ? "date" : "text"} required={f.required}
+                    value={form[f.name] ?? ""} placeholder={f.placeholder} className={inputCls}
                     onChange={(e) => setForm((fm) => ({ ...fm, [f.name]: e.target.value }))} />
                 )}
               </Field>
