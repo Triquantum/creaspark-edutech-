@@ -9,4 +9,5 @@ export class RecordDataDto {
 
 export class QueryRecordsDto {
   @IsOptional() @IsString() q?: string;
+  @IsOptional() @IsString() schoolId?: string;
 }

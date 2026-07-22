@@ -20,28 +20,31 @@ export class RecordsController {
   constructor(private records: RecordsService) {}
 
   @Get()
-  list(@Param("module") module: string, @Query() query: QueryRecordsDto) {
-    return this.records.list(module, query);
+  list(@Param("module") module: string, @Query() query: QueryRecordsDto, @CurrentUser() user: AuthUser) {
+    return this.records.list(module, query, user);
   }
 
   @Get(":id")
-  get(@Param("module") module: string, @Param("id") id: string) {
-    return this.records.get(module, id);
+  get(@Param("module") module: string, @Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.records.get(module, id, user);
   }
 
   @Post()
-  create(@Param("module") module: string, @Body() dto: RecordDataDto, @CurrentUser() user: AuthUser) {
-    return this.records.create(module, dto, user.id);
+  create(
+    @Param("module") module: string, @Body() dto: RecordDataDto,
+    @Query("schoolId") schoolId: string | undefined, @CurrentUser() user: AuthUser,
+  ) {
+    return this.records.create(module, dto, user, user.id, schoolId);
   }
 
   @Patch(":id")
-  update(@Param("module") module: string, @Param("id") id: string, @Body() dto: RecordDataDto) {
-    return this.records.update(module, id, dto);
+  update(@Param("module") module: string, @Param("id") id: string, @Body() dto: RecordDataDto, @CurrentUser() user: AuthUser) {
+    return this.records.update(module, id, dto, user);
   }
 
   @Delete(":id")
-  remove(@Param("module") module: string, @Param("id") id: string) {
-    return this.records.remove(module, id);
+  remove(@Param("module") module: string, @Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.records.remove(module, id, user);
   }
 }
 

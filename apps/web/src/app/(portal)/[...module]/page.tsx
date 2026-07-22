@@ -7,13 +7,14 @@ import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/
 
 interface RecordData { name: string; notes?: string; fields?: Record<string, string> }
 interface RecordRow { id: string; data: RecordData; updatedAt: string }
+interface School { id: string; name: string }
 
 function titleCase(s: string) {
   return s.split("-").map((w) => w[0]?.toUpperCase() + w.slice(1)).join(" ");
 }
 
-function RecordDialog({ moduleKey, title, mode, initial, onClose, onSaved }: {
-  moduleKey: string; title: string; mode: "add" | "edit"; initial?: RecordRow;
+function RecordDialog({ moduleKey, schoolId, title, mode, initial, onClose, onSaved }: {
+  moduleKey: string; schoolId: string; title: string; mode: "add" | "edit"; initial?: RecordRow;
   onClose: () => void; onSaved: () => void;
 }) {
   const [name, setName] = useState(initial?.data.name ?? "");
@@ -36,7 +37,7 @@ function RecordDialog({ moduleKey, title, mode, initial, onClose, onSaved }: {
         ...(Object.keys(fields).length > 0 && { fields }),
       };
       if (mode === "add") {
-        await api(`/records/${moduleKey}`, { method: "POST", body: JSON.stringify(body) });
+        await api(`/records/${moduleKey}?schoolId=${schoolId}`, { method: "POST", body: JSON.stringify(body) });
       } else {
         await api(`/records/${moduleKey}/${initial!.id}`, { method: "PATCH", body: JSON.stringify(body) });
       }
@@ -103,6 +104,8 @@ export default function ModuleScaffold({ params }: { params: Promise<{ module: s
   const title = titleCase(module[module.length - 1]);
   const group = module.length > 1 ? titleCase(module[0]) : null;
 
+  const [schools, setSchools] = useState<School[]>([]);
+  const [schoolId, setSchoolId] = useState("");
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [q, setQ] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -112,12 +115,21 @@ export default function ModuleScaffold({ params }: { params: Promise<{ module: s
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  useEffect(() => {
+    api<School[]>("/academic/schools").then((list) => {
+      setSchools(list);
+      setSchoolId((current) => current || list[0]?.id || "");
+    }).catch(() => {});
+  }, []);
+
   const load = useCallback(() => {
+    if (!schoolId) return;
     setState("loading");
-    api<RecordRow[]>(`/records/${moduleKey}${q ? `?q=${encodeURIComponent(q)}` : ""}`)
+    const params = new URLSearchParams({ schoolId, ...(q && { q }) });
+    api<RecordRow[]>(`/records/${moduleKey}?${params}`)
       .then((r) => { setRows(r); setState("ready"); })
       .catch(() => setState("error"));
-  }, [moduleKey, q]);
+  }, [moduleKey, q, schoolId]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
   useEffect(() => { setQ(""); setDialog(null); setViewing(null); setDeleting(null); }, [moduleKey]);
@@ -146,11 +158,18 @@ export default function ModuleScaffold({ params }: { params: Promise<{ module: s
           {group && <p className="text-xs font-medium uppercase tracking-widest text-slate-400">{group}</p>}
           <h1 className="font-display text-2xl font-semibold text-night dark:text-white">{title}</h1>
         </div>
-        <Button onClick={() => setDialog({ mode: "add" })}>Add {title.toLowerCase()}</Button>
+        <Button onClick={() => setDialog({ mode: "add" })} disabled={!schoolId}>Add {title.toLowerCase()}</Button>
       </div>
 
       <Card className="p-0 overflow-hidden">
-        <div className="border-b border-slate-100 dark:border-white/5 p-4">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 dark:border-white/5 p-4">
+          <select
+            value={schoolId} onChange={(e) => setSchoolId(e.target.value)}
+            aria-label="School"
+            className="h-10 rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+          >
+            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
           <input
             value={q} onChange={(e) => setQ(e.target.value)}
             placeholder={`Search ${title.toLowerCase()}`} aria-label={`Search ${title}`}
@@ -203,7 +222,7 @@ export default function ModuleScaffold({ params }: { params: Promise<{ module: s
 
       {dialog && (
         <RecordDialog
-          moduleKey={moduleKey} title={title} mode={dialog.mode}
+          moduleKey={moduleKey} schoolId={schoolId} title={title} mode={dialog.mode}
           initial={dialog.mode === "edit" ? dialog.row : undefined}
           onClose={() => setDialog(null)}
           onSaved={() => { setToast(dialog.mode === "add" ? "Added" : "Changes saved"); load(); }}
