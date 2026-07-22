@@ -3,7 +3,7 @@
   "version": "0.1.4",
   "scripts": {
     "dev": "nest start --watch",
-    "build": "nest build",
+    "build": "pnpm --filter @educore/database generate && nest build",
     "start": "node dist/main.js",
     "test": "jest",
     "lint": "eslint \"src/**/*.ts\""
