@@ -8,7 +8,7 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
 
-const ADMIN_ROLES = [Role.SCHOOL_ADMIN, Role.ORG_ADMIN] as const;
+const ADMIN_ROLES = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.ORG_ADMIN] as const;
 
 @ApiTags("users")
 @ApiBearerAuth()
@@ -19,32 +19,32 @@ export class UsersController {
 
   @Get()
   @Roles(...ADMIN_ROLES, Role.PRINCIPAL, Role.HR)
-  list(@Query() query: QueryUsersDto) {
-    return this.users.list(query);
+  list(@Query() query: QueryUsersDto, @CurrentUser() user: AuthUser) {
+    return this.users.list(user, query);
   }
 
   @Post()
   @Roles(...ADMIN_ROLES)
   register(@Body() dto: CreateUserDto, @CurrentUser() user: AuthUser) {
-    return this.users.create(dto, user.id);
+    return this.users.create(dto, user, user.id);
   }
 
   @Patch(":id")
   @Roles(...ADMIN_ROLES)
   update(@Param("id") id: string, @Body() dto: UpdateUserDto, @CurrentUser() user: AuthUser) {
-    return this.users.update(id, dto, user.id);
+    return this.users.update(id, dto, user, user.id);
   }
 
   @Post(":id/reset-password")
   @Roles(...ADMIN_ROLES)
   resetPassword(@Param("id") id: string, @CurrentUser() user: AuthUser) {
-    return this.users.resetPassword(id, user.id);
+    return this.users.resetPassword(id, user, user.id);
   }
 
   @Delete(":id")
   @Roles(...ADMIN_ROLES)
   remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
-    return this.users.remove(id, user.id);
+    return this.users.remove(id, user, user.id);
   }
 }
 

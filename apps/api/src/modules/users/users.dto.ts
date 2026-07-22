@@ -8,6 +8,8 @@ export class CreateUserDto {
   @IsEnum(Role) role: Role;
   /** Optional — if omitted, a temporary password is generated and returned once. */
   @IsOptional() @IsString() @MinLength(8) password?: string;
+  /** Which school's tenant this login belongs to — required for SUPER_ADMIN. */
+  @IsOptional() @IsString() schoolId?: string;
 }
 
 export class UpdateUserDto {
@@ -20,4 +22,5 @@ export class UpdateUserDto {
 export class QueryUsersDto {
   @IsOptional() @IsString() q?: string;
   @IsOptional() @IsEnum(Role) role?: Role;
+  @IsOptional() @IsString() schoolId?: string;
 }

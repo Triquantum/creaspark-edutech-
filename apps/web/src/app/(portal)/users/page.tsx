@@ -11,8 +11,8 @@ const ROLES = [
   "INVENTORY_MANAGER", "HOSTEL_WARDEN", "SECURITY", "PARENT", "STUDENT", "GUEST",
 ] as const;
 
-const ACCESS_ROLES = new Set(["SCHOOL_ADMIN", "ORG_ADMIN", "PRINCIPAL", "HR"]);
-const CAN_MANAGE = new Set(["SCHOOL_ADMIN", "ORG_ADMIN"]);
+const ACCESS_ROLES = new Set(["SUPER_ADMIN", "SCHOOL_ADMIN", "ORG_ADMIN", "PRINCIPAL", "HR"]);
+const CAN_MANAGE = new Set(["SUPER_ADMIN", "SCHOOL_ADMIN", "ORG_ADMIN"]);
 
 function roleLabel(role: string) {
   return role.toLowerCase().split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
@@ -23,9 +23,10 @@ interface UserRow {
   isActive: boolean; lastLoginAt?: string | null; createdAt: string;
 }
 interface Me { id: string; role: string }
+interface SchoolOpt { id: string; name: string; tenantName?: string }
 
-function RegisterDialog({ mode, initial, onClose, onSaved }: {
-  mode: "add" | "edit"; initial?: UserRow;
+function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
+  mode: "add" | "edit"; initial?: UserRow; schools: SchoolOpt[];
   onClose: () => void; onSaved: (tempPassword?: string) => void;
 }) {
   const [form, setForm] = useState({
@@ -33,6 +34,7 @@ function RegisterDialog({ mode, initial, onClose, onSaved }: {
     email: initial?.email ?? "",
     phone: initial?.phone ?? "",
     role: initial?.role ?? "TEACHER",
+    schoolId: schools[0]?.id ?? "",
     password: "",
     isActive: initial ? String(initial.isActive) : "true",
   });
@@ -56,6 +58,7 @@ function RegisterDialog({ mode, initial, onClose, onSaved }: {
             email: form.email.trim().toLowerCase(),
             ...(form.phone && { phone: form.phone.trim() }),
             role: form.role,
+            ...(form.schoolId && { schoolId: form.schoolId }),
             ...(form.password && { password: form.password }),
           }),
         });
@@ -109,6 +112,13 @@ function RegisterDialog({ mode, initial, onClose, onSaved }: {
             <input id="u-phone" value={form.phone ?? ""} onChange={set("phone")} inputMode="tel" className={inputCls} />
           </Field>
         </div>
+        {mode === "add" && (
+          <Field id="u-school" label="School">
+            <select id="u-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` (${s.tenantName})` : ""}</option>)}
+            </select>
+          </Field>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field id="u-role" label="Role">
             <select id="u-role" required value={form.role} onChange={set("role")} className={inputCls}>
@@ -158,6 +168,7 @@ function RegisterDialog({ mode, initial, onClose, onSaved }: {
 export default function UsersPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [rows, setRows] = useState<UserRow[]>([]);
+  const [schools, setSchools] = useState<SchoolOpt[]>([]);
   const [q, setQ] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "error" | "forbidden">("loading");
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: UserRow } | null>(null);
@@ -168,6 +179,7 @@ export default function UsersPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
+  useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
 
   const load = useCallback(() => {
     if (!me) return;
@@ -285,6 +297,7 @@ export default function UsersPage() {
         <RegisterDialog
           mode={dialog.mode}
           initial={dialog.mode === "edit" ? dialog.row : undefined}
+          schools={schools}
           onClose={() => setDialog(null)}
           onSaved={(tempPassword) => {
             if (dialog.mode === "add") {
