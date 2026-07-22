@@ -1,13 +1,20 @@
 "use client";
-import { Bell, LogOut, Moon, Search, Sun } from "lucide-react";
+import { Bell, LogOut, MessageSquare, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 
 interface SearchHit { id: string; label: string; sub: string; type: "Student" | "Teacher"; href: string }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
+interface InboxMessage {
+  id: string; body: string; createdAt: string; readAt?: string | null;
+  sender?: { fullName: string; role: string };
+  section?: { name: string; class: { name: string } } | null;
+}
 interface Me { fullName?: string; email: string; role: string }
+
+const LAST_SEEN_KEY = "notif:lastSeenAnnouncementAt";
 
 function useClickOutside(onOutside: () => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -28,6 +35,7 @@ function initials(name?: string, email?: string) {
 
 export function Topbar() {
   const router = useRouter();
+  const pathname = usePathname();
   const [dark, setDark] = useState(false);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
 
@@ -57,9 +65,52 @@ export function Topbar() {
   }, [q]);
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [unreadMessages, setUnreadMessages] = useState<InboxMessage[]>([]);
+  const [lastSeenAnnouncementAt, setLastSeenAnnouncementAt] = useState<string | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useClickOutside(() => setNotifOpen(false));
-  useEffect(() => { api<Announcement[]>("/announcements").then(setAnnouncements).catch(() => setAnnouncements([])); }, []);
+
+  function reloadNotifications() {
+    api<Announcement[]>("/announcements").then(setAnnouncements).catch(() => setAnnouncements([]));
+    api<InboxMessage[]>("/messages/inbox").then((r) => setUnreadMessages(r.filter((m) => !m.readAt))).catch(() => setUnreadMessages([]));
+  }
+  useEffect(() => {
+    setLastSeenAnnouncementAt(localStorage.getItem(LAST_SEEN_KEY));
+    reloadNotifications();
+  }, []);
+  // Route changes elsewhere (e.g. reading messages on /message directly) can
+  // change the unread count without the bell's own click handlers running.
+  useEffect(() => { reloadNotifications(); }, [pathname]);
+  // Poll so a badge for something new (a message someone just sent) shows up
+  // even if the user never navigates away from the page they're on.
+  useEffect(() => {
+    const id = setInterval(reloadNotifications, 45_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const unseenAnnouncements = announcements.filter(
+    (a) => !lastSeenAnnouncementAt || new Date(a.createdAt) > new Date(lastSeenAnnouncementAt),
+  );
+  const unreadCount = unreadMessages.length + unseenAnnouncements.length;
+
+  function openNotifications() {
+    setNotifOpen((o) => {
+      const next = !o;
+      if (next) {
+        const now = new Date().toISOString();
+        localStorage.setItem(LAST_SEEN_KEY, now);
+        setLastSeenAnnouncementAt(now);
+      }
+      return next;
+    });
+  }
+
+  async function openMessage(m: InboxMessage) {
+    setUnreadMessages((prev) => prev.filter((x) => x.id !== m.id));
+    setNotifOpen(false);
+    router.push("/message");
+    if (!m.readAt) await api(`/messages/${m.id}/read`, { method: "PATCH" }).catch(() => {});
+  }
 
   const [me, setMe] = useState<Me | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -112,20 +163,40 @@ export function Topbar() {
         </button>
 
         <div ref={notifRef} className="relative">
-          <button aria-label="Notifications" onClick={() => setNotifOpen((o) => !o)}
+          <button aria-label="Notifications" onClick={openNotifications}
             className="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-black/5 dark:hover:bg-white/10">
             <Bell size={18} />
-            {announcements.length > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger" />}
+            {unreadCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
           {notifOpen && (
             <div className="absolute right-0 top-12 z-20 w-80 max-h-96 overflow-y-auto rounded-xl border border-slate-100 bg-white shadow-lift dark:border-white/10 dark:bg-[#16213A]">
-              <p className="border-b border-slate-100 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-400 dark:border-white/10">Announcements</p>
-              {announcements.length === 0 && <p className="p-4 text-sm text-slate-500">Nothing new.</p>}
+              <p className="border-b border-slate-100 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-400 dark:border-white/10">Messages</p>
+              {unreadMessages.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">No unread messages.</p>}
+              {unreadMessages.map((m) => (
+                <button key={m.id} onClick={() => openMessage(m)}
+                  className="flex w-full items-start gap-2.5 border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-surface dark:border-white/5 dark:hover:bg-white/5">
+                  <MessageSquare size={14} className="mt-0.5 shrink-0 text-accent" />
+                  <span>
+                    <span className="block text-sm font-medium text-night dark:text-white">
+                      {m.section ? `${m.section.class.name} · ${m.section.name}` : m.sender?.fullName ?? "Unknown"}
+                    </span>
+                    <span className="mt-0.5 line-clamp-2 block text-xs text-slate-500">{m.body}</span>
+                  </span>
+                </button>
+              ))}
+
+              <p className="border-b border-t border-slate-100 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-400 dark:border-white/10">Announcements</p>
+              {announcements.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">Nothing new.</p>}
               {announcements.map((a) => (
-                <div key={a.id} className="border-b border-slate-50 px-4 py-3 last:border-0 dark:border-white/5">
+                <button key={a.id} onClick={() => { setNotifOpen(false); router.push("/announcement/notice"); }}
+                  className="block w-full border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-surface dark:border-white/5 dark:hover:bg-white/5">
                   <p className="text-sm font-medium text-night dark:text-white">{a.title}</p>
                   <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{a.body}</p>
-                </div>
+                </button>
               ))}
             </div>
           )}
