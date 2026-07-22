@@ -37,6 +37,9 @@ export class TeachersService {
   async create(dto: CreateTeacherDto, actorId: string) {
     const { tenantId } = currentTenant();
 
+    const school = await this.prisma.school.findFirst({ where: { id: dto.schoolId, tenantId } });
+    if (!school) throw new NotFoundException("School not found in this tenant");
+
     const [emailTaken, empTaken] = await Promise.all([
       this.prisma.user.findUnique({ where: { email: dto.email } }),
       this.prisma.staffProfile.findUnique({ where: { schoolId_employeeNo: { schoolId: dto.schoolId, employeeNo: dto.employeeNo } } }),

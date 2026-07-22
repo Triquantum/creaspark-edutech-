@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen, CalendarCheck2, GraduationCap, HeartHandshake, MessageSquare,
-  Megaphone, ShieldCheck, Users, Wallet, type LucideIcon,
+  Megaphone, School, ShieldCheck, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -17,6 +17,14 @@ interface AttendanceToday { total: number; present: number; percentage: number |
 interface MonthlyAttendance { summary: { percentage: number; total: number } }
 interface MyFees { totalDue: string | number; nextDue: { dueDate: string; amount: string | number } | null }
 interface ProgressOverall { overall: { averagePercentage: number; grade: string } | null }
+interface SchoolSummary {
+  id: string; name: string; slug: string; plan: string; status: string; createdAt: string;
+  students: number; teachers: number; parents: number;
+}
+interface PlatformSummary {
+  totalSchools: number; totalStudents: number; totalTeachers: number; totalParents: number;
+  schools: SchoolSummary[];
+}
 
 type QuickTile = { label: string; href: string; icon: LucideIcon };
 
@@ -74,6 +82,56 @@ function QuickAccess({ tiles }: { tiles: QuickTile[] }) {
   );
 }
 
+function PlatformOverview({ data }: { data: PlatformSummary }) {
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Schools Registered" value={data.totalSchools.toLocaleString("en-IN")} />
+        <StatCard label="Total Students" value={data.totalStudents.toLocaleString("en-IN")} />
+        <StatCard label="Total Teachers" value={data.totalTeachers.toLocaleString("en-IN")} />
+        <StatCard label="Total Parents" value={data.totalParents.toLocaleString("en-IN")} />
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-slate-100 p-4 dark:border-white/5">
+          <School size={16} className="text-primary" />
+          <h2 className="font-display font-semibold text-night dark:text-white">Registered Schools</h2>
+        </div>
+        {data.schools.length === 0 ? (
+          <p className="p-6 text-sm text-slate-500">No schools registered yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-slate-100 dark:border-white/5">
+                <th className="px-4 py-3 font-medium">School</th>
+                <th className="px-4 py-3 font-medium">Plan</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 text-right font-medium">Students</th>
+                <th className="px-4 py-3 text-right font-medium">Teachers</th>
+                <th className="px-4 py-3 text-right font-medium">Parents</th>
+                <th className="px-4 py-3 font-medium">Registered</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.schools.map((s) => (
+                <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
+                  <td className="px-4 py-3 font-medium text-night dark:text-white">{s.name}</td>
+                  <td className="px-4 py-3 text-slate-500">{s.plan}</td>
+                  <td className="px-4 py-3 text-slate-500">{s.status}</td>
+                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.students}</td>
+                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.teachers}</td>
+                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.parents}</td>
+                  <td className="px-4 py-3 text-slate-500">{new Date(s.createdAt).toLocaleDateString("en-IN")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function NoticesCard({ announcements }: { announcements: Announcement[] }) {
   return (
     <Card>
@@ -109,6 +167,9 @@ export default function Dashboard() {
   const [myFees, setMyFees] = useState<MyFees | null>(null);
   const [myProgress, setMyProgress] = useState<ProgressOverall | null>(null);
 
+  // Super admin platform-wide stats
+  const [platform, setPlatform] = useState<PlatformSummary | null>(null);
+
   useEffect(() => {
     api<Me>("/auth/me").then(setMe).catch(() => setMe(null));
     api<Announcement[]>("/announcements").then(setAnnouncements).catch(() => setAnnouncements([]));
@@ -134,6 +195,9 @@ export default function Dashboard() {
       api<MyFees>("/fees/my").then(setMyFees).catch(() => {});
       api<ProgressOverall>("/exams/progress").then(setMyProgress).catch(() => {});
     }
+    if (me.role === "SUPER_ADMIN") {
+      api<PlatformSummary>("/platform/summary").then(setPlatform).catch(() => {});
+    }
   }, [me]);
 
   const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -149,6 +213,8 @@ export default function Dashboard() {
         </h1>
         <p className="text-sm text-slate-500">{today}{me?.tenantName ? ` · ${me.tenantName}` : ""}</p>
       </div>
+
+      {me?.role === "SUPER_ADMIN" && platform && <PlatformOverview data={platform} />}
 
       {!isTeacher && !isSelf && (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">

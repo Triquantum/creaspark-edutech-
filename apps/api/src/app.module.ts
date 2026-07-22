@@ -17,6 +17,7 @@ import { RecordsModule } from "./modules/records/records.module";
 import { EventsModule } from "./modules/events/events.module";
 import { MessagesModule } from "./modules/messages/messages.module";
 import { ExamsModule } from "./modules/exams/exams.module";
+import { PlatformModule } from "./modules/platform/platform.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -39,6 +40,7 @@ import { HealthController } from "./modules/health.controller";
     EventsModule,
     MessagesModule,
     ExamsModule,
+    PlatformModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

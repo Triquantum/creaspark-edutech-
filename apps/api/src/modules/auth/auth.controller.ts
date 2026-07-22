@@ -16,7 +16,7 @@ export class AuthController {
   @Post("register-school")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @Roles(Role.SCHOOL_ADMIN, Role.ORG_ADMIN)
+  @Roles(Role.SUPER_ADMIN)
   registerSchool(@Body() dto: RegisterSchoolDto) {
     return this.auth.registerSchool(dto);
   }

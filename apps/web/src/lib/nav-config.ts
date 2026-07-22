@@ -13,8 +13,8 @@ export type Role =
   | "TEACHER" | "TRAINER" | "ACCOUNTANT" | "RECEPTION" | "LIBRARIAN" | "TRANSPORT_MANAGER"
   | "HR" | "INVENTORY_MANAGER" | "HOSTEL_WARDEN" | "SECURITY" | "PARENT" | "STUDENT" | "GUEST";
 
-export interface NavLeaf { label: string; href: string; roles?: Role[] }
-export interface NavGroup { label: string; icon: string; children?: NavLeaf[]; href?: string; roles?: Role[] }
+export interface NavLeaf { label: string; href: string; roles?: Role[]; hiddenFrom?: Role[] }
+export interface NavGroup { label: string; icon: string; children?: NavLeaf[]; href?: string; roles?: Role[]; hiddenFrom?: Role[] }
 
 const r = (s: string) => "/" + s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 const kids = (base: string, labels: string[]): NavLeaf[] =>
@@ -27,8 +27,8 @@ export const NAV: NavGroup[] = [
   { label: "Dashboard", icon: "home", href: "/dashboard" },
   { label: "Student", icon: "user", href: "/students" },
   { label: "Parents", icon: "users", href: "/parents" },
-  { label: "Teacher", icon: "user-check", href: "/teachers" },
-  { label: "User", icon: "shield", href: "/users" },
+  { label: "Teacher", icon: "user-check", href: "/teachers", hiddenFrom: ["TEACHER"] },
+  { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER"] },
   { label: "Academic", icon: "book", children: kids("academic", ["Class", "Division", "Subject", "Department", "Syllabus", "Assignment", "Routine"]) },
   { label: "Attendance", icon: "calendar-check", children: kids("attendance", ["Student Attendance", "Teacher Attendance", "Exam Attendance"]) },
   { label: "Exam", icon: "clipboard", children: kids("exam", ["Exam", "Exam Schedule", "Exam Grade", "Admit Card"]) },
@@ -55,8 +55,8 @@ export const NAV: NavGroup[] = [
   { label: "Library", icon: "library", children: kids("library", ["Members", "Books", "Issue / Return", "E-Books"]) },
   { label: "Transport", icon: "bus", children: kids("transport", ["Routes", "Vehicles", "Members"]) },
   { label: "Hostel", icon: "building", children: kids("hostel", ["Hostels", "Category", "Members"]) },
-  { label: "Sponsorship", icon: "hand-heart", children: kids("sponsorship", ["Candidates", "Sponsors", "Sponsorships"]) },
-  { label: "Account", icon: "rupee", children: kids("account", ["Fee Types", "Invoices", "Payment History", "Expense", "Income", "Bank Payment"]) },
+  { label: "Sponsorship", icon: "hand-heart", hiddenFrom: ["TEACHER"], children: kids("sponsorship", ["Candidates", "Sponsors", "Sponsorships"]) },
+  { label: "Account", icon: "rupee", hiddenFrom: ["TEACHER"], children: kids("account", ["Fee Types", "Invoices", "Payment History", "Expense", "Income", "Bank Payment"]) },
   { label: "Announcement", icon: "megaphone", children: kids("announcement", ["Notice", "Event", "Holiday"]) },
   { label: "Report", icon: "chart", children: kids("report", [
       "Class Report", "Student Report", "ID Card Report", "Admit Card Report", "Exam Schedule Report",
@@ -68,12 +68,10 @@ export const NAV: NavGroup[] = [
     ]) },
   { label: "Online Admission", icon: "file-plus", href: "/online-admission", roles: SUPER_ADMIN_ONLY },
   { label: "Visitor Information", icon: "id-card", href: "/visitors", roles: SUPER_ADMIN_ONLY },
-  // Register School stays reachable by school-level admins (added earlier
-  // as their dedicated onboarding entry point); the rest of Administrator
-  // is platform-level config and super-admin only.
-  { label: "Register School", icon: "file-plus", href: "/admin/register-school", roles: ["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN"] },
+  // Onboarding a whole new school/tenant is a platform-level operation —
+  // Register School lives under Administrator, super-admin only.
   { label: "Administrator", icon: "settings-2", roles: SUPER_ADMIN_ONLY,
-    children: kids("admin", ["Academic Year", "Certificate Template", "Admins", "Role", "Permission", "Backup", "Update"]) },
+    children: kids("admin", ["Register School", "Academic Year", "Certificate Template", "Admins", "Role", "Permission", "Backup", "Update"]) },
   { label: "Frontend", icon: "globe", roles: SUPER_ADMIN_ONLY, children: kids("frontend", ["Pages", "Menu", "Photo Gallery", "News"]) },
   { label: "Settings", icon: "settings", roles: SUPER_ADMIN_ONLY, children: kids("settings", ["General Settings", "Payment Settings", "SMS Settings", "Email Settings", "Language", "Theme"]) },
 ];

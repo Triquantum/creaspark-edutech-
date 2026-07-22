@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, inputCls } from "@/components/ui/modal";
 
-const ACCESS_ROLES = new Set(["SCHOOL_ADMIN", "ORG_ADMIN"]);
+const ACCESS_ROLES = new Set(["SUPER_ADMIN"]);
 
 interface Me { role: string }
 

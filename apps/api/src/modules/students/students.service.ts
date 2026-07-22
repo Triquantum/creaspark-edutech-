@@ -53,6 +53,16 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto, actorId: string) {
     const { tenantId } = currentTenant();
+
+    const school = await this.prisma.school.findFirst({ where: { id: dto.schoolId, tenantId } });
+    if (!school) throw new NotFoundException("School not found in this tenant");
+    if (dto.sectionId) {
+      const section = await this.prisma.section.findFirst({
+        where: { id: dto.sectionId, tenantId, class: { schoolId: dto.schoolId } },
+      });
+      if (!section) throw new NotFoundException("Division not found in this school");
+    }
+
     const student = await this.prisma.student.create({
       data: { ...dto, dob: dto.dob ? new Date(dto.dob) : undefined, tenantId },
     });
@@ -72,6 +82,12 @@ export class StudentsService {
         where: { schoolId_admissionNo: { schoolId: existing.schoolId, admissionNo: dto.admissionNo } },
       });
       if (clash) throw new ConflictException(`Admission no. ${dto.admissionNo} already exists`);
+    }
+    if (dto.sectionId) {
+      const section = await this.prisma.section.findFirst({
+        where: { id: dto.sectionId, tenantId, class: { schoolId: existing.schoolId } },
+      });
+      if (!section) throw new NotFoundException("Division not found in this school");
     }
 
     const student = await this.prisma.student.update({

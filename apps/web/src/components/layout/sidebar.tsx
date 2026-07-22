@@ -12,16 +12,20 @@ import {
 import { NAV, NavGroup, Role } from "@/lib/nav-config";
 import { api } from "@/lib/api";
 
-function visibleTo(role: Role | null, roles?: Role[]) {
-  return !roles || (role !== null && roles.includes(role));
+function visibleTo(role: Role | null, roles?: Role[], hiddenFrom?: Role[]) {
+  if (!roles && !hiddenFrom) return true;
+  if (role === null) return false;
+  if (roles && !roles.includes(role)) return false;
+  if (hiddenFrom && hiddenFrom.includes(role)) return false;
+  return true;
 }
 
 /** Drops role-gated groups/children the current user can't see. Nothing
  * renders until the role is known, so admin-only items never flash. */
 function filterNav(nav: NavGroup[], role: Role | null): NavGroup[] {
   return nav
-    .filter((g) => visibleTo(role, g.roles))
-    .map((g) => (g.children ? { ...g, children: g.children.filter((c) => visibleTo(role, c.roles)) } : g))
+    .filter((g) => visibleTo(role, g.roles, g.hiddenFrom))
+    .map((g) => (g.children ? { ...g, children: g.children.filter((c) => visibleTo(role, c.roles, c.hiddenFrom)) } : g))
     .filter((g) => !g.children || g.children.length > 0);
 }
 
