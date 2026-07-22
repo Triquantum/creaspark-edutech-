@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import {
   Home, User, Users, UserCheck, Shield, Book, CalendarCheck2, ClipboardList, Percent,
@@ -9,7 +9,21 @@ import {
   Library, Bus, Building2, HandHeart, IndianRupee, Megaphone, BarChart3, FilePlus2,
   IdCard, Settings2, Globe, Settings,
 } from "lucide-react";
-import { NAV, NavGroup } from "@/lib/nav-config";
+import { NAV, NavGroup, Role } from "@/lib/nav-config";
+import { api } from "@/lib/api";
+
+function visibleTo(role: Role | null, roles?: Role[]) {
+  return !roles || (role !== null && roles.includes(role));
+}
+
+/** Drops role-gated groups/children the current user can't see. Nothing
+ * renders until the role is known, so admin-only items never flash. */
+function filterNav(nav: NavGroup[], role: Role | null): NavGroup[] {
+  return nav
+    .filter((g) => visibleTo(role, g.roles))
+    .map((g) => (g.children ? { ...g, children: g.children.filter((c) => visibleTo(role, c.roles)) } : g))
+    .filter((g) => !g.children || g.children.length > 0);
+}
 
 const ICONS: Record<string, LucideIcon> = {
   home: Home, user: User, users: Users, "user-check": UserCheck, shield: Shield, book: Book,
@@ -80,6 +94,12 @@ function Group({ group, path }: { group: NavGroup; path: string }) {
 
 export function Sidebar() {
   const path = usePathname();
+  const [role, setRole] = useState<Role | null>(null);
+  useEffect(() => {
+    api<{ role: Role }>("/auth/me").then((r) => setRole(r.role)).catch(() => {});
+  }, []);
+  const nav = filterNav(NAV, role);
+
   return (
     <aside className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar text-slate-300">
       <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
@@ -96,7 +116,7 @@ export function Sidebar() {
         aria-label="Main"
         className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.15)_transparent]"
       >
-        {NAV.map((g) => <Group key={g.label} group={g} path={path} />)}
+        {nav.map((g) => <Group key={g.label} group={g} path={path} />)}
       </nav>
       <p className="shrink-0 px-6 py-4 text-xs text-slate-500">Creaspark Demo School · 2026–27</p>
     </aside>
