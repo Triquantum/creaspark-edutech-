@@ -33,6 +33,7 @@ export const NAV: NavGroup[] = [
   { label: "Attendance", icon: "calendar-check", children: kids("attendance", ["Student Attendance", "Teacher Attendance", "Exam Attendance"]) },
   { label: "Exam", icon: "clipboard", children: kids("exam", ["Exam", "Exam Schedule", "Exam Grade", "Admit Card"]) },
   { label: "Mark", icon: "percent", children: kids("mark", ["Mark Entry", "Mark Distribution", "Promotion"]) },
+  { label: "Portion Status", icon: "percent", href: "/portion", hiddenFrom: ["PARENT", "STUDENT", "GUEST"] },
   { label: "Message", icon: "message", href: "/message" },
   { label: "Media", icon: "image", href: "/media" },
   { label: "Mail / SMS", icon: "mail", href: "/mail-sms" },

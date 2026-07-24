@@ -65,6 +65,7 @@ model School {
   events        Event[]
   visitors      Visitor[]
   academicYears AcademicYear[]
+  portionReports PortionReport[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -104,6 +105,8 @@ model User {
   messagesSent      Message[]      @relation("MessagesSent")
   messagesReceived  Message[]      @relation("MessagesReceived")
   announcementReads AnnouncementRead[]
+  portionReportsSubmitted PortionReport[] @relation("PortionReportsByTeacher")
+  portionReportsReviewed  PortionReport[] @relation("PortionReportsReviewed")
 
   @@index([tenantId, role])
 }
@@ -155,6 +158,7 @@ model Class {
   school   School @relation(fields: [schoolId], references: [id])
   name     String                           // "Grade 6"
   sections Section[]
+  portionReports PortionReport[]
 
   @@unique([schoolId, name])
   @@index([tenantId])
@@ -171,6 +175,7 @@ model Section {
   students    Student[]
   attendance  AttendanceRecord[]
   messages    Message[]
+  portionReports PortionReport[]
 
   @@unique([classId, name])
   @@index([tenantId])
@@ -208,6 +213,7 @@ model Subject {
   name     String
   code     String?
   exams    ExamSubject[]
+  portionReports PortionReport[]
 
   @@index([tenantId])
 }
@@ -549,4 +555,48 @@ model Message {
   @@index([tenantId, recipientId, createdAt])
   @@index([tenantId, sectionId, createdAt])
   @@index([tenantId, senderId, createdAt])
+}
+
+// ────────────────────────── Syllabus / Portion Tracking ──────────────────────────
+// A teacher's self-reported record of how much of a subject's syllabus they've
+// covered, submitted daily or weekly. School management reviews each entry —
+// this IS the "report" (the review trail on the row), not a separate document.
+
+model PortionReport {
+  id              String   @id @default(cuid())
+  tenantId        String
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id])
+  teacherId       String
+  teacher         User     @relation("PortionReportsByTeacher", fields: [teacherId], references: [id])
+  subjectId       String
+  subject         Subject  @relation(fields: [subjectId], references: [id])
+  classId         String?
+  class           Class?   @relation(fields: [classId], references: [id])
+  sectionId       String?
+  section         Section? @relation(fields: [sectionId], references: [id])
+  period          PortionPeriod @default(DAILY)
+  periodDate      DateTime @db.Date               // the day, or the week's start date
+  topicsCovered   String
+  percentComplete Int?                            // teacher's own 0–100 estimate
+  status          PortionStatus @default(SUBMITTED)
+  reviewedBy      String?
+  reviewer        User?    @relation("PortionReportsReviewed", fields: [reviewedBy], references: [id])
+  reviewedAt      DateTime?
+  reviewNote      String?
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, schoolId, periodDate])
+  @@index([tenantId, teacherId, periodDate])
+}
+
+enum PortionPeriod {
+  DAILY
+  WEEKLY
+}
+
+enum PortionStatus {
+  SUBMITTED
+  REVIEWED
+  FLAGGED
 }

@@ -119,8 +119,10 @@ function PlatformOverview({ data }: { data: PlatformSummary }) {
             </thead>
             <tbody>
               {data.schools.map((s) => (
-                <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
-                  <td className="px-4 py-3 font-medium text-night dark:text-white">{s.name}</td>
+                <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
+                  <td className="px-4 py-3 font-medium text-night dark:text-white">
+                    <Link href={`/admin/schools/${s.id}`} className="hover:text-primary hover:underline">{s.name}</Link>
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{s.plan}</td>
                   <td className="px-4 py-3 text-slate-500">{s.status}</td>
                   <td className="px-4 py-3 text-right text-night dark:text-white">{s.students}</td>
