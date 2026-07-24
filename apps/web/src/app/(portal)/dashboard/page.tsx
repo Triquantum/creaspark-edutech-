@@ -37,6 +37,11 @@ const ADMIN_QUICK: QuickTile[] = [
   { label: "Announcements", href: "/announcement/notice", icon: Megaphone },
 ];
 
+const SUPER_ADMIN_QUICK: QuickTile[] = [
+  { label: "Register School", href: "/admin/register-school", icon: School },
+  ...ADMIN_QUICK,
+];
+
 const TEACHER_QUICK: QuickTile[] = [
   { label: "Take Attendance", href: "/attendance/student-attendance", icon: CalendarCheck2 },
   { label: "Students", href: "/students", icon: GraduationCap },
@@ -203,7 +208,8 @@ export default function Dashboard() {
   const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const isTeacher = me?.role === "TEACHER";
   const isSelf = me?.role === "STUDENT" || me?.role === "PARENT";
-  const quickTiles = isTeacher ? TEACHER_QUICK : isSelf ? SELF_QUICK : ADMIN_QUICK;
+  const quickTiles = isTeacher ? TEACHER_QUICK : isSelf ? SELF_QUICK
+    : me?.role === "SUPER_ADMIN" ? SUPER_ADMIN_QUICK : ADMIN_QUICK;
 
   return (
     <div className="space-y-6">
