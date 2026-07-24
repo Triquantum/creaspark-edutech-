@@ -21,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         jwksUri: process.env.SUPABASE_JWKS_URL!,
       }),
       audience: "authenticated",
-      issuer: `${process.env.SUPABASE_URL}/auth/v1`,
+      issuer: `${process.env.SUPABASE_URL!.replace(/\/+$/, "")}/auth/v1`,
       algorithms: ["ES256", "RS256"],
     });
   }

@@ -26,7 +26,7 @@ export class SupabaseJwtVerifier {
       const key = await this.client.getSigningKey(decoded.header.kid);
       const payload = jwt.verify(token, key.getPublicKey(), {
         audience: "authenticated",
-        issuer: `${process.env.SUPABASE_URL}/auth/v1`,
+        issuer: `${process.env.SUPABASE_URL!.replace(/\/+$/, "")}/auth/v1`,
       }) as jwt.JwtPayload;
 
       const appMeta = (payload.app_metadata ?? {}) as { role?: string; tenantId?: string };
