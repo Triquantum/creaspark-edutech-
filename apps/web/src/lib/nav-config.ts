@@ -39,7 +39,6 @@ export const NAV: NavGroup[] = [
   { label: "Mail / SMS", icon: "mail", href: "/mail-sms" },
   { label: "Online Exam", icon: "monitor", children: kids("online-exam", ["Question Group", "Question Level", "Question Bank", "Online Exam", "Instruction"]) },
   { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
-  { label: "Food Management", icon: "utensils", hiddenFrom: ["PARENT"], children: kids("food", ["Stores", "Location", "Food Category", "Item", "Item Assignment", "Purchase"]) },
   { label: "Asset Management", icon: "box", hiddenFrom: ["PARENT"], children: kids("assets", ["Vendor", "Location", "Asset Category", "Asset", "Asset Assignment", "Purchase"]) },
   { label: "Inventory", icon: "package", hiddenFrom: ["PARENT"], children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
   {

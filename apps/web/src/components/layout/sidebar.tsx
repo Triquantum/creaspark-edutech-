@@ -7,7 +7,7 @@ import {
   Home, User, Users, UserCheck, Shield, Book, CalendarCheck2, ClipboardList, Percent,
   MessageSquare, Image as ImageIcon, Mail, Monitor, Wallet, Box, Package, LogOut, Heart,
   Library, Bus, Building2, HandHeart, IndianRupee, Megaphone, BarChart3, FilePlus2,
-  IdCard, Settings2, Globe, Settings, UtensilsCrossed,
+  IdCard, Settings2, Globe, Settings,
 } from "lucide-react";
 import { NAV, NavGroup, Role } from "@/lib/nav-config";
 import { api } from "@/lib/api";
@@ -36,7 +36,6 @@ const ICONS: Record<string, LucideIcon> = {
   "log-out": LogOut, heart: Heart, library: Library, bus: Bus, building: Building2,
   "hand-heart": HandHeart, rupee: IndianRupee, megaphone: Megaphone, chart: BarChart3,
   "file-plus": FilePlus2, "id-card": IdCard, "settings-2": Settings2, globe: Globe, settings: Settings,
-  utensils: UtensilsCrossed,
 };
 
 function Group({ group, path }: { group: NavGroup; path: string }) {
