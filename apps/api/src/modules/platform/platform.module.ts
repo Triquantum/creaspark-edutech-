@@ -1,10 +1,27 @@
-import { Controller, Get, Injectable, Module, NotFoundException, Param, UseGuards } from "@nestjs/common";
+import {
+  Body, ConflictException, Controller, Delete, Get, Injectable, Module,
+  NotFoundException, Param, Patch, UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Role } from "@educore/database";
+import { Board, Plan, Role, TenantStatus } from "@educore/database";
+import { IsEnum, IsOptional, IsString } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
+
+export class UpdateSchoolDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsEnum(Board) board?: Board;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() city?: string;
+  @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsEnum(Plan) plan?: Plan;
+  @IsOptional() @IsEnum(TenantStatus) status?: TenantStatus;
+}
 
 /**
  * Cross-tenant platform overview for SUPER_ADMIN — deliberately queries
@@ -131,6 +148,50 @@ export class PlatformService {
       subjects: subjects.map((s) => ({ id: s.id, name: s.name, code: s.code })),
     };
   }
+
+  /** Updates the School row and, if plan/status were sent, the Tenant row
+   * alongside it — one form on the frontend, two tables underneath. */
+  async updateSchool(id: string, dto: UpdateSchoolDto) {
+    const school = await this.prisma.school.findUnique({ where: { id } });
+    if (!school) throw new NotFoundException("School not found");
+
+    if (dto.code && dto.code !== school.code) {
+      const clash = await this.prisma.school.findUnique({
+        where: { tenantId_code: { tenantId: school.tenantId, code: dto.code } },
+      });
+      if (clash) throw new ConflictException(`School code "${dto.code}" already exists`);
+    }
+
+    const { plan, status, ...schoolFields } = dto;
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.school.update({ where: { id }, data: schoolFields });
+      if (plan || status) {
+        await tx.tenant.update({
+          where: { id: school.tenantId },
+          data: { ...(plan && { plan }), ...(status && { status }) },
+        });
+      }
+      return updated;
+    });
+  }
+
+  /** Hard delete only when the school is an empty shell — any real student
+   * or staff history must be preserved, same rule StudentsService applies
+   * to individual students. Suspend the tenant instead for anything else. */
+  async deleteSchool(id: string) {
+    const school = await this.prisma.school.findUnique({
+      where: { id },
+      include: { _count: { select: { students: true, staff: true } } },
+    });
+    if (!school) throw new NotFoundException("School not found");
+    if (school._count.students > 0 || school._count.staff > 0) {
+      throw new ConflictException(
+        "This school has students or staff on record. Set its status to Suspended instead of deleting, to preserve their data.",
+      );
+    }
+    await this.prisma.school.delete({ where: { id } });
+    return { deleted: true };
+  }
 }
 
 @ApiTags("platform")
@@ -156,6 +217,18 @@ export class PlatformController {
   @Roles(Role.SUPER_ADMIN)
   schoolDetail(@Param("id") id: string) {
     return this.svc.schoolDetail(id);
+  }
+
+  @Patch("schools/:id")
+  @Roles(Role.SUPER_ADMIN)
+  updateSchool(@Param("id") id: string, @Body() dto: UpdateSchoolDto) {
+    return this.svc.updateSchool(id, dto);
+  }
+
+  @Delete("schools/:id")
+  @Roles(Role.SUPER_ADMIN)
+  deleteSchool(@Param("id") id: string) {
+    return this.svc.deleteSchool(id);
   }
 }
 

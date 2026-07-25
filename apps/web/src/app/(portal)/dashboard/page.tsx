@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   BookOpen, CalendarCheck2, GraduationCap, HeartHandshake, MessageSquare,
   Megaphone, School, ShieldCheck, Users, Wallet, type LucideIcon,
@@ -8,7 +9,13 @@ import {
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Calendar } from "@/components/ui/calendar";
+import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+
+const BOARDS = ["CBSE", "ICSE", "IB", "IGCSE", "STATE", "OTHER"] as const;
+const PLANS = ["STARTER", "GROWTH", "ENTERPRISE"] as const;
+const STATUSES = ["ACTIVE", "SUSPENDED", "TRIAL"] as const;
 
 interface Me { fullName?: string; tenantName?: string; role: string }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
@@ -87,7 +94,118 @@ function QuickAccess({ tiles }: { tiles: QuickTile[] }) {
   );
 }
 
-function PlatformOverview({ data }: { data: PlatformSummary }) {
+interface SchoolFull {
+  id: string; name: string; code: string; board: string;
+  city: string | null; state: string | null; phone: string | null; email: string | null;
+  plan: string; status: string;
+}
+type SchoolForm = { name: string; code: string; board: string; city: string; state: string; phone: string; email: string; plan: string; status: string };
+
+function toForm(s: SchoolFull): SchoolForm {
+  return {
+    name: s.name, code: s.code, board: s.board, city: s.city ?? "", state: s.state ?? "",
+    phone: s.phone ?? "", email: s.email ?? "", plan: s.plan, status: s.status,
+  };
+}
+
+function SchoolEditModal({ schoolId, onClose, onSaved }: { schoolId: string; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState<SchoolForm | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ school: SchoolFull }>(`/platform/schools/${schoolId}`).then((r) => setForm(toForm(r.school))).catch(() => setError("Could not load school"));
+  }, [schoolId]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await api(`/platform/schools/${schoolId}`, { method: "PATCH", body: JSON.stringify(form) });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Edit school" onClose={onClose} wide>
+      {!form ? (
+        <p className="text-sm text-slate-500">{error ?? "Loading…"}</p>
+      ) : (
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field id="se-name" label="School name">
+              <input id="se-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-code" label="School code">
+              <input id="se-code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-board" label="Board">
+              <select id="se-board" value={form.board} onChange={(e) => setForm({ ...form, board: e.target.value })} className={inputCls}>
+                {BOARDS.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </Field>
+            <Field id="se-city" label="City" optional>
+              <input id="se-city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-state" label="State" optional>
+              <input id="se-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-phone" label="Phone" optional>
+              <input id="se-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-email" label="Email" optional>
+              <input id="se-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-plan" label="Plan">
+              <select id="se-plan" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} className={inputCls}>
+                {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </Field>
+            <Field id="se-status" label="Status">
+              <select id="se-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inputCls}>
+                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+          </div>
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <div className="flex justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+function PlatformOverview({ data, onChanged }: { data: PlatformSummary; onChanged: () => void }) {
+  const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<SchoolSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setBusy(true);
+    setDeleteError(null);
+    try {
+      await api(`/platform/schools/${deleting.id}`, { method: "DELETE" });
+      setDeleting(null);
+      onChanged();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
@@ -115,6 +233,7 @@ function PlatformOverview({ data }: { data: PlatformSummary }) {
                 <th className="px-4 py-3 text-right font-medium">Teachers</th>
                 <th className="px-4 py-3 text-right font-medium">Parents</th>
                 <th className="px-4 py-3 font-medium">Registered</th>
+                <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -129,12 +248,34 @@ function PlatformOverview({ data }: { data: PlatformSummary }) {
                   <td className="px-4 py-3 text-right text-night dark:text-white">{s.teachers}</td>
                   <td className="px-4 py-3 text-right text-night dark:text-white">{s.parents}</td>
                   <td className="px-4 py-3 text-slate-500">{new Date(s.createdAt).toLocaleDateString("en-IN")}</td>
+                  <td className="px-4 py-3">
+                    <RowActions
+                      onView={() => router.push(`/admin/schools/${s.id}`)}
+                      onEdit={() => setEditingId(s.id)}
+                      onDelete={() => setDeleting(s)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </Card>
+
+      {editingId && (
+        <SchoolEditModal schoolId={editingId} onClose={() => setEditingId(null)}
+          onSaved={() => { setEditingId(null); onChanged(); }} />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Delete school?"
+          message={deleteError ?? `This permanently removes "${deleting.name}". Schools with students or staff on record can't be deleted — set their status to Suspended instead.`}
+          onConfirm={confirmDelete}
+          onClose={() => { setDeleting(null); setDeleteError(null); }}
+          busy={busy}
+        />
+      )}
     </div>
   );
 }
@@ -203,9 +344,13 @@ export default function Dashboard() {
       api<ProgressOverall>("/exams/progress").then(setMyProgress).catch(() => {});
     }
     if (me.role === "SUPER_ADMIN") {
-      api<PlatformSummary>("/platform/summary").then(setPlatform).catch(() => {});
+      loadPlatform();
     }
   }, [me]);
+
+  function loadPlatform() {
+    api<PlatformSummary>("/platform/summary").then(setPlatform).catch(() => {});
+  }
 
   const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const isTeacher = me?.role === "TEACHER";
@@ -222,7 +367,7 @@ export default function Dashboard() {
         <p className="text-sm text-slate-500">{today}{me?.tenantName ? ` · ${me.tenantName}` : ""}</p>
       </div>
 
-      {me?.role === "SUPER_ADMIN" && platform && <PlatformOverview data={platform} />}
+      {me?.role === "SUPER_ADMIN" && platform && <PlatformOverview data={platform} onChanged={loadPlatform} />}
 
       {!isTeacher && !isSelf && (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
