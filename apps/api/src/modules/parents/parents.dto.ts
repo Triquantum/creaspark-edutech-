@@ -25,4 +25,5 @@ export class UpdateParentDto {
 
 export class QueryParentsDto {
   @IsOptional() @IsString() q?: string;
+  @IsOptional() @IsString() schoolId?: string;
 }

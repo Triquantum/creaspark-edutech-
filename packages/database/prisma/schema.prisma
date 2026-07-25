@@ -48,6 +48,7 @@ model School {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   name      String
   code      String                          // school short-code, unique per tenant
+  institutionType InstitutionType @default(SCHOOL)
   board     Board    @default(CBSE)
   address   String?
   city      String?
@@ -78,6 +79,12 @@ enum Board {
   IGCSE
   STATE
   OTHER
+}
+
+enum InstitutionType {
+  SCHOOL
+  COLLEGE
+  INSTITUTE
 }
 
 // ────────────────────────── Identity & RBAC ──────────────────────────

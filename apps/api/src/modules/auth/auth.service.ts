@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
-import { Role } from "@educore/database";
+import { InstitutionType, Role } from "@educore/database";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
@@ -46,7 +46,12 @@ export class AuthService {
     const schoolName = dto.schoolName.trim();
 
     const tenant = await this.prisma.tenant.create({ data: { name: schoolName, slug } });
-    await this.prisma.school.create({ data: { tenantId: tenant.id, name: schoolName, code: slug.toUpperCase() } });
+    await this.prisma.school.create({
+      data: {
+        tenantId: tenant.id, name: schoolName, code: slug.toUpperCase(),
+        institutionType: dto.institutionType ?? InstitutionType.SCHOOL,
+      },
+    });
 
     try {
       const authUser = await this.supabaseAdmin.createUser(email, dto.adminPassword, {

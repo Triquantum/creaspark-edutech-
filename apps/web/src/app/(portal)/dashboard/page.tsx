@@ -9,13 +9,9 @@ import {
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Calendar } from "@/components/ui/calendar";
-import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/ui/modal";
-import { Button } from "@/components/ui/button";
+import { ConfirmDialog, RowActions } from "@/components/ui/modal";
 import { api } from "@/lib/api";
-
-const BOARDS = ["CBSE", "ICSE", "IB", "IGCSE", "STATE", "OTHER"] as const;
-const PLANS = ["STARTER", "GROWTH", "ENTERPRISE"] as const;
-const STATUSES = ["ACTIVE", "SUSPENDED", "TRIAL"] as const;
+import { SchoolEditModal } from "@/components/platform/school-edit-modal";
 
 interface Me { fullName?: string; tenantName?: string; role: string }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
@@ -25,7 +21,7 @@ interface MonthlyAttendance { summary: { percentage: number; total: number } }
 interface MyFees { totalDue: string | number; nextDue: { dueDate: string; amount: string | number } | null }
 interface ProgressOverall { overall: { averagePercentage: number; grade: string } | null }
 interface SchoolSummary {
-  id: string; name: string; slug: string; plan: string; status: string; createdAt: string;
+  id: string; name: string; institutionType: string; slug: string; plan: string; status: string; createdAt: string;
   students: number; teachers: number; parents: number;
 }
 interface PlatformSummary {
@@ -94,102 +90,13 @@ function QuickAccess({ tiles }: { tiles: QuickTile[] }) {
   );
 }
 
-interface SchoolFull {
-  id: string; name: string; code: string; board: string;
-  city: string | null; state: string | null; phone: string | null; email: string | null;
-  plan: string; status: string;
-}
-type SchoolForm = { name: string; code: string; board: string; city: string; state: string; phone: string; email: string; plan: string; status: string };
-
-function toForm(s: SchoolFull): SchoolForm {
-  return {
-    name: s.name, code: s.code, board: s.board, city: s.city ?? "", state: s.state ?? "",
-    phone: s.phone ?? "", email: s.email ?? "", plan: s.plan, status: s.status,
-  };
-}
-
-function SchoolEditModal({ schoolId, onClose, onSaved }: { schoolId: string; onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState<SchoolForm | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<{ school: SchoolFull }>(`/platform/schools/${schoolId}`).then((r) => setForm(toForm(r.school))).catch(() => setError("Could not load school"));
-  }, [schoolId]);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form) return;
-    setError(null);
-    setBusy(true);
-    try {
-      await api(`/platform/schools/${schoolId}`, { method: "PATCH", body: JSON.stringify(form) });
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal title="Edit school" onClose={onClose} wide>
-      {!form ? (
-        <p className="text-sm text-slate-500">{error ?? "Loading…"}</p>
-      ) : (
-        <form onSubmit={submit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="se-name" label="School name">
-              <input id="se-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} />
-            </Field>
-            <Field id="se-code" label="School code">
-              <input id="se-code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className={inputCls} />
-            </Field>
-            <Field id="se-board" label="Board">
-              <select id="se-board" value={form.board} onChange={(e) => setForm({ ...form, board: e.target.value })} className={inputCls}>
-                {BOARDS.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
-            </Field>
-            <Field id="se-city" label="City" optional>
-              <input id="se-city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className={inputCls} />
-            </Field>
-            <Field id="se-state" label="State" optional>
-              <input id="se-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className={inputCls} />
-            </Field>
-            <Field id="se-phone" label="Phone" optional>
-              <input id="se-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
-            </Field>
-            <Field id="se-email" label="Email" optional>
-              <input id="se-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} />
-            </Field>
-            <Field id="se-plan" label="Plan">
-              <select id="se-plan" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} className={inputCls}>
-                {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </Field>
-            <Field id="se-status" label="Status">
-              <select id="se-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inputCls}>
-                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </Field>
-          </div>
-          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-          <div className="flex justify-end gap-3 pt-1">
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
-          </div>
-        </form>
-      )}
-    </Modal>
-  );
-}
-
 function PlatformOverview({ data, onChanged }: { data: PlatformSummary; onChanged: () => void }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<SchoolSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const schools = data.schools.filter((s) => s.institutionType === "SCHOOL");
 
   async function confirmDelete() {
     if (!deleting) return;
@@ -220,7 +127,7 @@ function PlatformOverview({ data, onChanged }: { data: PlatformSummary; onChange
           <School size={16} className="text-primary" />
           <h2 className="font-display font-semibold text-night dark:text-white">Registered Schools</h2>
         </div>
-        {data.schools.length === 0 ? (
+        {schools.length === 0 ? (
           <p className="p-6 text-sm text-slate-500">No schools registered yet.</p>
         ) : (
           <table className="w-full text-sm">
@@ -237,7 +144,7 @@ function PlatformOverview({ data, onChanged }: { data: PlatformSummary; onChange
               </tr>
             </thead>
             <tbody>
-              {data.schools.map((s) => (
+              {schools.map((s) => (
                 <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
                   <td className="px-4 py-3 font-medium text-night dark:text-white">
                     <Link href={`/admin/schools/${s.id}`} className="hover:text-primary hover:underline">{s.name}</Link>

@@ -16,9 +16,9 @@ export class ParentsController {
   constructor(private parents: ParentsService) {}
 
   @Get()
-  @Roles(Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.RECEPTION, Role.TEACHER)
-  list(@Query() query: QueryParentsDto) {
-    return this.parents.list(query);
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.RECEPTION, Role.TEACHER)
+  list(@Query() query: QueryParentsDto, @CurrentUser() user: AuthUser) {
+    return this.parents.list(user, query);
   }
 
   @Post()
@@ -28,15 +28,15 @@ export class ParentsController {
   }
 
   @Patch(":id")
-  @Roles(Role.SCHOOL_ADMIN, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
   update(@Param("id") id: string, @Body() dto: UpdateParentDto, @CurrentUser() user: AuthUser) {
-    return this.parents.update(id, dto, user.id);
+    return this.parents.update(id, dto, user, user.id);
   }
 
   @Delete(":id")
-  @Roles(Role.SCHOOL_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN)
   remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
-    return this.parents.remove(id, user.id);
+    return this.parents.remove(id, user, user.id);
   }
 }
 

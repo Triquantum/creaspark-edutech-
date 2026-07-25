@@ -72,7 +72,11 @@ export const NAV: NavGroup[] = [
   // Onboarding a whole new school/tenant is a platform-level operation —
   // Register School lives under Administrator, super-admin only.
   { label: "Administrator", icon: "settings-2", roles: SUPER_ADMIN_ONLY,
-    children: kids("admin", ["Register School", "Academic Year", "Certificate Template", "Admins", "Role", "Permission", "Backup", "Update"]) },
+    children: [
+      ...kids("admin", ["Register School", "Register Institute"]),
+      { label: "People Directory", href: "/admin/people" },
+      ...kids("admin", ["Academic Year", "Certificate Template", "Admins", "Role", "Permission", "Backup", "Update"]),
+    ] },
   { label: "Frontend", icon: "globe", roles: SUPER_ADMIN_ONLY, children: kids("frontend", ["Pages", "Menu", "Photo Gallery", "News"]) },
   { label: "Settings", icon: "settings", roles: SUPER_ADMIN_ONLY, children: kids("settings", ["General Settings", "Payment Settings", "SMS Settings", "Email Settings", "Language", "Theme"]) },
 ];

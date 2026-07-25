@@ -27,6 +27,7 @@ export const auth = {
   /** Creates the school + its admin identity in Supabase; sign in separately via supabase.auth.signInWithPassword. */
   registerSchool: (body: {
     schoolName: string; schoolCode: string; adminFullName: string; adminEmail: string; adminPassword: string;
+    institutionType?: "SCHOOL" | "COLLEGE" | "INSTITUTE";
   }) =>
     api<{ tenant: { id: string; slug: string; name: string } }>(
       "/auth/register-school",

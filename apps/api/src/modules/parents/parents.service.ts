@@ -1,9 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
+import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateParentDto, QueryParentsDto, UpdateParentDto } from "./parents.dto";
 
 const PARENT_SELECT = {
@@ -20,12 +21,33 @@ const PARENT_SELECT = {
 export class ParentsService {
   constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
 
-  async list(query: QueryParentsDto) {
-    const { tenantId } = currentTenant();
+  /** SUPER_ADMIN has no real school of their own; tenantId for a *new*
+   * login is resolved from an explicit schoolId instead of currentTenant(). */
+  private async resolveTenant(user: AuthUser, schoolId?: string): Promise<{ tenantId: string }> {
+    if (user.role === Role.SUPER_ADMIN) {
+      if (!schoolId) throw new BadRequestException("schoolId is required for Super Admin");
+      const school = await this.prisma.school.findUnique({ where: { id: schoolId } });
+      if (!school) throw new NotFoundException("School not found");
+      return { tenantId: school.tenantId };
+    }
+    return { tenantId: currentTenant().tenantId };
+  }
+
+  /** For actions on an *existing* parent: SUPER_ADMIN may act on any
+   * tenant; everyone else is confined to their own. */
+  private assertCanAct(user: AuthUser, targetTenantId: string) {
+    if (user.role === Role.SUPER_ADMIN) return;
+    if (targetTenantId !== currentTenant().tenantId) throw new NotFoundException("Parent not found");
+  }
+
+  async list(user: AuthUser, query: QueryParentsDto) {
+    const crossTenant = user.role === Role.SUPER_ADMIN && !query.schoolId;
+    const tenantId = crossTenant ? undefined : (await this.resolveTenant(user, query.schoolId)).tenantId;
     return this.prisma.user.findMany({
       where: {
-        tenantId,
+        ...(tenantId && { tenantId }),
         role: Role.PARENT,
+        ...(query.schoolId && { guardianLinks: { some: { student: { schoolId: query.schoolId } } } }),
         ...(query.q && {
           OR: [
             { fullName: { contains: query.q, mode: "insensitive" as const } },
@@ -33,9 +55,9 @@ export class ParentsService {
           ],
         }),
       },
-      select: PARENT_SELECT,
+      select: crossTenant ? { ...PARENT_SELECT, tenant: { select: { name: true } } } : PARENT_SELECT,
       orderBy: { fullName: "asc" },
-      take: 100,
+      take: 200,
     });
   }
 
@@ -80,16 +102,16 @@ export class ParentsService {
     };
   }
 
-  private async findParent(id: string) {
-    const { tenantId } = currentTenant();
-    const user = await this.prisma.user.findFirst({ where: { id, tenantId, role: Role.PARENT }, select: PARENT_SELECT });
-    if (!user) throw new NotFoundException("Parent not found");
-    return user;
+  private async findParent(id: string, user: AuthUser) {
+    const found = await this.prisma.user.findFirst({ where: { id, role: Role.PARENT }, select: { ...PARENT_SELECT, tenantId: true } });
+    if (!found) throw new NotFoundException("Parent not found");
+    this.assertCanAct(user, found.tenantId);
+    return found;
   }
 
-  async update(id: string, dto: UpdateParentDto, actorId: string) {
-    const { tenantId } = currentTenant();
-    await this.findParent(id);
+  async update(id: string, dto: UpdateParentDto, user: AuthUser, actorId: string) {
+    const target = await this.findParent(id, user);
+    const tenantId = target.tenantId;
 
     if (dto.isActive !== undefined) {
       await this.supabaseAdmin.setBanned(id, !dto.isActive);
@@ -118,13 +140,13 @@ export class ParentsService {
         data: { tenantId, userId: actorId, action: "parent.update", entity: "User", entityId: id },
       }),
     ]);
-    return this.findParent(id);
+    return this.findParent(id, user);
   }
 
   /** Removes the login but keeps the guardian contact entries on students (name/phone/relation stay on record). */
-  async remove(id: string, actorId: string) {
-    const { tenantId } = currentTenant();
-    const user = await this.findParent(id);
+  async remove(id: string, user: AuthUser, actorId: string) {
+    const target = await this.findParent(id, user);
+    const tenantId = target.tenantId;
 
     await this.supabaseAdmin.deleteUser(id);
     await this.prisma.$transaction([
@@ -133,7 +155,7 @@ export class ParentsService {
       this.prisma.auditLog.create({
         data: {
           tenantId, userId: actorId, action: "parent.delete", entity: "User", entityId: id,
-          metadata: { email: user.email, name: user.fullName },
+          metadata: { email: target.email, name: target.fullName },
         },
       }),
     ]);

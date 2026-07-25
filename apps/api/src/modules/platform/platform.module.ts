@@ -3,7 +3,7 @@ import {
   NotFoundException, Param, Patch, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Board, Plan, Role, TenantStatus } from "@educore/database";
+import { Board, InstitutionType, Plan, Role, TenantStatus } from "@educore/database";
 import { IsEnum, IsOptional, IsString } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -13,6 +13,7 @@ import { Roles } from "../../common/decorators/roles.decorator";
 export class UpdateSchoolDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsEnum(InstitutionType) institutionType?: InstitutionType;
   @IsOptional() @IsEnum(Board) board?: Board;
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() city?: string;
@@ -43,7 +44,10 @@ export class PlatformService {
         // this join gives the real School.id the drill-down page needs,
         // while still keying counts off tenantId like every other module.
         this.prisma.school.findMany({
-          select: { id: true, name: true, tenant: { select: { id: true, slug: true, plan: true, status: true, createdAt: true } } },
+          select: {
+            id: true, name: true, institutionType: true,
+            tenant: { select: { id: true, slug: true, plan: true, status: true, createdAt: true } },
+          },
           orderBy: { createdAt: "desc" },
         }),
         this.prisma.student.groupBy({ by: ["tenantId"], _count: true }),
@@ -61,7 +65,8 @@ export class PlatformService {
       totalTeachers,
       totalParents,
       schools: schools.map((s) => ({
-        id: s.id, name: s.name, slug: s.tenant.slug, plan: s.tenant.plan, status: s.tenant.status, createdAt: s.tenant.createdAt,
+        id: s.id, name: s.name, institutionType: s.institutionType,
+        slug: s.tenant.slug, plan: s.tenant.plan, status: s.tenant.status, createdAt: s.tenant.createdAt,
         students: studentMap.get(s.tenant.id) ?? 0,
         teachers: teacherMap.get(s.tenant.id) ?? 0,
         parents: parentMap.get(s.tenant.id) ?? 0,
@@ -72,10 +77,10 @@ export class PlatformService {
   /** Every physical school (not tenant) across the platform, for cross-tenant pickers. */
   async schools() {
     const rows = await this.prisma.school.findMany({
-      select: { id: true, name: true, code: true, tenant: { select: { name: true } } },
+      select: { id: true, name: true, code: true, institutionType: true, tenant: { select: { name: true } } },
       orderBy: { name: "asc" },
     });
-    return rows.map((r) => ({ id: r.id, name: r.name, code: r.code, tenantName: r.tenant.name }));
+    return rows.map((r) => ({ id: r.id, name: r.name, code: r.code, institutionType: r.institutionType, tenantName: r.tenant.name }));
   }
 
   /** Full roster for one school — the school-wise drill-down from the
@@ -127,7 +132,7 @@ export class PlatformService {
 
     return {
       school: {
-        id: school.id, name: school.name, code: school.code, board: school.board,
+        id: school.id, name: school.name, code: school.code, institutionType: school.institutionType, board: school.board,
         city: school.city, state: school.state, phone: school.phone, email: school.email,
         tenantName: school.tenant.name, plan: school.tenant.plan, status: school.tenant.status,
       },
