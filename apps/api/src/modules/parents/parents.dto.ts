@@ -1,5 +1,6 @@
-import { IsArray, IsBoolean, IsEmail, IsOptional, IsString, MinLength, ArrayMinSize, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength, ArrayMinSize, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
+import { Gender } from "@educore/database";
 
 export class StudentLinkDto {
   @IsString() studentId: string;
@@ -20,6 +21,7 @@ export class CreateParentDto {
 export class UpdateParentDto {
   @IsOptional() @IsString() fullName?: string;
   @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsEnum(Gender) gender?: Gender;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

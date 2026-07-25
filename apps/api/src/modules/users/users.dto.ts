@@ -1,5 +1,5 @@
 import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength } from "class-validator";
-import { Role } from "@educore/database";
+import { Gender, Role } from "@educore/database";
 
 export class CreateUserDto {
   @IsString() fullName: string;
@@ -15,6 +15,7 @@ export class CreateUserDto {
 export class UpdateUserDto {
   @IsOptional() @IsString() fullName?: string;
   @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsEnum(Gender) gender?: Gender;
   @IsOptional() @IsEnum(Role) role?: Role;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }

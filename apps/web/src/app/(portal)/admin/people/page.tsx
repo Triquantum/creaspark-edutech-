@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Users, Pencil } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -9,15 +10,25 @@ import { Modal, Field, inputCls } from "@/components/ui/modal";
 const ACCESS_ROLES = new Set(["SUPER_ADMIN"]);
 const TABS = ["Students", "Teachers", "Parents"] as const;
 type Tab = (typeof TABS)[number];
+const GENDERS = ["MALE", "FEMALE", "OTHER"] as const;
 
 interface Me { role: string }
 interface Institution { id: string; name: string; institutionType: string }
 interface StudentRow {
-  id: string; firstName: string; lastName: string; admissionNo: string; rollNo: string | null;
+  id: string; firstName: string; lastName: string; admissionNo: string; rollNo: string | null; gender: string | null;
   section: { name: string; class: { name: string } } | null;
 }
-interface TeacherRow { id: string; fullName: string; email: string; phone: string | null; isActive: boolean; tenant?: { name: string } }
-interface ParentRow { id: string; fullName: string; email: string; phone: string | null; isActive: boolean }
+interface TeacherRow { id: string; fullName: string; email: string; phone: string | null; gender: string | null; isActive: boolean; tenant?: { name: string } }
+interface ParentRow { id: string; fullName: string; email: string; phone: string | null; gender: string | null; isActive: boolean }
+
+function GenderSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+      <option value="">Unspecified</option>
+      {GENDERS.map((g) => <option key={g} value={g}>{g.charAt(0) + g.slice(1).toLowerCase()}</option>)}
+    </select>
+  );
+}
 
 function InstitutionSelect({ institutions, value, onChange }: { institutions: Institution[]; value: string; onChange: (v: string) => void }) {
   return (
@@ -31,7 +42,9 @@ function InstitutionSelect({ institutions, value, onChange }: { institutions: In
 }
 
 function StudentEditModal({ row, onClose, onSaved }: { row: StudentRow; onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ firstName: row.firstName, lastName: row.lastName, admissionNo: row.admissionNo, rollNo: row.rollNo ?? "" });
+  const [form, setForm] = useState({
+    firstName: row.firstName, lastName: row.lastName, admissionNo: row.admissionNo, rollNo: row.rollNo ?? "", gender: row.gender ?? "",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +53,10 @@ function StudentEditModal({ row, onClose, onSaved }: { row: StudentRow; onClose:
     setError(null);
     setBusy(true);
     try {
-      await api(`/students/${row.id}`, { method: "PATCH", body: JSON.stringify(form) });
+      await api(`/students/${row.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ...form, gender: form.gender || undefined }),
+      });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -68,6 +84,9 @@ function StudentEditModal({ row, onClose, onSaved }: { row: StudentRow; onClose:
             <input id="pe-roll" value={form.rollNo} onChange={(e) => setForm({ ...form, rollNo: e.target.value })} className={inputCls} />
           </Field>
         </div>
+        <Field id="pe-gender" label="Gender" optional>
+          <GenderSelect value={form.gender} onChange={(v) => setForm({ ...form, gender: v })} />
+        </Field>
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
@@ -79,10 +98,10 @@ function StudentEditModal({ row, onClose, onSaved }: { row: StudentRow; onClose:
 }
 
 function PersonEditModal({ title, endpoint, row, onClose, onSaved }: {
-  title: string; endpoint: string; row: { id: string; fullName: string; phone: string | null; isActive: boolean };
+  title: string; endpoint: string; row: { id: string; fullName: string; phone: string | null; gender: string | null; isActive: boolean };
   onClose: () => void; onSaved: () => void;
 }) {
-  const [form, setForm] = useState({ fullName: row.fullName, phone: row.phone ?? "", isActive: row.isActive });
+  const [form, setForm] = useState({ fullName: row.fullName, phone: row.phone ?? "", gender: row.gender ?? "", isActive: row.isActive });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,7 +110,10 @@ function PersonEditModal({ title, endpoint, row, onClose, onSaved }: {
     setError(null);
     setBusy(true);
     try {
-      await api(`${endpoint}/${row.id}`, { method: "PATCH", body: JSON.stringify(form) });
+      await api(`${endpoint}/${row.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ...form, gender: form.gender || undefined }),
+      });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -105,6 +127,9 @@ function PersonEditModal({ title, endpoint, row, onClose, onSaved }: {
       <form onSubmit={submit} className="space-y-4">
         <Field id="pe-name" label="Full name">
           <input id="pe-name" required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className={inputCls} />
+        </Field>
+        <Field id="pe-gender" label="Gender" optional>
+          <GenderSelect value={form.gender} onChange={(v) => setForm({ ...form, gender: v })} />
         </Field>
         <Field id="pe-phone" label="Phone" optional>
           <input id="pe-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
@@ -124,13 +149,23 @@ function PersonEditModal({ title, endpoint, row, onClose, onSaved }: {
 }
 
 export default function PeopleDirectoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <PeopleDirectory />
+    </Suspense>
+  );
+}
+
+function PeopleDirectory() {
+  const searchParams = useSearchParams();
   const [me, setMe] = useState<Me | null>(null);
   const [checked, setChecked] = useState(false);
   useEffect(() => {
     api<Me>("/auth/me").then(setMe).catch(() => setMe(null)).finally(() => setChecked(true));
   }, []);
 
-  const [tab, setTab] = useState<Tab>("Students");
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(TABS.includes(initialTab as Tab) ? (initialTab as Tab) : "Students");
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [schoolId, setSchoolId] = useState("");
   const [q, setQ] = useState("");

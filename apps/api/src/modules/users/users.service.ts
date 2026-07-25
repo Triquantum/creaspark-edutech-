@@ -8,7 +8,7 @@ import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateUserDto, QueryUsersDto, UpdateUserDto } from "./users.dto";
 
 const USER_LIST_SELECT = {
-  id: true, fullName: true, email: true, phone: true, role: true,
+  id: true, fullName: true, email: true, phone: true, gender: true, role: true,
   isActive: true, lastLoginAt: true, createdAt: true,
 } as const;
 
@@ -121,6 +121,7 @@ export class UsersService {
         data: {
           ...(dto.fullName !== undefined && { fullName: dto.fullName.trim() }),
           ...(dto.phone !== undefined && { phone: dto.phone }),
+          ...(dto.gender !== undefined && { gender: dto.gender }),
           ...(dto.role !== undefined && { role: dto.role }),
           ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         },

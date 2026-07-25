@@ -1,25 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { api, auth } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, inputCls, ConfirmDialog, RowActions } from "@/components/ui/modal";
-import { SchoolEditModal } from "@/components/platform/school-edit-modal";
+import { Field, inputCls } from "@/components/ui/modal";
 
 const ACCESS_ROLES = new Set(["SUPER_ADMIN"]);
 const TYPES = ["COLLEGE", "INSTITUTE"] as const;
 
 interface Me { role: string }
-interface InstitutionRow {
-  id: string; name: string; institutionType: string; slug: string; plan: string; status: string; createdAt: string;
-  students: number; teachers: number; parents: number;
-}
-interface PlatformSummary { schools: InstitutionRow[] }
 
 export default function RegisterInstitutePage() {
-  const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [checked, setChecked] = useState(false);
   useEffect(() => {
@@ -35,19 +28,6 @@ export default function RegisterInstitutePage() {
   const [result, setResult] = useState<{ name: string; slug: string; email: string } | null>(null);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<InstitutionRow | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  function loadInstitutions() {
-    api<PlatformSummary>("/platform/summary")
-      .then((r) => setInstitutions(r.schools.filter((s) => s.institutionType !== "SCHOOL")))
-      .catch(() => {});
-  }
-  useEffect(() => { if (me && ACCESS_ROLES.has(me.role)) loadInstitutions(); }, [me]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,26 +49,10 @@ export default function RegisterInstitutePage() {
       });
       setResult({ name: res.tenant.name, slug: res.tenant.slug, email });
       setForm({ institutionType: form.institutionType, schoolName: "", schoolCode: "", adminFullName: "", adminEmail: "", adminPassword: "", confirm: "" });
-      loadInstitutions();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not register institution");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function confirmDelete() {
-    if (!deleting) return;
-    setBusy(true);
-    setDeleteError(null);
-    try {
-      await api(`/platform/schools/${deleting.id}`, { method: "DELETE" });
-      setDeleting(null);
-      loadInstitutions();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Could not delete");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -117,7 +81,8 @@ export default function RegisterInstitutePage() {
             ✓ <span className="font-medium">{result.name}</span> (code &quot;{result.slug}&quot;) is registered.
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Its admin can sign in now with {result.email} and the password you set.
+            Its admin can sign in now with {result.email} and the password you set. See it in{" "}
+            <Link href="/admin/registered-institutes" className="text-primary hover:underline">View Registered Institutes</Link>.
           </p>
         </Card>
       )}
@@ -160,63 +125,11 @@ export default function RegisterInstitutePage() {
         </form>
       </Card>
 
-      <Card className="p-0 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-slate-100 p-4 dark:border-white/5">
-          <Building2 size={16} className="text-primary" />
-          <h2 className="font-display font-semibold text-night dark:text-white">Registered Colleges &amp; Institutes</h2>
-        </div>
-        {institutions.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">None registered yet.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <tr className="border-b border-slate-100 dark:border-white/5">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Students</th>
-                <th className="px-4 py-3 text-right font-medium">Teachers</th>
-                <th className="px-4 py-3 text-right font-medium">Parents</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {institutions.map((s) => (
-                <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
-                  <td className="px-4 py-3 font-medium text-night dark:text-white">{s.name}</td>
-                  <td className="px-4 py-3 text-slate-500">{s.institutionType.charAt(0) + s.institutionType.slice(1).toLowerCase()}</td>
-                  <td className="px-4 py-3 text-slate-500">{s.status}</td>
-                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.students}</td>
-                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.teachers}</td>
-                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.parents}</td>
-                  <td className="px-4 py-3">
-                    <RowActions
-                      onView={() => router.push(`/admin/schools/${s.id}`)}
-                      onEdit={() => setEditingId(s.id)}
-                      onDelete={() => setDeleting(s)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
-
-      {editingId && (
-        <SchoolEditModal schoolId={editingId} onClose={() => setEditingId(null)}
-          onSaved={() => { setEditingId(null); loadInstitutions(); }} />
-      )}
-
-      {deleting && (
-        <ConfirmDialog
-          title="Delete institution?"
-          message={deleteError ?? `This permanently removes "${deleting.name}". Institutions with students or staff on record can't be deleted — set their status to Suspended instead.`}
-          onConfirm={confirmDelete}
-          onClose={() => { setDeleting(null); setDeleteError(null); }}
-          busy={busy}
-        />
-      )}
+      <p className="text-sm text-slate-500">
+        <Link href="/admin/registered-institutes" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+          <Building2 size={14} /> View Registered Institutes
+        </Link>
+      </p>
     </div>
   );
 }

@@ -11,18 +11,21 @@ export const INSTITUTION_TYPES = ["SCHOOL", "COLLEGE", "INSTITUTE"] as const;
 
 export interface SchoolFull {
   id: string; name: string; code: string; institutionType: string; board: string;
-  city: string | null; state: string | null; phone: string | null; email: string | null;
+  address: string | null; city: string | null; state: string | null; country: string | null; pincode: string | null;
+  phone: string | null; email: string | null;
   plan: string; status: string;
 }
 export type SchoolForm = {
   name: string; code: string; institutionType: string; board: string;
-  city: string; state: string; phone: string; email: string; plan: string; status: string;
+  address: string; city: string; state: string; country: string; pincode: string;
+  phone: string; email: string; plan: string; status: string;
 };
 
 export function toSchoolForm(s: SchoolFull): SchoolForm {
   return {
     name: s.name, code: s.code, institutionType: s.institutionType, board: s.board,
-    city: s.city ?? "", state: s.state ?? "", phone: s.phone ?? "", email: s.email ?? "",
+    address: s.address ?? "", city: s.city ?? "", state: s.state ?? "", country: s.country ?? "", pincode: s.pincode ?? "",
+    phone: s.phone ?? "", email: s.email ?? "",
     plan: s.plan, status: s.status,
   };
 }
@@ -77,13 +80,22 @@ export function SchoolEditModal({ schoolId, onClose, onSaved }: { schoolId: stri
                 {BOARDS.map((b) => <option key={b} value={b}>{b}</option>)}
               </select>
             </Field>
-            <Field id="se-city" label="City" optional>
+            <Field id="se-address" label="Address" optional>
+              <input id="se-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-city" label="City / Place" optional>
               <input id="se-city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className={inputCls} />
             </Field>
             <Field id="se-state" label="State" optional>
               <input id="se-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className={inputCls} />
             </Field>
-            <Field id="se-phone" label="Phone" optional>
+            <Field id="se-country" label="Country" optional>
+              <input id="se-country" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-pincode" label="Pincode" optional>
+              <input id="se-pincode" value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-phone" label="Contact number" optional>
               <input id="se-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
             </Field>
             <Field id="se-email" label="Email" optional>

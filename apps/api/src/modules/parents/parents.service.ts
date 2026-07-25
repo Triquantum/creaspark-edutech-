@@ -8,7 +8,7 @@ import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateParentDto, QueryParentsDto, UpdateParentDto } from "./parents.dto";
 
 const PARENT_SELECT = {
-  id: true, fullName: true, email: true, phone: true, isActive: true, lastLoginAt: true,
+  id: true, fullName: true, email: true, phone: true, gender: true, isActive: true, lastLoginAt: true,
   guardianLinks: {
     select: {
       relation: true, isPrimary: true,
@@ -123,6 +123,7 @@ export class ParentsService {
         data: {
           ...(dto.fullName !== undefined && { fullName: dto.fullName }),
           ...(dto.phone !== undefined && { phone: dto.phone }),
+          ...(dto.gender !== undefined && { gender: dto.gender }),
           ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         },
       }),

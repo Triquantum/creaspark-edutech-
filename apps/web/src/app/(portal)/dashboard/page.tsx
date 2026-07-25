@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   BookOpen, CalendarCheck2, GraduationCap, HeartHandshake, MessageSquare,
   Megaphone, School, ShieldCheck, Users, Wallet, type LucideIcon,
@@ -9,9 +8,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Calendar } from "@/components/ui/calendar";
-import { ConfirmDialog, RowActions } from "@/components/ui/modal";
 import { api } from "@/lib/api";
-import { SchoolEditModal } from "@/components/platform/school-edit-modal";
+import { InstitutionsTable } from "@/components/platform/institutions-table";
 
 interface Me { fullName?: string; tenantName?: string; role: string }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
@@ -90,99 +88,21 @@ function QuickAccess({ tiles }: { tiles: QuickTile[] }) {
   );
 }
 
-function PlatformOverview({ data, onChanged }: { data: PlatformSummary; onChanged: () => void }) {
-  const router = useRouter();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<SchoolSummary | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const schools = data.schools.filter((s) => s.institutionType === "SCHOOL");
-
-  async function confirmDelete() {
-    if (!deleting) return;
-    setBusy(true);
-    setDeleteError(null);
-    try {
-      await api(`/platform/schools/${deleting.id}`, { method: "DELETE" });
-      setDeleting(null);
-      onChanged();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Could not delete");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function PlatformOverview({ data }: { data: PlatformSummary }) {
   return (
     <div className="space-y-5">
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Schools Registered" value={data.totalSchools.toLocaleString("en-IN")} />
-        <StatCard label="Total Students" value={data.totalStudents.toLocaleString("en-IN")} />
-        <StatCard label="Total Teachers" value={data.totalTeachers.toLocaleString("en-IN")} />
-        <StatCard label="Total Parents" value={data.totalParents.toLocaleString("en-IN")} />
+        <StatCard label="Schools Registered" value={data.totalSchools.toLocaleString("en-IN")} href="/admin/registered-schools" />
+        <StatCard label="Total Students" value={data.totalStudents.toLocaleString("en-IN")} href="/admin/people?tab=Students" />
+        <StatCard label="Total Teachers" value={data.totalTeachers.toLocaleString("en-IN")} href="/admin/people?tab=Teachers" />
+        <StatCard label="Total Parents" value={data.totalParents.toLocaleString("en-IN")} href="/admin/people?tab=Parents" />
       </div>
 
-      <Card className="p-0 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-slate-100 p-4 dark:border-white/5">
-          <School size={16} className="text-primary" />
-          <h2 className="font-display font-semibold text-night dark:text-white">Registered Schools</h2>
-        </div>
-        {schools.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">No schools registered yet.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <tr className="border-b border-slate-100 dark:border-white/5">
-                <th className="px-4 py-3 font-medium">School</th>
-                <th className="px-4 py-3 font-medium">Plan</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Students</th>
-                <th className="px-4 py-3 text-right font-medium">Teachers</th>
-                <th className="px-4 py-3 text-right font-medium">Parents</th>
-                <th className="px-4 py-3 font-medium">Registered</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {schools.map((s) => (
-                <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
-                  <td className="px-4 py-3 font-medium text-night dark:text-white">
-                    <Link href={`/admin/schools/${s.id}`} className="hover:text-primary hover:underline">{s.name}</Link>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{s.plan}</td>
-                  <td className="px-4 py-3 text-slate-500">{s.status}</td>
-                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.students}</td>
-                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.teachers}</td>
-                  <td className="px-4 py-3 text-right text-night dark:text-white">{s.parents}</td>
-                  <td className="px-4 py-3 text-slate-500">{new Date(s.createdAt).toLocaleDateString("en-IN")}</td>
-                  <td className="px-4 py-3">
-                    <RowActions
-                      onView={() => router.push(`/admin/schools/${s.id}`)}
-                      onEdit={() => setEditingId(s.id)}
-                      onDelete={() => setDeleting(s)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
-
-      {editingId && (
-        <SchoolEditModal schoolId={editingId} onClose={() => setEditingId(null)}
-          onSaved={() => { setEditingId(null); onChanged(); }} />
-      )}
-
-      {deleting && (
-        <ConfirmDialog
-          title="Delete school?"
-          message={deleteError ?? `This permanently removes "${deleting.name}". Schools with students or staff on record can't be deleted — set their status to Suspended instead.`}
-          onConfirm={confirmDelete}
-          onClose={() => { setDeleting(null); setDeleteError(null); }}
-          busy={busy}
-        />
-      )}
+      <InstitutionsTable
+        title="Registered Schools" icon={School}
+        typeFilter={(t) => t === "SCHOOL"}
+        emptyMessage="No schools registered yet."
+      />
     </div>
   );
 }
@@ -274,7 +194,7 @@ export default function Dashboard() {
         <p className="text-sm text-slate-500">{today}{me?.tenantName ? ` · ${me.tenantName}` : ""}</p>
       </div>
 
-      {me?.role === "SUPER_ADMIN" && platform && <PlatformOverview data={platform} onChanged={loadPlatform} />}
+      {me?.role === "SUPER_ADMIN" && platform && <PlatformOverview data={platform} />}
 
       {!isTeacher && !isSelf && (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">

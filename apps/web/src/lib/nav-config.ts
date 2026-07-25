@@ -30,6 +30,13 @@ export const NAV: NavGroup[] = [
   { label: "Teacher", icon: "user-check", href: "/teachers", hiddenFrom: ["TEACHER"] },
   { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER", "PARENT"] },
   { label: "Academic", icon: "book", hiddenFrom: ["PARENT"], children: kids("academic", ["Class", "Division", "Subject", "Department", "Syllabus", "Assignment", "Routine"]) },
+  { label: "School", icon: "graduation-cap", roles: SUPER_ADMIN_ONLY,
+    children: [
+      { label: "Register School", href: "/admin/register-school" },
+      { label: "View Registered Schools", href: "/admin/registered-schools" },
+      { label: "Register Institute", href: "/admin/register-institute" },
+      { label: "View Registered Institutes", href: "/admin/registered-institutes" },
+    ] },
   { label: "Attendance", icon: "calendar-check", children: kids("attendance", ["Student Attendance", "Teacher Attendance", "Exam Attendance"]) },
   { label: "Exam", icon: "clipboard", children: kids("exam", ["Exam", "Exam Schedule", "Exam Grade", "Admit Card"]) },
   { label: "Mark", icon: "percent", children: kids("mark", ["Mark Entry", "Mark Distribution", "Promotion"]) },
@@ -69,11 +76,8 @@ export const NAV: NavGroup[] = [
     ]) },
   { label: "Online Admission", icon: "file-plus", href: "/online-admission", roles: SUPER_ADMIN_ONLY },
   { label: "Visitor Information", icon: "id-card", href: "/visitors", roles: SUPER_ADMIN_ONLY },
-  // Onboarding a whole new school/tenant is a platform-level operation —
-  // Register School lives under Administrator, super-admin only.
   { label: "Administrator", icon: "settings-2", roles: SUPER_ADMIN_ONLY,
     children: [
-      ...kids("admin", ["Register School", "Register Institute"]),
       { label: "People Directory", href: "/admin/people" },
       ...kids("admin", ["Academic Year", "Certificate Template", "Admins", "Role", "Permission", "Backup", "Update"]),
     ] },

@@ -18,6 +18,8 @@ export class UpdateSchoolDto {
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() city?: string;
   @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsString() country?: string;
+  @IsOptional() @IsString() pincode?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsEnum(Plan) plan?: Plan;
@@ -36,7 +38,7 @@ export class PlatformService {
   async summary() {
     const [totalSchools, totalStudents, totalTeachers, totalParents, schools, studentsByTenant, teachersByTenant, parentsByTenant] =
       await Promise.all([
-        this.prisma.tenant.count(),
+        this.prisma.school.count({ where: { institutionType: InstitutionType.SCHOOL } }),
         this.prisma.student.count(),
         this.prisma.user.count({ where: { role: Role.TEACHER } }),
         this.prisma.user.count({ where: { role: Role.PARENT } }),
@@ -133,7 +135,8 @@ export class PlatformService {
     return {
       school: {
         id: school.id, name: school.name, code: school.code, institutionType: school.institutionType, board: school.board,
-        city: school.city, state: school.state, phone: school.phone, email: school.email,
+        address: school.address, city: school.city, state: school.state, country: school.country, pincode: school.pincode,
+        phone: school.phone, email: school.email,
         tenantName: school.tenant.name, plan: school.tenant.plan, status: school.tenant.status,
       },
       students: students.map((s) => ({
