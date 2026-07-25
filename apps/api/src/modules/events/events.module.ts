@@ -1,6 +1,6 @@
 import {
   Body, Controller, Delete, Get, Injectable, Module, NotFoundException,
-  Param, Post, Query, UseGuards,
+  Param, Patch, Post, Query, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
@@ -18,6 +18,15 @@ export class CreateEventDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() location?: string;
   @IsDateString() startAt: string;
+  @IsOptional() @IsDateString() endAt?: string;
+  @IsOptional() @IsArray() audience?: Role[];
+}
+
+export class UpdateEventDto {
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() location?: string;
+  @IsOptional() @IsDateString() startAt?: string;
   @IsOptional() @IsDateString() endAt?: string;
   @IsOptional() @IsArray() audience?: Role[];
 }
@@ -66,6 +75,27 @@ export class EventsService {
     return event;
   }
 
+  async update(id: string, dto: UpdateEventDto, actorId: string) {
+    const { tenantId } = currentTenant();
+    const existing = await this.prisma.event.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new NotFoundException("Event not found");
+    const event = await this.prisma.event.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.location !== undefined && { location: dto.location }),
+        ...(dto.startAt !== undefined && { startAt: new Date(dto.startAt) }),
+        ...(dto.endAt !== undefined && { endAt: new Date(dto.endAt) }),
+        ...(dto.audience !== undefined && { audience: dto.audience }),
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: { tenantId, userId: actorId, action: "event.update", entity: "Event", entityId: id },
+    });
+    return event;
+  }
+
   async remove(id: string, actorId: string) {
     const { tenantId } = currentTenant();
     const existing = await this.prisma.event.findFirst({ where: { id, tenantId } });
@@ -94,6 +124,12 @@ export class EventsController {
   @Roles(...MANAGE)
   create(@Body() dto: CreateEventDto, @CurrentUser() user: AuthUser) {
     return this.svc.create(dto, user.id);
+  }
+
+  @Patch(":id")
+  @Roles(...MANAGE)
+  update(@Param("id") id: string, @Body() dto: UpdateEventDto, @CurrentUser() user: AuthUser) {
+    return this.svc.update(id, dto, user.id);
   }
 
   @Delete(":id")

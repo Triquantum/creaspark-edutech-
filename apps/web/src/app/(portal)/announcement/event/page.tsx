@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,14 +10,15 @@ import { Calendar, CalendarEvent } from "@/components/ui/calendar";
 interface School { id: string; name: string }
 interface EventRow extends CalendarEvent { id: string; description?: string | null }
 
-function CreateEventDialog({ schools, defaultDate, onClose, onSaved }: {
-  schools: School[]; defaultDate?: string; onClose: () => void; onSaved: () => void;
+function EventDialog({ mode, initial, schools, defaultDate, onClose, onSaved }: {
+  mode: "add" | "edit"; initial?: EventRow; schools: School[]; defaultDate?: string;
+  onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
     schoolId: schools[0]?.id ?? "",
-    title: "", description: "", location: "",
-    startAt: defaultDate ? defaultDate.slice(0, 16) : "",
-    endAt: "",
+    title: initial?.title ?? "", description: initial?.description ?? "", location: initial?.location ?? "",
+    startAt: initial ? initial.startAt.slice(0, 16) : defaultDate ? defaultDate.slice(0, 16) : "",
+    endAt: initial?.endAt ? initial.endAt.slice(0, 16) : "",
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -27,30 +28,35 @@ function CreateEventDialog({ schools, defaultDate, onClose, onSaved }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!form.title.trim() || !form.startAt || !form.schoolId) { setError("Title, school, and start date are required"); return; }
+    if (!form.title.trim() || !form.startAt || (mode === "add" && !form.schoolId)) {
+      setError("Title, school, and start date are required");
+      return;
+    }
     setSaving(true);
     try {
-      await api("/events", {
-        method: "POST",
-        body: JSON.stringify({
-          schoolId: form.schoolId, title: form.title.trim(),
-          description: form.description.trim() || undefined, location: form.location.trim() || undefined,
-          startAt: new Date(form.startAt).toISOString(),
-          endAt: form.endAt ? new Date(form.endAt).toISOString() : undefined,
-        }),
-      });
+      const body = {
+        title: form.title.trim(),
+        description: form.description.trim() || undefined, location: form.location.trim() || undefined,
+        startAt: new Date(form.startAt).toISOString(),
+        endAt: form.endAt ? new Date(form.endAt).toISOString() : undefined,
+      };
+      if (mode === "add") {
+        await api("/events", { method: "POST", body: JSON.stringify({ ...body, schoolId: form.schoolId }) });
+      } else {
+        await api(`/events/${initial!.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      }
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create event");
+      setError(err instanceof Error ? err.message : "Failed to save event");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Modal title="New Event" onClose={onClose}>
+    <Modal title={mode === "add" ? "New Event" : "Edit Event"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        {schools.length > 1 && (
+        {mode === "add" && schools.length > 1 && (
           <Field id="schoolId" label="School">
             <select id="schoolId" className={inputCls} value={form.schoolId} onChange={set("schoolId")}>
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -77,7 +83,7 @@ function CreateEventDialog({ schools, defaultDate, onClose, onSaved }: {
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Event"}</Button>
+          <Button type="submit" disabled={saving}>{saving ? "Saving…" : mode === "add" ? "Create Event" : "Save changes"}</Button>
         </div>
       </form>
     </Modal>
@@ -88,6 +94,7 @@ export default function EventsPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [upcoming, setUpcoming] = useState<EventRow[]>([]);
   const [creating, setCreating] = useState<string | null>(null); // holds default date, or "" for now
+  const [editing, setEditing] = useState<EventRow | null>(null);
   const [deleting, setDeleting] = useState<EventRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -133,10 +140,16 @@ export default function EventsPage() {
                     {e.location ? ` · ${e.location}` : ""}
                   </p>
                 </div>
-                <button onClick={() => setDeleting(e)} aria-label="Delete event"
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-danger/10 hover:text-danger">
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex shrink-0 gap-1">
+                  <button onClick={() => setEditing(e)} aria-label="Edit event"
+                    className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-accent/10 hover:text-accent">
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => setDeleting(e)} aria-label="Delete event"
+                    className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-danger/10 hover:text-danger">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -144,11 +157,21 @@ export default function EventsPage() {
       </div>
 
       {creating !== null && (
-        <CreateEventDialog
+        <EventDialog
+          mode="add"
           schools={schools}
           defaultDate={creating || undefined}
           onClose={() => setCreating(null)}
           onSaved={() => { setCreating(null); setRefreshKey((k) => k + 1); }}
+        />
+      )}
+      {editing && (
+        <EventDialog
+          mode="edit"
+          initial={editing}
+          schools={schools}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); setRefreshKey((k) => k + 1); }}
         />
       )}
       {deleting && (
