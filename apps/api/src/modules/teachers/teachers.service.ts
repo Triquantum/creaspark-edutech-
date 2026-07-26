@@ -186,13 +186,38 @@ export class TeachersService {
     return this.findTeacher(id);
   }
 
-  /** Removes login + staff profile. Historical records (attendance they marked, etc.) keep their reference by id. */
+  /** Removes login + staff profile. Any real activity (messages, portion
+   * reports, courses taught, announcement reads) must be preserved instead —
+   * same rule StudentsService/PlatformService apply — so those are checked
+   * before attempting the delete, not left to fail as a raw FK violation.
+   * The check also runs before the Supabase Auth account is deleted, so a
+   * blocked delete never leaves an orphaned Auth-deleted-but-DB-row-intact
+   * teacher behind. */
   async remove(id: string, user: AuthUser, actorId: string) {
     const target = await this.findTeacher(id);
     // Same fix as update(): the target's tenantId is already known from the
     // fetched row, so there's no need to resolve one via schoolId — which
     // used to throw for Super Admin deleting a teacher with no staffProfile.
     const tenantId = target.tenantId;
+
+    const counts = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        _count: {
+          select: {
+            messagesSent: true, messagesReceived: true, auditLogs: true,
+            announcementReads: true, portionReportsSubmitted: true,
+            portionReportsReviewed: true, coursesTaught: true,
+          },
+        },
+      },
+    });
+    const blockers = Object.entries(counts?._count ?? {}).filter(([, count]) => count > 0).map(([key]) => key);
+    if (blockers.length > 0) {
+      throw new ConflictException(
+        `${target.fullName} has activity on record (${blockers.join(", ")}) that must be preserved. Set them Inactive instead (Edit → Status).`,
+      );
+    }
 
     await this.supabaseAdmin.deleteUser(id);
     await this.prisma.$transaction([
