@@ -85,3 +85,29 @@ export const NAV: NavGroup[] = [
   { label: "Frontend", icon: "globe", roles: SUPER_ADMIN_ONLY, children: kids("frontend", ["Pages", "Menu", "Photo Gallery", "News"]) },
   { label: "Settings", icon: "settings", roles: SUPER_ADMIN_ONLY, children: kids("settings", ["General Settings", "Payment Settings", "SMS Settings", "Email Settings", "Language", "Theme"]) },
 ];
+
+export function visibleTo(role: Role | null, roles?: Role[], hiddenFrom?: Role[]) {
+  if (!roles && !hiddenFrom) return true;
+  if (role === null) return false;
+  if (roles && !roles.includes(role)) return false;
+  if (hiddenFrom && hiddenFrom.includes(role)) return false;
+  return true;
+}
+
+export interface NavPage { label: string; href: string }
+
+/** Every module page the given role can see, flattened for search — group
+ * leaves get their group as a prefix so "Academic · Class" is distinct
+ * from "Exam · Class". */
+export function flattenPages(role: Role | null): NavPage[] {
+  const pages: NavPage[] = [];
+  for (const g of NAV) {
+    if (!visibleTo(role, g.roles, g.hiddenFrom)) continue;
+    if (g.href) pages.push({ label: g.label, href: g.href });
+    for (const c of g.children ?? []) {
+      if (!visibleTo(role, c.roles, c.hiddenFrom)) continue;
+      pages.push({ label: g.children!.length > 1 ? `${g.label} · ${c.label}` : c.label, href: c.href });
+    }
+  }
+  return pages;
+}

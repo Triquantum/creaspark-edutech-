@@ -1,11 +1,35 @@
 "use client";
-import { Bell, LogOut, MessageSquare, Moon, Search, Sun } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Bell, LogOut, MessageSquare, Mic, MicOff, Moon, Search, Sun, WifiOff } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { flattenPages, Role } from "@/lib/nav-config";
 
-interface SearchHit { id: string; label: string; sub: string; type: "Student" | "Teacher"; href: string }
+interface SearchHit { id: string; label: string; sub: string; type: "Student" | "Teacher" | "Page"; href: string }
+
+interface SpeechRecognitionAlternative { transcript: string }
+interface SpeechRecognitionResultLike { [index: number]: SpeechRecognitionAlternative; length: number }
+interface SpeechRecognitionResultListLike { [index: number]: SpeechRecognitionResultLike; length: number }
+interface SpeechRecognitionEventLike extends Event { results: SpeechRecognitionResultListLike }
+interface SpeechRecognitionErrorEventLike extends Event { error: string }
+interface SpeechRecognitionLike extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start(): void;
+  stop(): void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  }
+}
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string; isRead: boolean }
 interface InboxMessage {
   id: string; body: string; createdAt: string; readAt?: string | null;
@@ -26,6 +50,27 @@ function useClickOutside(onOutside: () => void) {
   return ref;
 }
 
+function useOnlineStatus() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+  return online;
+}
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
+}
+
 function initials(name?: string, email?: string) {
   if (name) return name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
   return (email?.[0] ?? "?").toUpperCase();
@@ -36,11 +81,25 @@ export function Topbar() {
   const pathname = usePathname();
   const [dark, setDark] = useState(false);
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
+  const online = useOnlineStatus();
+
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
 
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useClickOutside(() => setSearchOpen(false));
+
+  const pages = useMemo(() => flattenPages((me?.role as Role | undefined) ?? null), [me?.role]);
+  const pageHits = useMemo((): SearchHit[] => {
+    const query = q.trim().toLowerCase();
+    if (query.length < 2) return [];
+    return pages
+      .filter((p) => p.label.toLowerCase().includes(query))
+      .slice(0, 5)
+      .map((p): SearchHit => ({ id: p.href, label: p.label, sub: "", type: "Page", href: p.href }));
+  }, [q, pages]);
 
   useEffect(() => {
     if (q.trim().length < 2) { setHits([]); return; }
@@ -61,6 +120,34 @@ export function Topbar() {
     }, 250);
     return () => clearTimeout(t);
   }, [q]);
+
+  const [voiceListening, setVoiceListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const voiceSupported = useMemo(() => getSpeechRecognitionCtor() !== null, []);
+
+  function startVoiceSearch() {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
+    const recognition = new Ctor();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? "";
+      setQ(transcript);
+      setSearchOpen(true);
+    };
+    recognition.onerror = () => setVoiceListening(false);
+    recognition.onend = () => setVoiceListening(false);
+    recognitionRef.current = recognition;
+    setVoiceListening(true);
+    recognition.start();
+  }
+
+  function stopVoiceSearch() {
+    recognitionRef.current?.stop();
+    setVoiceListening(false);
+  }
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [unreadMessages, setUnreadMessages] = useState<InboxMessage[]>([]);
@@ -99,10 +186,8 @@ export function Topbar() {
     if (!a.isRead) await api(`/announcements/${a.id}/read`, { method: "PATCH" }).catch(() => {});
   }
 
-  const [me, setMe] = useState<Me | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const avatarRef = useClickOutside(() => setAvatarOpen(false));
-  useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -118,15 +203,27 @@ export function Topbar() {
             value={q}
             onChange={(e) => { setQ(e.target.value); setSearchOpen(true); }}
             onFocus={() => setSearchOpen(true)}
-            placeholder="Search students, teachers…"
+            placeholder="Search students, teachers, pages…"
             aria-label="Universal search"
-            className="h-10 w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 pl-9 pr-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            className="h-10 w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 pl-9 pr-10 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
+          {voiceSupported && (
+            <button
+              type="button"
+              aria-label={voiceListening ? "Stop voice search" : "Search by voice"}
+              onClick={() => (voiceListening ? stopVoiceSearch() : startVoiceSearch())}
+              className={`absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-lg ${
+                voiceListening ? "animate-pulse text-danger" : "text-slate-400 hover:text-accent"
+              }`}
+            >
+              {voiceListening ? <MicOff size={15} /> : <Mic size={15} />}
+            </button>
+          )}
         </label>
         {searchOpen && q.trim().length >= 2 && (
           <div className="absolute left-0 right-0 top-12 z-20 max-h-80 overflow-y-auto rounded-xl border border-slate-100 bg-white shadow-lift dark:border-white/10 dark:bg-[#16213A]">
-            {hits.length === 0 && <p className="p-4 text-sm text-slate-500">No matches.</p>}
-            {hits.map((h) => (
+            {pageHits.length === 0 && hits.length === 0 && <p className="p-4 text-sm text-slate-500">No matches.</p>}
+            {[...pageHits, ...hits].map((h) => (
               <button
                 key={`${h.type}-${h.id}`}
                 onClick={() => { router.push(h.href); setSearchOpen(false); setQ(""); }}
@@ -144,6 +241,17 @@ export function Topbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        {!online && (
+          <span
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-1.5 rounded-full bg-danger/10 px-2.5 py-1.5 text-xs font-medium text-danger"
+          >
+            <WifiOff size={13} />
+            Offline
+          </span>
+        )}
+
         <button aria-label="Toggle theme" onClick={() => setDark(!dark)}
           className="grid h-10 w-10 place-items-center rounded-xl hover:bg-black/5 dark:hover:bg-white/10">
           {dark ? <Sun size={18} /> : <Moon size={18} />}
