@@ -1,15 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MessageSquare, Send, Users } from "lucide-react";
+import { MessageSquare, Send, Trash2, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Modal, Field, inputCls } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, Field, inputCls } from "@/components/ui/modal";
 
 interface Person { id: string; fullName: string; role: string }
 interface SectionRef { id: string; name: string; class: { name: string } }
 interface MessageRow {
-  id: string; body: string; createdAt: string; readAt?: string | null;
+  id: string; subject?: string | null; body: string; createdAt: string; readAt?: string | null;
   sender?: Person; recipient?: Person; section?: SectionRef | null;
 }
 interface Me { role: string }
@@ -19,6 +19,12 @@ const CAN_BROADCAST = new Set(["TEACHER", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRI
 const ANNOUNCE_AUDIENCE = [
   { value: "TEACHER", label: "Teachers" },
   { value: "SCHOOL_ADMIN", label: "School Admins" },
+] as const;
+const ROLE_FILTERS = [
+  { value: "", label: "All roles" },
+  { value: "TEACHER", label: "Teachers" },
+  { value: "STUDENT", label: "Students" },
+  { value: "PARENT", label: "Parents" },
 ] as const;
 
 function targetLabel(m: MessageRow, mine: "inbox" | "sent") {
@@ -76,6 +82,7 @@ function ComposeDialog({ canBroadcast, canAnnounce, onClose, onSent }: {
   const [schools, setSchools] = useState<School[]>([]);
   const [schoolId, setSchoolId] = useState("");
   const [audience, setAudience] = useState<Set<string>>(new Set());
+  const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -130,15 +137,17 @@ function ComposeDialog({ canBroadcast, canAnnounce, onClose, onSent }: {
       if (mode === "announce") {
         const r = await api<{ sentCount: number; school: string }>("/messages/broadcast", {
           method: "POST",
-          body: JSON.stringify({ schoolId, roles: Array.from(audience), body }),
+          body: JSON.stringify({ schoolId, subject: subject.trim() || undefined, roles: Array.from(audience), body }),
         });
         onSent(`Sent to ${r.sentCount} ${r.sentCount === 1 ? "person" : "people"} at ${r.school}`);
       } else {
         await api("/messages", {
           method: "POST",
-          body: JSON.stringify(
-            mode === "broadcast" ? { sectionId: target!.id, body } : { recipientId: target!.id, body },
-          ),
+          body: JSON.stringify({
+            subject: subject.trim() || undefined,
+            ...(mode === "broadcast" ? { sectionId: target!.id } : { recipientId: target!.id }),
+            body,
+          }),
         });
         onSent("Message sent");
       }
@@ -209,6 +218,10 @@ function ComposeDialog({ canBroadcast, canAnnounce, onClose, onSent }: {
           </Field>
         )}
 
+        <Field id="subject" label="Subject" optional>
+          <input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} className={inputCls} placeholder="e.g. Fee reminder" />
+        </Field>
+
         <Field id="body" label="Message">
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4}
             className={`${inputCls} h-auto py-3`} placeholder="Type your message…" />
@@ -231,18 +244,36 @@ export default function MessagePage() {
   const [sent, setSent] = useState<MessageRow[]>([]);
   const [composing, setComposing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [schools, setSchools] = useState<School[]>([]);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [q, setQ] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [schoolIdFilter, setSchoolIdFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const [deleting, setDeleting] = useState<MessageRow | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
+  useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
+  useEffect(() => { api<School[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
 
   function reload() {
-    api<MessageRow[]>("/messages/inbox").then(setInbox).catch(() => setInbox([]));
-    api<MessageRow[]>("/messages/sent").then(setSent).catch(() => setSent([]));
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (roleFilter) params.set("role", roleFilter);
+    if (schoolIdFilter) params.set("schoolId", schoolIdFilter);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    api<MessageRow[]>(`/messages/inbox${qs}`).then(setInbox).catch(() => setInbox([]));
+    api<MessageRow[]>(`/messages/sent${qs}`).then(setSent).catch(() => setSent([]));
   }
 
-  useEffect(() => {
-    api<Me>("/auth/me").then(setMe).catch(() => setMe(null));
-    reload();
-  }, []);
+  useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
+  useEffect(reload, [q, roleFilter, schoolIdFilter, dateFrom, dateTo]);
 
   const rows = tab === "inbox" ? inbox : sent;
 
@@ -250,6 +281,21 @@ export default function MessagePage() {
     if (tab === "inbox" && !m.readAt) {
       await api(`/messages/${m.id}/read`, { method: "PATCH" }).catch(() => {});
       setInbox((prev) => prev.map((x) => (x.id === m.id ? { ...x, readAt: new Date().toISOString() } : x)));
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      await api(`/messages/${deleting.id}`, { method: "DELETE" });
+      setDeleting(null);
+      reload();
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not delete");
+      setDeleting(null);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -273,11 +319,32 @@ export default function MessagePage() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search subject, message or person…" aria-label="Search messages"
+          className={`${inputCls} max-w-xs`}
+        />
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} aria-label="Filter by role" className={`${inputCls} max-w-xs`}>
+          {ROLE_FILTERS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        <select value={schoolIdFilter} onChange={(e) => setSchoolIdFilter(e.target.value)} aria-label="Filter by school" className={`${inputCls} max-w-xs`}>
+          <option value="">All schools</option>
+          {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <div className="flex items-center gap-2">
+          <label htmlFor="dateFrom" className="text-xs text-slate-400">From</label>
+          <input id="dateFrom" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={`${inputCls} w-auto`} />
+          <label htmlFor="dateTo" className="text-xs text-slate-400">To</label>
+          <input id="dateTo" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={`${inputCls} w-auto`} />
+        </div>
+      </div>
+
       <Card>
         {rows.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-12 text-center text-slate-400">
             <MessageSquare size={28} />
-            <p className="text-sm">No messages yet.</p>
+            <p className="text-sm">No messages match this search.</p>
           </div>
         )}
         <ul className="divide-y divide-slate-100 dark:divide-white/10">
@@ -289,10 +356,22 @@ export default function MessagePage() {
                   {m.section ? <Users size={14} className="text-accent" /> : null}
                   {targetLabel(m, tab)}
                 </span>
-                <span className="shrink-0 text-xs text-slate-400">
-                  {new Date(m.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-xs text-slate-400">
+                    {new Date(m.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  {tab === "sent" && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleting(m); }}
+                      aria-label="Delete message" title="Delete"
+                      className="text-slate-400 hover:text-danger"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
+              {m.subject && <p className="mt-1 text-sm font-semibold text-night dark:text-white">{m.subject}</p>}
               <p className="mt-1 text-sm text-slate-500">{m.body}</p>
             </li>
           ))}
@@ -305,6 +384,16 @@ export default function MessagePage() {
           canAnnounce={me?.role === "SUPER_ADMIN"}
           onClose={() => setComposing(false)}
           onSent={(msg) => { setComposing(false); reload(); setTab("sent"); setToast(msg); }}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Delete message?"
+          message={`This permanently removes this message for both you and ${deleting.recipient?.fullName ?? "the recipient"}.`}
+          onConfirm={confirmDelete}
+          onClose={() => setDeleting(null)}
+          busy={busy}
         />
       )}
 

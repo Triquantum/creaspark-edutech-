@@ -594,6 +594,7 @@ model Message {
   recipient   User?     @relation("MessagesReceived", fields: [recipientId], references: [id])
   sectionId   String?
   section     Section?  @relation(fields: [sectionId], references: [id])
+  subject     String?
   body        String
   readAt      DateTime?
   createdAt   DateTime  @default(now())
