@@ -38,6 +38,10 @@ interface InboxMessage {
 }
 interface Me { fullName?: string; email: string; role: string }
 
+// Mirrors GET /teachers' @Roles() guard — skips the request entirely for
+// roles that would always get a 403 (e.g. TEACHER, PARENT, STUDENT).
+const TEACHER_DIRECTORY_ROLES = new Set(["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR", "HR"]);
+
 function useClickOutside(onOutside: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -101,12 +105,16 @@ export function Topbar() {
       .map((p): SearchHit => ({ id: p.href, label: p.label, sub: "", type: "Page", href: p.href }));
   }, [q, pages]);
 
+  const canSearchTeachers = !!me && TEACHER_DIRECTORY_ROLES.has(me.role);
+
   useEffect(() => {
     if (q.trim().length < 2) { setHits([]); return; }
     const t = setTimeout(() => {
       Promise.all([
         api<{ items: { id: string; firstName: string; lastName: string; admissionNo: string }[] }>(`/students?q=${encodeURIComponent(q)}`).catch(() => ({ items: [] })),
-        api<{ id: string; fullName: string; email: string }[]>(`/teachers?q=${encodeURIComponent(q)}`).catch(() => []),
+        canSearchTeachers
+          ? api<{ id: string; fullName: string; email: string }[]>(`/teachers?q=${encodeURIComponent(q)}`).catch(() => [])
+          : Promise.resolve([]),
       ]).then(([students, teachers]) => {
         setHits([
           ...students.items.slice(0, 5).map((s): SearchHit => ({
@@ -119,7 +127,7 @@ export function Topbar() {
       });
     }, 250);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, canSearchTeachers]);
 
   const [voiceListening, setVoiceListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);

@@ -253,7 +253,7 @@ export default function ParentsPage() {
           </p>
         )}
         {state === "ready" && rows.length === 0 && (
-          <p className="p-6 text-sm text-slate-500">No parents match this search.</p>
+          <p className="p-6 text-sm text-slate-500">{q.trim() ? "No parents match this search." : "No parents yet."}</p>
         )}
 
         {rows.length > 0 && (
