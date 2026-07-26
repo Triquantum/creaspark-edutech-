@@ -13,8 +13,13 @@ interface MessageRow {
   sender?: Person; recipient?: Person; section?: SectionRef | null;
 }
 interface Me { role: string }
+interface School { id: string; name: string }
 
 const CAN_BROADCAST = new Set(["TEACHER", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR"]);
+const ANNOUNCE_AUDIENCE = [
+  { value: "TEACHER", label: "Teachers" },
+  { value: "SCHOOL_ADMIN", label: "School Admins" },
+] as const;
 
 function targetLabel(m: MessageRow, mine: "inbox" | "sent") {
   if (m.section) return `Broadcast to ${m.section.class.name} · ${m.section.name}`;
@@ -62,12 +67,15 @@ function Picker({ placeholder, search, onPick }: {
   );
 }
 
-function ComposeDialog({ canBroadcast, onClose, onSent }: {
-  canBroadcast: boolean; onClose: () => void; onSent: () => void;
+function ComposeDialog({ canBroadcast, canAnnounce, onClose, onSent }: {
+  canBroadcast: boolean; canAnnounce: boolean; onClose: () => void; onSent: (msg: string) => void;
 }) {
-  const [mode, setMode] = useState<"student" | "guardian" | "broadcast">("student");
+  const [mode, setMode] = useState<"student" | "guardian" | "broadcast" | "announce">("student");
   const [target, setTarget] = useState<{ id: string; label: string } | null>(null);
   const [sections, setSections] = useState<{ id: string; label: string }[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [schoolId, setSchoolId] = useState("");
+  const [audience, setAudience] = useState<Set<string>>(new Set());
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -77,6 +85,20 @@ function ComposeDialog({ canBroadcast, onClose, onSent }: {
       api<{ id: string; label: string }[]>("/academic/sections").then(setSections).catch(() => setSections([]));
     }
   }, [mode, sections.length]);
+
+  useEffect(() => {
+    if (mode === "announce" && schools.length === 0) {
+      api<School[]>("/platform/schools").then(setSchools).catch(() => setSchools([]));
+    }
+  }, [mode, schools.length]);
+
+  function toggleAudience(role: string) {
+    setAudience((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role); else next.add(role);
+      return next;
+    });
+  }
 
   const searchStudents = async (q: string) => {
     const r = await api<{ items: { id: string; userId?: string | null; firstName: string; lastName: string; admissionNo: string }[] }>(
@@ -97,18 +119,29 @@ function ComposeDialog({ canBroadcast, onClose, onSent }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (mode !== "broadcast" && !target) { setError("Choose a recipient"); return; }
-    if (mode === "broadcast" && !target) { setError("Choose a class"); return; }
+    if (mode === "announce") {
+      if (!schoolId) { setError("Choose a school"); return; }
+      if (audience.size === 0) { setError("Choose at least one audience"); return; }
+    } else if (mode === "broadcast" && !target) { setError("Choose a class"); return; }
+    else if (mode !== "broadcast" && !target) { setError("Choose a recipient"); return; }
     if (!body.trim()) { setError("Write a message"); return; }
     setSending(true);
     try {
-      await api("/messages", {
-        method: "POST",
-        body: JSON.stringify(
-          mode === "broadcast" ? { sectionId: target!.id, body } : { recipientId: target!.id, body },
-        ),
-      });
-      onSent();
+      if (mode === "announce") {
+        const r = await api<{ sentCount: number; school: string }>("/messages/broadcast", {
+          method: "POST",
+          body: JSON.stringify({ schoolId, roles: Array.from(audience), body }),
+        });
+        onSent(`Sent to ${r.sentCount} ${r.sentCount === 1 ? "person" : "people"} at ${r.school}`);
+      } else {
+        await api("/messages", {
+          method: "POST",
+          body: JSON.stringify(
+            mode === "broadcast" ? { sectionId: target!.id, body } : { recipientId: target!.id, body },
+          ),
+        });
+        onSent("Message sent");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send");
     } finally {
@@ -119,41 +152,62 @@ function ComposeDialog({ canBroadcast, onClose, onSent }: {
   return (
     <Modal title="New Message" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <div className="flex gap-2">
-          {(["student", "guardian", ...(canBroadcast ? (["broadcast"] as const) : [])] as const).map((m) => (
+        <div className="flex flex-wrap gap-2">
+          {(["student", "guardian", ...(canBroadcast ? (["broadcast"] as const) : []), ...(canAnnounce ? (["announce"] as const) : [])] as const).map((m) => (
             <button key={m} type="button" onClick={() => { setMode(m); setTarget(null); }}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors
                 ${mode === m ? "bg-primary text-white" : "bg-surface text-slate-500 dark:bg-white/5"}`}>
-              {m === "student" ? "Message a Student" : m === "guardian" ? "Contact a Guardian" : "Broadcast to Class"}
+              {m === "student" ? "Message a Student" : m === "guardian" ? "Contact a Guardian" : m === "broadcast" ? "Broadcast to Class" : "Announce to School"}
             </button>
           ))}
         </div>
 
-        <Field id="target" label={mode === "broadcast" ? "Class" : "Recipient"}>
-          {target ? (
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-2.5 text-sm dark:border-white/10">
-              <span>{target.label}</span>
-              <button type="button" onClick={() => setTarget(null)} className="text-xs text-danger">Change</button>
-            </div>
-          ) : mode === "broadcast" ? (
-            <select className={inputCls} onChange={(e) => {
-              const s = sections.find((x) => x.id === e.target.value);
-              if (s) setTarget(s);
-            }} defaultValue="">
-              <option value="" disabled>Select a class…</option>
-              {sections.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-          ) : (
-            <Picker
-              placeholder={mode === "student" ? "Search student by name…" : "Search guardian by name…"}
-              search={mode === "student" ? searchStudents : searchGuardians}
-              onPick={setTarget}
-            />
-          )}
-          {mode === "student" && !target && (
-            <p className="mt-1 text-xs text-slate-400">Only students with a login account can be messaged.</p>
-          )}
-        </Field>
+        {mode === "announce" ? (
+          <>
+            <Field id="announce-school" label="School">
+              <select id="announce-school" className={inputCls} value={schoolId} onChange={(e) => setSchoolId(e.target.value)}>
+                <option value="" disabled>Select a school…</option>
+                {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field id="announce-audience" label="Audience">
+              <div className="flex gap-4">
+                {ANNOUNCE_AUDIENCE.map((a) => (
+                  <label key={a.value} className="flex items-center gap-2 text-sm text-night dark:text-white">
+                    <input type="checkbox" checked={audience.has(a.value)} onChange={() => toggleAudience(a.value)} className="accent-primary" />
+                    {a.label}
+                  </label>
+                ))}
+              </div>
+            </Field>
+          </>
+        ) : (
+          <Field id="target" label={mode === "broadcast" ? "Class" : "Recipient"}>
+            {target ? (
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-2.5 text-sm dark:border-white/10">
+                <span>{target.label}</span>
+                <button type="button" onClick={() => setTarget(null)} className="text-xs text-danger">Change</button>
+              </div>
+            ) : mode === "broadcast" ? (
+              <select className={inputCls} onChange={(e) => {
+                const s = sections.find((x) => x.id === e.target.value);
+                if (s) setTarget(s);
+              }} defaultValue="">
+                <option value="" disabled>Select a class…</option>
+                {sections.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            ) : (
+              <Picker
+                placeholder={mode === "student" ? "Search student by name…" : "Search guardian by name…"}
+                search={mode === "student" ? searchStudents : searchGuardians}
+                onPick={setTarget}
+              />
+            )}
+            {mode === "student" && !target && (
+              <p className="mt-1 text-xs text-slate-400">Only students with a login account can be messaged.</p>
+            )}
+          </Field>
+        )}
 
         <Field id="body" label="Message">
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4}
@@ -176,6 +230,9 @@ export default function MessagePage() {
   const [inbox, setInbox] = useState<MessageRow[]>([]);
   const [sent, setSent] = useState<MessageRow[]>([]);
   const [composing, setComposing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
 
   function reload() {
     api<MessageRow[]>("/messages/inbox").then(setInbox).catch(() => setInbox([]));
@@ -245,9 +302,16 @@ export default function MessagePage() {
       {composing && (
         <ComposeDialog
           canBroadcast={!!me && CAN_BROADCAST.has(me.role)}
+          canAnnounce={me?.role === "SUPER_ADMIN"}
           onClose={() => setComposing(false)}
-          onSent={() => { setComposing(false); reload(); setTab("sent"); }}
+          onSent={(msg) => { setComposing(false); reload(); setTab("sent"); setToast(msg); }}
         />
+      )}
+
+      {toast && (
+        <div role="status" className="fixed bottom-6 right-6 z-50 rounded-xl bg-night px-4 py-3 text-sm text-white shadow-lift">
+          {toast}
+        </div>
       )}
     </div>
   );
