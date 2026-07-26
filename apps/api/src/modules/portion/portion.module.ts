@@ -19,14 +19,20 @@ export class CreatePortionReportDto {
   @IsOptional() @IsString() sectionId?: string;
   @IsIn(["DAILY", "WEEKLY"]) period: "DAILY" | "WEEKLY";
   @IsDateString() periodDate: string;
+  @IsString() chapterName: string;
+  @IsOptional() @IsString() description?: string;
   @IsString() topicsCovered: string;
   @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
+  @IsIn(["PRACTICAL", "THEORY"]) mode: "PRACTICAL" | "THEORY";
+  @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED";
 }
 
 export class QueryPortionReportsDto {
   @IsOptional() @IsString() schoolId?: string;
   @IsOptional() @IsString() teacherId?: string;
   @IsOptional() @IsIn(["SUBMITTED", "REVIEWED", "FLAGGED"]) status?: "SUBMITTED" | "REVIEWED" | "FLAGGED";
+  @IsOptional() @IsIn(["PRACTICAL", "THEORY"]) mode?: "PRACTICAL" | "THEORY";
+  @IsOptional() @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus?: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
 }
@@ -72,7 +78,9 @@ export class PortionService {
         tenantId, schoolId, teacherId: user.id,
         subjectId: dto.subjectId, classId: dto.classId, sectionId: dto.sectionId,
         period: dto.period, periodDate: new Date(dto.periodDate),
+        chapterName: dto.chapterName, description: dto.description,
         topicsCovered: dto.topicsCovered, percentComplete: dto.percentComplete,
+        mode: dto.mode, completionStatus: dto.completionStatus,
       },
     });
     return report;
@@ -95,6 +103,8 @@ export class PortionService {
         ...(scope.schoolId && { schoolId: scope.schoolId }),
         ...(query.teacherId && { teacherId: query.teacherId }),
         ...(query.status && { status: query.status }),
+        ...(query.mode && { mode: query.mode }),
+        ...(query.completionStatus && { completionStatus: query.completionStatus }),
         ...((query.from || query.to) && {
           periodDate: { ...(query.from && { gte: new Date(query.from) }), ...(query.to && { lte: new Date(query.to) }) },
         }),

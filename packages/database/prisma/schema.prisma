@@ -624,8 +624,12 @@ model PortionReport {
   section         Section? @relation(fields: [sectionId], references: [id])
   period          PortionPeriod @default(DAILY)
   periodDate      DateTime @db.Date               // the day, or the week's start date
+  chapterName     String?                         // the chapter/portion this entry is about
+  description     String?                         // what the chapter covers, independent of this period's topics
   topicsCovered   String
   percentComplete Int?                            // teacher's own 0–100 estimate
+  mode            PortionMode?                    // Practical (lab) vs Theory (classroom)
+  completionStatus PortionCompletionStatus?        // progress on the chapter as a whole
   status          PortionStatus @default(SUBMITTED)
   reviewedBy      String?
   reviewer        User?    @relation("PortionReportsReviewed", fields: [reviewedBy], references: [id])
@@ -646,6 +650,17 @@ enum PortionStatus {
   SUBMITTED
   REVIEWED
   FLAGGED
+}
+
+enum PortionMode {
+  PRACTICAL
+  THEORY
+}
+
+enum PortionCompletionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
 }
 
 // ────────────────────────── LMS ──────────────────────────

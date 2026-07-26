@@ -8,8 +8,10 @@ import { api } from "@/lib/api";
 interface Me { role: string }
 interface Option { id: string; name: string }
 interface PortionReport {
-  id: string; period: "DAILY" | "WEEKLY"; periodDate: string; topicsCovered: string;
+  id: string; period: "DAILY" | "WEEKLY"; periodDate: string;
+  chapterName: string | null; description: string | null; topicsCovered: string;
   percentComplete: number | null; status: "SUBMITTED" | "REVIEWED" | "FLAGGED";
+  mode: "PRACTICAL" | "THEORY" | null; completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | null;
   reviewNote: string | null;
   subject?: { name: string }; class?: { name: string } | null; section?: { name: string } | null;
   teacher?: { fullName: string; email: string }; reviewer?: { fullName: string } | null;
@@ -27,6 +29,29 @@ function StatusBadge({ status }: { status: PortionReport["status"] }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[status]}`}>{status}</span>;
 }
 
+const COMPLETION_STYLE: Record<NonNullable<PortionReport["completionStatus"]>, string> = {
+  PENDING: "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300",
+  IN_PROGRESS: "bg-accent/15 text-accent",
+  COMPLETED: "bg-success/15 text-success",
+};
+const COMPLETION_LABEL: Record<NonNullable<PortionReport["completionStatus"]>, string> = {
+  PENDING: "Pending", IN_PROGRESS: "In Progress", COMPLETED: "Completed",
+};
+
+function CompletionBadge({ status }: { status: PortionReport["completionStatus"] }) {
+  if (!status) return <span className="text-slate-400">—</span>;
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${COMPLETION_STYLE[status]}`}>{COMPLETION_LABEL[status]}</span>;
+}
+
+function ModeBadge({ mode }: { mode: PortionReport["mode"] }) {
+  if (!mode) return <span className="text-slate-400">—</span>;
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mode === "PRACTICAL" ? "bg-primary/10 text-primary" : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300"}`}>
+      {mode === "PRACTICAL" ? "Practical (Lab)" : "Theory (Class)"}
+    </span>
+  );
+}
+
 function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
   const [subjects, setSubjects] = useState<Option[]>([]);
   const [classes, setClasses] = useState<Option[]>([]);
@@ -36,8 +61,12 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
   const [sectionId, setSectionId] = useState("");
   const [period, setPeriod] = useState<"DAILY" | "WEEKLY">("DAILY");
   const [periodDate, setPeriodDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [chapterName, setChapterName] = useState("");
+  const [description, setDescription] = useState("");
   const [topicsCovered, setTopicsCovered] = useState("");
   const [percentComplete, setPercentComplete] = useState("");
+  const [mode, setMode] = useState<"PRACTICAL" | "THEORY">("THEORY");
+  const [completionStatus, setCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,12 +85,16 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
         method: "POST",
         body: JSON.stringify({
           subjectId, classId: classId || undefined, sectionId: sectionId || undefined,
-          period, periodDate, topicsCovered,
+          period, periodDate, chapterName, description: description || undefined, topicsCovered,
           percentComplete: percentComplete ? Number(percentComplete) : undefined,
+          mode, completionStatus,
         }),
       });
+      setChapterName("");
+      setDescription("");
       setTopicsCovered("");
       setPercentComplete("");
+      setCompletionStatus("IN_PROGRESS");
       onSubmitted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit");
@@ -108,7 +141,29 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
             <input id="pf-percent" type="number" min={0} max={100} value={percentComplete}
               onChange={(e) => setPercentComplete(e.target.value)} placeholder="e.g. 65" className={inputCls} />
           </Field>
+          <Field id="pf-chapter" label="Chapter / Portion name">
+            <input id="pf-chapter" required value={chapterName} onChange={(e) => setChapterName(e.target.value)}
+              placeholder="e.g. Chapter 4 — Fractions" className={inputCls} />
+          </Field>
+          <Field id="pf-mode" label="Mode">
+            <select id="pf-mode" value={mode} onChange={(e) => setMode(e.target.value as "PRACTICAL" | "THEORY")} className={inputCls}>
+              <option value="THEORY">Theory (from Class)</option>
+              <option value="PRACTICAL">Practical (on Lab)</option>
+            </select>
+          </Field>
+          <Field id="pf-completion" label="Portion status">
+            <select id="pf-completion" value={completionStatus}
+              onChange={(e) => setCompletionStatus(e.target.value as "PENDING" | "IN_PROGRESS" | "COMPLETED")} className={inputCls}>
+              <option value="PENDING">Pending</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
+          </Field>
         </div>
+        <Field id="pf-description" label="Chapter description" optional>
+          <textarea id="pf-description" rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
+            placeholder="What this chapter covers overall" className={`${inputCls} h-auto py-2.5`} />
+        </Field>
         <Field id="pf-topics" label="Topics covered">
           <textarea id="pf-topics" required rows={3} value={topicsCovered} onChange={(e) => setTopicsCovered(e.target.value)}
             placeholder="What was taught in this period" className={`${inputCls} h-auto py-2.5`} />
@@ -134,9 +189,12 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
             <tr className="border-b border-slate-100 dark:border-white/5">
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Subject</th>
+              <th className="px-4 py-3 font-medium">Chapter</th>
               <th className="px-4 py-3 font-medium">Topics</th>
               <th className="px-4 py-3 font-medium">%</th>
-              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Mode</th>
+              <th className="px-4 py-3 font-medium">Portion status</th>
+              <th className="px-4 py-3 font-medium">Review status</th>
               <th className="px-4 py-3 font-medium">Review note</th>
             </tr>
           </thead>
@@ -145,8 +203,11 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
               <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
                 <td className="px-4 py-3 text-slate-500">{new Date(r.periodDate).toLocaleDateString("en-IN")} · {r.period === "DAILY" ? "Day" : "Week"}</td>
                 <td className="px-4 py-3 font-medium text-night dark:text-white">{r.subject?.name ?? "—"}</td>
+                <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.chapterName ?? undefined}>{r.chapterName ?? "—"}</td>
                 <td className="px-4 py-3 max-w-xs truncate text-slate-500" title={r.topicsCovered}>{r.topicsCovered}</td>
                 <td className="px-4 py-3 text-night dark:text-white">{r.percentComplete ?? "—"}</td>
+                <td className="px-4 py-3"><ModeBadge mode={r.mode} /></td>
+                <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 <td className="px-4 py-3 text-slate-500">{r.reviewNote ?? "—"}</td>
               </tr>
@@ -190,9 +251,12 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
               <th className="px-4 py-3 font-medium">Teacher</th>
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Subject / Class</th>
+              <th className="px-4 py-3 font-medium">Chapter</th>
               <th className="px-4 py-3 font-medium">Topics</th>
               <th className="px-4 py-3 font-medium">%</th>
-              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Mode</th>
+              <th className="px-4 py-3 font-medium">Portion status</th>
+              <th className="px-4 py-3 font-medium">Review status</th>
               <th className="px-4 py-3 text-right font-medium">Action</th>
             </tr>
           </thead>
@@ -202,8 +266,11 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
                 <td className="px-4 py-3 font-medium text-night dark:text-white">{r.teacher?.fullName ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-500">{new Date(r.periodDate).toLocaleDateString("en-IN")} · {r.period === "DAILY" ? "Day" : "Week"}</td>
                 <td className="px-4 py-3 text-slate-500">{r.subject?.name}{r.class ? ` · ${r.class.name}` : ""}{r.section ? ` ${r.section.name}` : ""}</td>
+                <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.chapterName ?? undefined}>{r.chapterName ?? "—"}</td>
                 <td className="px-4 py-3 max-w-xs truncate text-slate-500" title={r.topicsCovered}>{r.topicsCovered}</td>
                 <td className="px-4 py-3 text-night dark:text-white">{r.percentComplete ?? "—"}</td>
+                <td className="px-4 py-3"><ModeBadge mode={r.mode} /></td>
+                <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 <td className="px-4 py-3 text-right">
                   <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => { setReviewing(r); setNote(r.reviewNote ?? ""); }}>
@@ -218,6 +285,14 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
 
       {reviewing && (
         <Modal title={`Review — ${reviewing.teacher?.fullName ?? "report"}`} onClose={() => setReviewing(null)}>
+          {reviewing.chapterName && (
+            <div className="mb-3 flex items-center gap-2 flex-wrap">
+              <p className="font-medium text-night dark:text-white">{reviewing.chapterName}</p>
+              <ModeBadge mode={reviewing.mode} />
+              <CompletionBadge status={reviewing.completionStatus} />
+            </div>
+          )}
+          {reviewing.description && <p className="mb-2 text-sm text-slate-500">{reviewing.description}</p>}
           <p className="text-sm leading-relaxed text-slate-500">{reviewing.topicsCovered}</p>
           <div className="mt-4">
             <Field id="review-note" label="Review note" optional>
