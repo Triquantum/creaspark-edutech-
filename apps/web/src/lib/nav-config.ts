@@ -25,10 +25,10 @@ const SCHOOL_MANAGEMENT: Role[] = ["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "
 
 export const NAV: NavGroup[] = [
   { label: "Dashboard", icon: "home", href: "/dashboard" },
-  { label: "Student", icon: "user", href: "/students", hiddenFrom: ["PARENT"] },
+  { label: "Student", icon: "user", href: "/students", hiddenFrom: ["PARENT", "STUDENT"] },
   { label: "Parents", icon: "users", href: "/parents", hiddenFrom: ["PARENT"] },
   { label: "Teacher", icon: "user-check", href: "/teachers", hiddenFrom: ["TEACHER"] },
-  { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER", "PARENT"] },
+  { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER", "PARENT", "STUDENT"] },
   { label: "Academic", icon: "book", hiddenFrom: ["PARENT", "STUDENT"], children: [
     ...kids("academic", ["Class", "Division", "Subject", "Department"]),
     { label: "Teacher Assignment", href: "/academic/teacher-assignment" },
@@ -50,9 +50,9 @@ export const NAV: NavGroup[] = [
   { label: "Media", icon: "image", href: "/media" },
   { label: "Mail / SMS", icon: "mail", href: "/mail-sms" },
   { label: "Online Exam", icon: "monitor", children: kids("online-exam", ["Question Group", "Question Level", "Question Bank", "Online Exam", "Instruction"]) },
-  { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
-  { label: "Asset Management", icon: "box", hiddenFrom: ["PARENT"], children: kids("assets", ["Vendor", "Location", "Asset Category", "Asset", "Asset Assignment", "Purchase"]) },
-  { label: "Inventory", icon: "package", hiddenFrom: ["PARENT"], children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
+  { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT", "STUDENT"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
+  { label: "Asset Management", icon: "box", hiddenFrom: ["PARENT", "STUDENT"], children: kids("assets", ["Vendor", "Location", "Asset Category", "Asset", "Asset Assignment", "Purchase"]) },
+  { label: "Inventory", icon: "package", hiddenFrom: ["PARENT", "STUDENT"], children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
   {
     label: "Leave Application", icon: "log-out",
     // Category/Assign are admin config (define leave types, grant balances);
@@ -64,12 +64,12 @@ export const NAV: NavGroup[] = [
       ...kids("leave", ["Leave Apply", "Leave Applications"]),
     ],
   },
-  { label: "Child Care", icon: "heart", children: kids("child-care", ["Activity Category", "Activities", "Child Care"]) },
+  { label: "Child Care", icon: "heart", hiddenFrom: ["STUDENT"], children: kids("child-care", ["Activity Category", "Activities", "Child Care"]) },
   { label: "Library", icon: "library", children: kids("library", ["Members", "Books", "Issue / Return", "E-Books"]) },
   { label: "Transport", icon: "bus", children: kids("transport", ["Routes", "Vehicles", "Members"]) },
   { label: "Hostel", icon: "building", children: kids("hostel", ["Hostels", "Category", "Members"]) },
-  { label: "Sponsorship", icon: "hand-heart", hiddenFrom: ["TEACHER"], children: kids("sponsorship", ["Candidates", "Sponsors", "Sponsorships"]) },
-  { label: "Account", icon: "rupee", hiddenFrom: ["TEACHER"], children: kids("account", ["Fee Types", "Invoices", "Payment History", "Expense", "Income", "Bank Payment"]) },
+  { label: "Sponsorship", icon: "hand-heart", hiddenFrom: ["TEACHER", "STUDENT"], children: kids("sponsorship", ["Candidates", "Sponsors", "Sponsorships"]) },
+  { label: "Account", icon: "rupee", hiddenFrom: ["TEACHER", "STUDENT"], children: kids("account", ["Fee Types", "Invoices", "Payment History", "Expense", "Income", "Bank Payment"]) },
   { label: "Announcement", icon: "megaphone", children: kids("announcement", ["Notice", "Event", "Holiday"]) },
   { label: "Report", icon: "chart", children: kids("report", [
       "Class Report", "Student Report", "ID Card Report", "Admit Card Report", "Exam Schedule Report",
