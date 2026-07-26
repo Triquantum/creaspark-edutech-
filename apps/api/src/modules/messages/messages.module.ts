@@ -113,9 +113,14 @@ export class MessagesService {
     return conditions;
   }
 
-  /** Direct messages to me, plus (for STUDENT/PARENT) broadcasts to my child's section. */
+  /** Direct messages to me, plus (for STUDENT/PARENT) broadcasts to my child's
+   * section. Same cross-tenant fix as sent(): Super Admin's notifications
+   * (e.g. portion-status alerts) land in the sending teacher's tenant, not
+   * Super Admin's own placeholder one — currentTenant() would hide every
+   * one of them, so Super Admin reads by recipientId alone, across every
+   * tenant. */
   async inbox(user: AuthUser, query: QueryMessagesDto) {
-    const { tenantId } = currentTenant();
+    const scope = user.role === Role.SUPER_ADMIN ? {} : { tenantId: currentTenant().tenantId };
     const mySectionIds = new Set<string>();
     if (user.role === "STUDENT" || user.role === "PARENT") {
       const students = await listViewableStudents(this.prisma, user);
@@ -129,7 +134,7 @@ export class MessagesService {
     const senderFilter = this.personFilter(query.role, query.schoolId);
     return this.prisma.message.findMany({
       where: {
-        tenantId,
+        ...scope,
         AND: [
           { OR: [{ recipientId: user.id }, ...(mySectionIds.size ? [{ sectionId: { in: [...mySectionIds] } }] : [])] },
           ...(senderFilter ? [{ sender: senderFilter }] : []),

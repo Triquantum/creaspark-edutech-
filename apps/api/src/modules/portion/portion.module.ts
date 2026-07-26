@@ -82,8 +82,36 @@ export class PortionService {
         topicsCovered: dto.topicsCovered, percentComplete: dto.percentComplete,
         mode: dto.mode, completionStatus: dto.completionStatus,
       },
+      include: { subject: { select: { name: true } }, teacher: { select: { fullName: true } } },
     });
+    await this.notifyReviewers(tenantId, report);
     return report;
+  }
+
+  /** Every submission alerts this school's own reviewers (Org/School Admin,
+   * Principal, VP, Coordinator) plus every Super Admin platform-wide, via
+   * the existing Message/bell system rather than a separate notification
+   * type — reuses read-tracking, inbox, and the bell's unread count as-is. */
+  private async notifyReviewers(
+    tenantId: string,
+    report: { teacherId: string; period: string; chapterName: string | null; subject: { name: string }; teacher: { fullName: string } },
+  ) {
+    const tenantReviewerRoles = REVIEW_ROLES.filter((r) => r !== Role.SUPER_ADMIN);
+    const [tenantReviewers, superAdmins] = await Promise.all([
+      this.prisma.user.findMany({ where: { tenantId, role: { in: tenantReviewerRoles }, isActive: true }, select: { id: true } }),
+      this.prisma.user.findMany({ where: { role: Role.SUPER_ADMIN, isActive: true }, select: { id: true } }),
+    ]);
+    const recipients = [...tenantReviewers, ...superAdmins];
+    if (!recipients.length) return;
+
+    const chapterSuffix = report.chapterName ? ` — ${report.chapterName}` : "";
+    await this.prisma.message.createMany({
+      data: recipients.map((r) => ({
+        tenantId, senderId: report.teacherId, recipientId: r.id,
+        subject: "Portion status submitted",
+        body: `${report.teacher.fullName} submitted a ${report.period === "DAILY" ? "daily" : "weekly"} portion update for ${report.subject.name}${chapterSuffix}.`,
+      })),
+    });
   }
 
   async listMine(user: AuthUser) {
