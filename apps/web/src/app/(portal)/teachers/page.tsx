@@ -8,7 +8,10 @@ import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/
 
 interface TeacherRow {
   id: string; fullName: string; email: string; phone?: string | null; isActive: boolean;
-  staffProfile?: { employeeNo: string; designation: string; department?: string | null; joinDate?: string } | null;
+  staffProfile?: {
+    employeeNo: string; designation: string; department?: string | null; joinDate?: string;
+    schoolId?: string; school?: { name: string } | null;
+  } | null;
 }
 interface SchoolOpt { id: string; name: string }
 
@@ -202,6 +205,7 @@ function TeachersPageInner() {
               <tr className="border-b border-slate-100 dark:border-white/5">
                 <th className="px-4 py-3 font-medium">Employee no.</th>
                 <th className="px-4 py-3 font-medium">Name</th>
+                <th className="px-4 py-3 font-medium">School</th>
                 <th className="px-4 py-3 font-medium">Designation</th>
                 <th className="px-4 py-3 font-medium">Contact</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -213,6 +217,7 @@ function TeachersPageInner() {
                 <tr key={t.id} className="border-b border-slate-50 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{t.staffProfile?.employeeNo ?? "—"}</td>
                   <td className="px-4 py-3 font-medium text-night dark:text-white">{t.fullName}</td>
+                  <td className="px-4 py-3 text-slate-500">{t.staffProfile?.school?.name ?? "—"}</td>
                   <td className="px-4 py-3">
                     {t.staffProfile?.designation ?? "—"}
                     {t.staffProfile?.department && <span className="text-slate-400"> · {t.staffProfile.department}</span>}
@@ -260,6 +265,7 @@ function TeachersPageInner() {
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
             {[
               ["Employee no.", viewing.staffProfile?.employeeNo ?? "—"],
+              ["School", viewing.staffProfile?.school?.name ?? "—"],
               ["Status", viewing.isActive ? "Active" : "Inactive"],
               ["Designation", viewing.staffProfile?.designation ?? "—"],
               ["Department", viewing.staffProfile?.department ?? "—"],

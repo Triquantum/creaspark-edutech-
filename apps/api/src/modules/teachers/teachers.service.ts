@@ -50,7 +50,12 @@ export class TeachersService {
       },
       select: {
         id: true, fullName: true, email: true, phone: true, isActive: true,
-        staffProfile: { select: { employeeNo: true, designation: true, department: true, joinDate: true } },
+        staffProfile: {
+          select: {
+            employeeNo: true, designation: true, department: true, joinDate: true,
+            schoolId: true, school: { select: { name: true } },
+          },
+        },
       },
       orderBy: { fullName: "asc" },
       take: 100,
