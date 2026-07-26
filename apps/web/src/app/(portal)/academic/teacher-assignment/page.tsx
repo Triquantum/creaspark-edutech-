@@ -324,13 +324,17 @@ export default function TeacherAssignmentPage() {
       </Card>
 
       <div>
-        <h2 className="font-display text-lg font-semibold text-night dark:text-white">All Assignments</h2>
-        <p className="mt-1 text-sm text-slate-500">Every subject-teacher assignment at this school, across all classes and divisions.</p>
+        <h2 className="font-display text-lg font-semibold text-night dark:text-white">{myRole === "TEACHER" ? "My Assignments" : "All Assignments"}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {myRole === "TEACHER"
+            ? "Every subject and class/division you're assigned to teach."
+            : "Every subject-teacher assignment at this school, across all classes and divisions."}
+        </p>
       </div>
 
       <Card className="p-0 overflow-hidden">
         {assignments.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">No assignments yet at this school.</p>
+          <p className="p-6 text-sm text-slate-500">{myRole === "TEACHER" ? "No classes assigned to you yet." : "No assignments yet at this school."}</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-400">

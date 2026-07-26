@@ -82,10 +82,17 @@ export class AcademicService {
   }
 
   // ── Classes ──
+  /** Teachers only ever see classes/divisions/subjects they're actually
+   * assigned to teach (via TeacherAssignment) — everyone else (Super Admin,
+   * School Admin, Principal, etc.) sees the full tenant-scoped set as before. */
   async classes(user: AuthUser, schoolId?: string) {
     const scope = await this.readScope(user, schoolId);
     const rows = await this.prisma.class.findMany({
-      where: { ...(scope.tenantId && { tenantId: scope.tenantId }), ...(scope.schoolId && { schoolId: scope.schoolId }) },
+      where: {
+        ...(scope.tenantId && { tenantId: scope.tenantId }),
+        ...(scope.schoolId && { schoolId: scope.schoolId }),
+        ...(user.role === Role.TEACHER && { sections: { some: { teacherAssignments: { some: { teacherId: user.id } } } } }),
+      },
       include: { _count: { select: { sections: true } }, school: { select: { name: true } } },
       orderBy: { name: "asc" },
     });
@@ -127,6 +134,7 @@ export class AcademicService {
       where: {
         ...(scope.tenantId && { tenantId: scope.tenantId }),
         ...(scope.schoolId && { class: { schoolId: scope.schoolId } }),
+        ...(user.role === Role.TEACHER && { teacherAssignments: { some: { teacherId: user.id } } }),
       },
       include: { class: { select: { name: true, schoolId: true } }, _count: { select: { students: true } } },
       orderBy: [{ class: { name: "asc" } }, { name: "asc" }],
@@ -175,7 +183,10 @@ export class AcademicService {
   async subjects(user: AuthUser, schoolId?: string) {
     const scope = await this.readScope(user, schoolId);
     return this.prisma.subject.findMany({
-      where: { ...(scope.tenantId && { tenantId: scope.tenantId }) },
+      where: {
+        ...(scope.tenantId && { tenantId: scope.tenantId }),
+        ...(user.role === Role.TEACHER && { teacherAssignments: { some: { teacherId: user.id } } }),
+      },
       orderBy: { name: "asc" },
     });
   }
@@ -209,10 +220,22 @@ export class AcademicService {
   }
 
   // ── Departments ──
+  /** Teachers see only their own department (from their StaffProfile), not
+   * the school's full org chart — matches the classes/sections/subjects
+   * scoping above. A teacher with no department set sees none. */
   async departments(user: AuthUser, schoolId?: string) {
     const scope = await this.readScope(user, schoolId);
+    let myDepartment: string | undefined;
+    if (user.role === Role.TEACHER) {
+      const profile = await this.prisma.staffProfile.findUnique({ where: { userId: user.id }, select: { department: true } });
+      myDepartment = profile?.department ?? "__none__";
+    }
     const rows = await this.prisma.department.findMany({
-      where: { ...(scope.tenantId && { tenantId: scope.tenantId }), ...(scope.schoolId && { schoolId: scope.schoolId }) },
+      where: {
+        ...(scope.tenantId && { tenantId: scope.tenantId }),
+        ...(scope.schoolId && { schoolId: scope.schoolId }),
+        ...(myDepartment && { name: myDepartment }),
+      },
       orderBy: { name: "asc" },
     });
     const counts = await this.prisma.staffProfile.groupBy({

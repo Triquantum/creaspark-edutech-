@@ -55,6 +55,8 @@ export class TeacherAssignmentsService {
     return { tenantId: currentTenant().tenantId };
   }
 
+  /** Teachers only ever see their own assignments, never the whole school's —
+   * matches the same scoping applied to Classes/Divisions/Subjects. */
   list(user: AuthUser, schoolId?: string, sectionId?: string) {
     const scope = this.readScope(user);
     return this.prisma.teacherAssignment.findMany({
@@ -62,6 +64,7 @@ export class TeacherAssignmentsService {
         ...(scope.tenantId && { tenantId: scope.tenantId }),
         ...(schoolId && { section: { class: { schoolId } } }),
         ...(sectionId && { sectionId }),
+        ...(user.role === Role.TEACHER && { teacherId: user.id }),
       },
       include: ASSIGNMENT_INCLUDE,
       orderBy: [{ section: { class: { name: "asc" } } }, { section: { name: "asc" } }, { subject: { name: "asc" } }],
