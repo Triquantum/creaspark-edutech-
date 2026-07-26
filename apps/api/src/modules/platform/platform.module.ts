@@ -183,18 +183,32 @@ export class PlatformService {
     });
   }
 
-  /** Hard delete only when the school is an empty shell — any real student
-   * or staff history must be preserved, same rule StudentsService applies
-   * to individual students. Suspend the tenant instead for anything else. */
+  /** Hard delete only when the school is a genuinely empty shell — any real
+   * record must be preserved, same rule StudentsService applies to individual
+   * students. Suspend the tenant instead for anything else. Every one of
+   * School's relations (schema.prisma) is checked here, not just
+   * students/staff — leaving one out means Postgres rejects the delete with
+   * a raw foreign-key violation that surfaces to the admin as an opaque
+   * 500 instead of this clear message. */
   async deleteSchool(id: string) {
     const school = await this.prisma.school.findUnique({
       where: { id },
-      include: { _count: { select: { students: true, staff: true } } },
+      include: {
+        _count: {
+          select: {
+            students: true, staff: true, classes: true, feePlans: true,
+            announcements: true, events: true, visitors: true,
+            academicYears: true, portionReports: true, courses: true,
+          },
+        },
+      },
     });
     if (!school) throw new NotFoundException("School not found");
-    if (school._count.students > 0 || school._count.staff > 0) {
+
+    const blockers = Object.entries(school._count).filter(([, count]) => count > 0).map(([key]) => key);
+    if (blockers.length > 0) {
       throw new ConflictException(
-        "This school has students or staff on record. Set its status to Suspended instead of deleting, to preserve their data.",
+        `This school has records on file (${blockers.join(", ")}) that must be preserved. Set its status to Suspended instead of deleting.`,
       );
     }
     await this.prisma.school.delete({ where: { id } });

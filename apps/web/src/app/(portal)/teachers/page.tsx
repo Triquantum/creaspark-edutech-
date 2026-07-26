@@ -15,8 +15,8 @@ interface TeacherRow {
 }
 interface SchoolOpt { id: string; name: string }
 
-function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
-  mode: "add" | "edit"; initial?: TeacherRow; schools: SchoolOpt[];
+function TeacherDialog({ mode, initial, schools, schoolsError, onClose, onSaved }: {
+  mode: "add" | "edit"; initial?: TeacherRow; schools: SchoolOpt[]; schoolsError: string | null;
   onClose: () => void; onSaved: (tempPassword?: string) => void;
 }) {
   const [form, setForm] = useState({
@@ -101,8 +101,14 @@ function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
           </Field>
           <Field id="ft-school" label="School">
             <select id="ft-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
+              {schools.length === 0 && <option value="" disabled>{schoolsError ? "Unavailable" : "Loading schools…"}</option>}
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+            {schools.length === 0 && (
+              <p className="mt-1 text-xs text-danger">
+                {schoolsError ?? "Still loading — if this doesn't fill in, reload the page."}
+              </p>
+            )}
           </Field>
         </div>
         {mode === "edit" && (
@@ -151,6 +157,7 @@ function TeachersPageInner() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [schoolsError, setSchoolsError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setState("loading");
@@ -160,7 +167,11 @@ function TeachersPageInner() {
   }, [q]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
-  useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
+  useEffect(() => {
+    api<SchoolOpt[]>("/academic/schools")
+      .then((r) => { setSchools(r); setSchoolsError(r.length === 0 ? "No schools are registered yet." : null); })
+      .catch((err) => { setSchools([]); setSchoolsError(err instanceof Error ? err.message : "Could not load schools"); });
+  }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
   async function confirmDelete() {
@@ -260,6 +271,7 @@ function TeachersPageInner() {
           mode={dialog.mode}
           initial={dialog.mode === "edit" ? dialog.row : undefined}
           schools={schools}
+          schoolsError={schoolsError}
           onClose={() => setDialog(null)}
           onSaved={(tempPassword) => {
             if (dialog.mode === "add") {
