@@ -12,7 +12,8 @@ export default function DivisionsPage() {
         { key: "studentCount", label: "Students" },
       ]}
       fields={[
-        { name: "classId", label: "Class", type: "select", optionsUrl: "/academic/classes", required: true },
+        { name: "schoolId", label: "School", type: "select", optionsUrl: "/academic/schools", required: true },
+        { name: "classId", label: "Class", type: "select", optionsUrl: "/academic/classes", required: true, dependsOn: "schoolId", filterKey: "schoolId" },
         { name: "name", label: "Division name", required: true, placeholder: "C" },
       ]}
       deleteHint="Divisions with students can't be deleted until students are moved."

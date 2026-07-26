@@ -13,6 +13,11 @@ export interface FieldDef {
   optionValue?: string;            // default "id"
   optionLabel?: string;            // default "name"
   editable?: boolean;              // default true; false = only on create
+  /** Cascading select: only options whose `filterKey` property matches the
+   * `dependsOn` field's current value are shown (e.g. Class filtered to the
+   * chosen School). Declare the field this depends on earlier in `fields`. */
+  dependsOn?: string;
+  filterKey?: string;
 }
 export interface ColumnDef { key: string; label: string; muted?: boolean }
 
@@ -26,7 +31,7 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
 }) {
   type Row = Record<string, unknown> & { id: string };
   const [rows, setRows] = useState<Row[]>([]);
-  const [options, setOptions] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [rawOptions, setRawOptions] = useState<Record<string, Record<string, unknown>[]>>({});
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: Row } | null>(null);
   const [viewing, setViewing] = useState<Row | null>(null);
@@ -46,45 +51,58 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
     for (const f of fields) {
       if (f.type === "select" && f.optionsUrl) {
         api<Record<string, unknown>[]>(f.optionsUrl).then((list) =>
-          setOptions((o) => ({
-            ...o,
-            [f.name]: list.map((item) => ({
-              value: String(item[f.optionValue ?? "id"]),
-              label: String(item[f.optionLabel ?? "name"]),
-            })),
-          })),
+          setRawOptions((o) => ({ ...o, [f.name]: list })),
         ).catch(() => {});
       }
     }
   }, [fields]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
-  // Options can still be loading when the "add" dialog opens, so its select
-  // fields get initialized to "" — the <select> then visually defaults to
-  // showing the first option (browsers do this when the controlled value
-  // matches none), even though form state stays empty. Backfill once the
-  // real options arrive so a value the user never touched still gets sent.
+
+  /** Options for a select field, filtered to the current dependsOn value
+   * when the field declares one (e.g. Class narrowed to the chosen School).
+   * Returns [] until that field's own fetch has resolved at least once. */
+  function fieldOptions(f: FieldDef, formValues: Record<string, string>): { value: string; label: string }[] {
+    const raw = rawOptions[f.name];
+    if (!raw) return [];
+    const filtered = f.dependsOn && f.filterKey
+      ? raw.filter((item) => String(item[f.filterKey!] ?? "") === (formValues[f.dependsOn!] ?? ""))
+      : raw;
+    return filtered.map((item) => ({
+      value: String(item[f.optionValue ?? "id"]),
+      label: String(item[f.optionLabel ?? "name"]),
+    }));
+  }
+
+  // A select's value can go stale for two reasons: its options were still
+  // loading when the dialog opened (form state stuck at ""), or a dependsOn
+  // field just changed and the previous pick no longer belongs to the new
+  // filtered set. Either way, once real options exist, snap back to a valid
+  // one — first available, or "" if the (now-filtered) list is empty.
   useEffect(() => {
-    if (dialog?.mode !== "add") return;
+    if (!dialog) return;
     setForm((fm) => {
       let changed = false;
       const next = { ...fm };
       for (const f of fields) {
-        if (f.type === "select" && !next[f.name] && options[f.name]?.[0]) {
-          next[f.name] = options[f.name][0].value;
-          changed = true;
+        if (f.type !== "select" || !(f.name in rawOptions)) continue;
+        const opts = fieldOptions(f, next);
+        const valid = new Set(opts.map((o) => o.value));
+        if (!next[f.name] || !valid.has(next[f.name])) {
+          const fallback = opts[0]?.value ?? "";
+          if (next[f.name] !== fallback) { next[f.name] = fallback; changed = true; }
         }
       }
       return changed ? next : fm;
     });
-  }, [options, dialog, fields]);
+  }, [rawOptions, dialog, fields, form]);
 
   function openDialog(d: { mode: "add" } | { mode: "edit"; row: Row }) {
     setError(null);
     const initial: Record<string, string> = {};
     for (const f of fields) {
-      initial[f.name] = d.mode === "edit"
-        ? String((d.row[f.name] as string | undefined) ?? "")
-        : (f.type === "select" ? (options[f.name]?.[0]?.value ?? "") : "");
+      // "add" mode leaves selects at "" — the sync effect above fills in a
+      // valid default (respecting dependsOn order) as soon as options load.
+      initial[f.name] = d.mode === "edit" ? String((d.row[f.name] as string | undefined) ?? "") : "";
     }
     setForm(initial);
     setDialog(d);
@@ -187,7 +205,7 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
                 {f.type === "select" ? (
                   <select id={`rf-${f.name}`} required={f.required} value={form[f.name] ?? ""} className={inputCls}
                     onChange={(e) => setForm((fm) => ({ ...fm, [f.name]: e.target.value }))}>
-                    {(options[f.name] ?? []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {fieldOptions(f, form).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 ) : (
                   <input id={`rf-${f.name}`} type={f.type === "date" ? "date" : "text"} required={f.required}
