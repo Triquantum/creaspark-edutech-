@@ -58,6 +58,25 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
     }
   }, [fields]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
+  // Options can still be loading when the "add" dialog opens, so its select
+  // fields get initialized to "" — the <select> then visually defaults to
+  // showing the first option (browsers do this when the controlled value
+  // matches none), even though form state stays empty. Backfill once the
+  // real options arrive so a value the user never touched still gets sent.
+  useEffect(() => {
+    if (dialog?.mode !== "add") return;
+    setForm((fm) => {
+      let changed = false;
+      const next = { ...fm };
+      for (const f of fields) {
+        if (f.type === "select" && !next[f.name] && options[f.name]?.[0]) {
+          next[f.name] = options[f.name][0].value;
+          changed = true;
+        }
+      }
+      return changed ? next : fm;
+    });
+  }, [options, dialog, fields]);
 
   function openDialog(d: { mode: "add" } | { mode: "edit"; row: Row }) {
     setError(null);
