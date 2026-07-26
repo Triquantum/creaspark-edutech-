@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from "class-validator";
+import { IsEmail, IsEnum, IsOptional, IsString, IsUrl, MinLength } from "class-validator";
 import { InstitutionType } from "@educore/database";
 
 export class RegisterSchoolDto {
@@ -8,6 +8,7 @@ export class RegisterSchoolDto {
   @IsEmail() adminEmail: string;
   @IsString() @MinLength(8) adminPassword: string;
   @IsOptional() @IsEnum(InstitutionType) institutionType?: InstitutionType;
+  @IsOptional() @IsUrl() logoUrl?: string;
 }
 
 export class LoginWithTokenDto {

@@ -50,6 +50,7 @@ export class AuthService {
       data: {
         tenantId: tenant.id, name: schoolName, code: slug.toUpperCase(),
         institutionType: dto.institutionType ?? InstitutionType.SCHOOL,
+        logoUrl: dto.logoUrl,
       },
     });
 

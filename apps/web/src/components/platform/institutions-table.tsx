@@ -9,7 +9,7 @@ import { SchoolEditModal } from "@/components/platform/school-edit-modal";
 
 export interface InstitutionRow {
   id: string; name: string; institutionType: string; plan: string; status: string; createdAt: string;
-  students: number; teachers: number; parents: number;
+  students: number; teachers: number; parents: number; logoUrl?: string | null;
 }
 interface PlatformSummary { schools: InstitutionRow[] }
 
@@ -76,7 +76,18 @@ export function InstitutionsTable({ title, icon: Icon, typeFilter, emptyMessage 
           <tbody>
             {rows.map((s) => (
               <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
-                <td className="px-4 py-3 font-medium text-night dark:text-white">{s.name}</td>
+                <td className="px-4 py-3 font-medium text-night dark:text-white">
+                  <span className="flex items-center gap-2.5">
+                    {s.logoUrl ? (
+                      <img src={s.logoUrl} alt="" className="h-7 w-7 shrink-0 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-white/10" />
+                    ) : (
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface text-[10px] font-semibold text-slate-400 dark:bg-white/5">
+                        {s.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    {s.name}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-slate-500">{s.institutionType.charAt(0) + s.institutionType.slice(1).toLowerCase()}</td>
                 <td className="px-4 py-3 text-slate-500">{s.plan}</td>
                 <td className="px-4 py-3 text-slate-500">{s.status}</td>

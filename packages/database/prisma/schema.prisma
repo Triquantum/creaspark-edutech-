@@ -49,6 +49,7 @@ model School {
   name      String
   code      String                          // school short-code, unique per tenant
   institutionType InstitutionType @default(SCHOOL)
+  logoUrl   String?
   board     Board    @default(CBSE)
   address   String?
   city      String?

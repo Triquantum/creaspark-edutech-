@@ -47,7 +47,7 @@ export class PlatformService {
         // while still keying counts off tenantId like every other module.
         this.prisma.school.findMany({
           select: {
-            id: true, name: true, institutionType: true,
+            id: true, name: true, institutionType: true, logoUrl: true,
             tenant: { select: { id: true, slug: true, plan: true, status: true, createdAt: true } },
           },
           orderBy: { createdAt: "desc" },
@@ -67,7 +67,7 @@ export class PlatformService {
       totalTeachers,
       totalParents,
       schools: schools.map((s) => ({
-        id: s.id, name: s.name, institutionType: s.institutionType,
+        id: s.id, name: s.name, institutionType: s.institutionType, logoUrl: s.logoUrl,
         slug: s.tenant.slug, plan: s.tenant.plan, status: s.tenant.status, createdAt: s.tenant.createdAt,
         students: studentMap.get(s.tenant.id) ?? 0,
         teachers: teacherMap.get(s.tenant.id) ?? 0,
