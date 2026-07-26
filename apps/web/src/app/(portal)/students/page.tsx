@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/ui/modal";
+import { BulkUploadModal } from "@/components/students/bulk-upload-modal";
 
 interface StudentRow {
   id: string; admissionNo: string; firstName: string; lastName: string;
@@ -242,6 +243,7 @@ function StudentsPageInner() {
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: StudentRow } | null>(null);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -279,7 +281,10 @@ function StudentsPageInner() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="font-display text-2xl font-semibold text-night dark:text-white">Students</h1>
-        <Button onClick={() => setDialog({ mode: "add" })}>Add student</Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => setBulkUploadOpen(true)}>Bulk upload</Button>
+          <Button onClick={() => setDialog({ mode: "add" })}>Add student</Button>
+        </div>
       </div>
 
       <Card className="p-0 overflow-hidden">
@@ -297,7 +302,7 @@ function StudentsPageInner() {
           </p>
         )}
         {state === "ready" && rows.length === 0 && (
-          <p className="p-6 text-sm text-slate-500">No students match this search.</p>
+          <p className="p-6 text-sm text-slate-500">{q.trim() ? "No students match this search." : "No students yet."}</p>
         )}
 
         {rows.length > 0 && (
@@ -345,6 +350,13 @@ function StudentsPageInner() {
         />
       )}
       {viewing && <ViewStudent id={viewing} onClose={() => setViewing(null)} />}
+      {bulkUploadOpen && (
+        <BulkUploadModal
+          schools={schools}
+          onClose={() => setBulkUploadOpen(false)}
+          onDone={() => { setBulkUploadOpen(false); setToast("Bulk upload complete"); setQ(""); load(); }}
+        />
+      )}
       {deleting && (
         <ConfirmDialog
           title="Delete student?"

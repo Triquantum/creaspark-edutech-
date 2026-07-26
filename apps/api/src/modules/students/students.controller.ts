@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
 import { StudentsService } from "./students.service";
-import { CreateStudentDto, QueryStudentsDto, UpdateStudentDto } from "./dto/create-student.dto";
+import { BulkUpsertStudentsDto, CreateStudentDto, QueryStudentsDto, UpdateStudentDto } from "./dto/create-student.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -45,6 +45,12 @@ export class StudentsController {
   @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
   update(@Param("id") id: string, @Body() dto: UpdateStudentDto, @CurrentUser() user: AuthUser) {
     return this.students.update(id, dto, user, user.id);
+  }
+
+  @Post("bulk")
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
+  bulkUpsert(@Body() dto: BulkUpsertStudentsDto, @CurrentUser() user: AuthUser) {
+    return this.students.bulkUpsert(dto, user, user.id);
   }
 
   @Delete(":id")

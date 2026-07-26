@@ -5,7 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
-import { CreateStudentDto, QueryStudentsDto, UpdateStudentDto } from "./dto/create-student.dto";
+import { BulkUpsertStudentsDto, CreateStudentDto, QueryStudentsDto, UpdateStudentDto } from "./dto/create-student.dto";
 
 const PAGE = 25;
 
@@ -161,6 +161,76 @@ export class StudentsService {
       }),
     ]);
     return { deleted: true };
+  }
+
+  /**
+   * Best-effort spreadsheet import: each row succeeds or fails on its own
+   * (one bad row doesn't sink the other 200), matched by (schoolId,
+   * admissionNo) — an existing match is updated, otherwise a new student is
+   * created. className/sectionName are resolved to a sectionId by a
+   * case-insensitive name lookup within the target school; an unresolved or
+   * omitted name just leaves the student unassigned rather than failing the
+   * row, since section can always be fixed up later from the regular UI.
+   */
+  async bulkUpsert(dto: BulkUpsertStudentsDto, user: AuthUser, actorId: string) {
+    const { tenantId } = await this.resolveTenant(user, dto.schoolId);
+    const school = await this.prisma.school.findFirst({ where: { id: dto.schoolId, tenantId } });
+    if (!school) throw new NotFoundException("School not found in this tenant");
+
+    const sectionCache = new Map<string, string | null>();
+    const resolveSectionId = async (className?: string, sectionName?: string): Promise<string | null> => {
+      if (!className || !sectionName) return null;
+      const key = `${className.trim().toLowerCase()}::${sectionName.trim().toLowerCase()}`;
+      if (sectionCache.has(key)) return sectionCache.get(key)!;
+      const section = await this.prisma.section.findFirst({
+        where: {
+          class: { schoolId: dto.schoolId, name: { equals: className.trim(), mode: "insensitive" } },
+          name: { equals: sectionName.trim(), mode: "insensitive" },
+        },
+      });
+      sectionCache.set(key, section?.id ?? null);
+      return section?.id ?? null;
+    };
+
+    let created = 0;
+    let updated = 0;
+    const errors: { row: number; admissionNo: string; message: string }[] = [];
+
+    for (let i = 0; i < dto.rows.length; i++) {
+      const row = dto.rows[i];
+      try {
+        const admissionNo = row.admissionNo.trim();
+        const sectionId = await resolveSectionId(row.className, row.sectionName);
+        const existing = await this.prisma.student.findUnique({
+          where: { schoolId_admissionNo: { schoolId: dto.schoolId, admissionNo } },
+        });
+        const data = {
+          firstName: row.firstName.trim(), lastName: row.lastName.trim(),
+          gender: row.gender, dob: row.dob ? new Date(row.dob) : undefined,
+          ...(sectionId && { sectionId }),
+        };
+        if (existing) {
+          await this.prisma.student.update({ where: { id: existing.id }, data });
+          updated++;
+        } else {
+          await this.prisma.student.create({
+            data: { ...data, tenantId, schoolId: dto.schoolId, admissionNo, sectionId: sectionId ?? undefined },
+          });
+          created++;
+        }
+      } catch (err) {
+        errors.push({ row: i + 1, admissionNo: row.admissionNo, message: err instanceof Error ? err.message : "Could not save this row" });
+      }
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        tenantId, userId: actorId, action: "student.bulk-upsert", entity: "Student", entityId: dto.schoolId,
+        metadata: { schoolId: dto.schoolId, created, updated, errorCount: errors.length },
+      },
+    });
+
+    return { created, updated, errors };
   }
 
   /** Creates a real, standalone login for the student themselves (role
