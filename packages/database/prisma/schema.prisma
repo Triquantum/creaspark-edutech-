@@ -120,6 +120,7 @@ model User {
   portionReportsSubmitted PortionReport[] @relation("PortionReportsByTeacher")
   portionReportsReviewed  PortionReport[] @relation("PortionReportsReviewed")
   coursesTaught           Course[] @relation("CoursesTaught")
+  teacherAssignments      TeacherAssignment[] @relation("TeacherAssignments")
 
   @@index([tenantId, role])
 }
@@ -190,6 +191,7 @@ model Section {
   attendance  AttendanceRecord[]
   messages    Message[]
   portionReports PortionReport[]
+  teacherAssignments TeacherAssignment[]
 
   @@unique([classId, name])
   @@index([tenantId])
@@ -229,8 +231,29 @@ model Subject {
   exams    ExamSubject[]
   portionReports PortionReport[]
   courses  Course[]
+  teacherAssignments TeacherAssignment[]
 
   @@index([tenantId])
+}
+
+// Which teacher teaches a given Subject to a given Section (class ×
+// division) — the "Assign Subjects & Class to Teachers" screen. One
+// teacher per subject per section at a time; re-assigning overwrites the
+// existing row rather than erroring, since swapping who teaches a slot is
+// the normal edit, not a conflict.
+model TeacherAssignment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  teacherId String
+  teacher   User     @relation("TeacherAssignments", fields: [teacherId], references: [id])
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  sectionId String
+  section   Section  @relation(fields: [sectionId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([sectionId, subjectId])
+  @@index([tenantId, teacherId])
 }
 
 // ────────────────────────── People ──────────────────────────

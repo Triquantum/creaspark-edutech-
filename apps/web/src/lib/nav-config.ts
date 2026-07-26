@@ -29,7 +29,11 @@ export const NAV: NavGroup[] = [
   { label: "Parents", icon: "users", href: "/parents", hiddenFrom: ["PARENT"] },
   { label: "Teacher", icon: "user-check", href: "/teachers", hiddenFrom: ["TEACHER"] },
   { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER", "PARENT"] },
-  { label: "Academic", icon: "book", hiddenFrom: ["PARENT"], children: kids("academic", ["Class", "Division", "Subject", "Department", "Syllabus", "Assignment", "Routine"]) },
+  { label: "Academic", icon: "book", hiddenFrom: ["PARENT"], children: [
+    ...kids("academic", ["Class", "Division", "Subject", "Department"]),
+    { label: "Teacher Assignment", href: "/academic/teacher-assignment" },
+    ...kids("academic", ["Syllabus", "Assignment", "Routine"]),
+  ] },
   { label: "Courses", icon: "monitor", href: "/lms/courses", hiddenFrom: ["SUPER_ADMIN", "GUEST"] },
   { label: "School", icon: "graduation-cap", roles: SUPER_ADMIN_ONLY,
     children: [

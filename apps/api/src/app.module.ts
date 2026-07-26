@@ -11,6 +11,7 @@ import { FeesModule } from "./modules/fees/fees.module";
 import { AnnouncementsModule } from "./modules/announcements/announcements.module";
 import { AcademicModule } from "./modules/academic/academic.module";
 import { TeachersModule } from "./modules/teachers/teachers.module";
+import { TeacherAssignmentsModule } from "./modules/teacher-assignments/teacher-assignments.module";
 import { ParentsModule } from "./modules/parents/parents.module";
 import { UsersModule } from "./modules/users/users.module";
 import { RecordsModule } from "./modules/records/records.module";
@@ -39,6 +40,7 @@ import { HealthController } from "./modules/health.controller";
     AnnouncementsModule,
     AcademicModule,
     TeachersModule,
+    TeacherAssignmentsModule,
     ParentsModule,
     UsersModule,
     RecordsModule,
