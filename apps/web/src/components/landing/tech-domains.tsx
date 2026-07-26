@@ -1,15 +1,14 @@
 "use client";
 import { motion } from "framer-motion";
-import { Cpu, Bot, Wifi, Rocket, Printer, BrainCircuit, Lightbulb } from "lucide-react";
+import { Bot, Wifi, Rocket, Printer, BrainCircuit, Lightbulb } from "lucide-react";
 import { Reveal, Stagger, staggerItem } from "./reveal";
 
 const DOMAINS = [
-  { Icon: Cpu, title: "Artificial Intelligence", body: "Applied AI projects, from chatbots to computer vision, built hands-on." },
-  { Icon: Bot, title: "Robotics", body: "Kit-based robotics labs with build, code and compete tracking." },
-  { Icon: Wifi, title: "Internet of Things", body: "Sensor networks and connected-device projects for real-world skills." },
-  { Icon: Rocket, title: "Drone Technology", body: "Assembly, flight programming and aerial-data fundamentals." },
+  { Icon: BrainCircuit, title: "Artificial Intelligence & Machine Learning", body: "Applied AI and ML projects, from chatbots and computer vision to predictive models in production." },
   { Icon: Printer, title: "3D Printing", body: "Design-to-print workflows across CAD, slicing and fabrication." },
-  { Icon: BrainCircuit, title: "Machine Learning", body: "Data-driven problem solving, from first models to deployment." },
+  { Icon: Bot, title: "Robotics", body: "Kit-based robotics labs with build, code and compete tracking." },
+  { Icon: Wifi, title: "IoT Solutions", body: "Sensor networks and connected-device projects for real-world skills." },
+  { Icon: Rocket, title: "Drone Technology", body: "Assembly, flight programming and aerial-data fundamentals." },
   { Icon: Lightbulb, title: "Design Thinking", body: "Structured ideation and prototyping for real institutional problems." },
 ];
 
