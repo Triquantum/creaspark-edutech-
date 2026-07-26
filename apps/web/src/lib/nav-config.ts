@@ -42,23 +42,25 @@ export const NAV: NavGroup[] = [
       { label: "Register Institute", href: "/admin/register-institute" },
       { label: "View Registered Institutes", href: "/admin/registered-institutes" },
     ] },
-  { label: "Attendance", icon: "calendar-check", children: kids("attendance", ["Student Attendance", "Teacher Attendance", "Exam Attendance"]) },
-  { label: "Exam", icon: "clipboard", children: kids("exam", ["Exam", "Exam Schedule", "Exam Grade", "Admit Card"]) },
-  { label: "Mark", icon: "percent", children: kids("mark", ["Mark Entry", "Mark Distribution", "Promotion"]) },
+  { label: "Attendance", icon: "calendar-check", hiddenFrom: ["PARENT", "STUDENT"], children: kids("attendance", ["Student Attendance", "Teacher Attendance", "Exam Attendance"]) },
+  { label: "Exam", icon: "clipboard", hiddenFrom: ["PARENT", "STUDENT"], children: kids("exam", ["Exam", "Exam Schedule", "Exam Grade", "Admit Card"]) },
+  { label: "Mark", icon: "percent", hiddenFrom: ["PARENT", "STUDENT"], children: kids("mark", ["Mark Entry", "Mark Distribution", "Promotion"]) },
   { label: "Portion Status", icon: "percent", href: "/portion", hiddenFrom: ["PARENT", "STUDENT", "GUEST"] },
   { label: "Message", icon: "message", href: "/message" },
   { label: "Media", icon: "image", href: "/media" },
-  { label: "Mail / SMS", icon: "mail", href: "/mail-sms" },
-  { label: "Online Exam", icon: "monitor", children: kids("online-exam", ["Question Group", "Question Level", "Question Bank", "Online Exam", "Instruction"]) },
+  { label: "Mail / SMS", icon: "mail", href: "/mail-sms", hiddenFrom: ["PARENT", "STUDENT"] },
+  { label: "Online Exam", icon: "monitor", hiddenFrom: ["PARENT", "STUDENT"], children: kids("online-exam", ["Question Group", "Question Level", "Question Bank", "Online Exam", "Instruction"]) },
   { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT", "STUDENT"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
   { label: "Asset Management", icon: "box", hiddenFrom: ["PARENT", "STUDENT"], children: kids("assets", ["Vendor", "Location", "Asset Category", "Asset", "Asset Assignment", "Purchase"]) },
   { label: "Inventory", icon: "package", hiddenFrom: ["PARENT", "STUDENT"], children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
   {
-    label: "Leave Application", icon: "log-out",
+    label: "Leave Application", icon: "log-out", hiddenFrom: ["PARENT", "STUDENT"],
     // Category/Assign are admin config (define leave types, grant balances);
     // Apply/Applications are the actual "request leave / see my requests"
     // actions every staff member needs — keeping both under one roof was
-    // confusing teachers into thinking the whole module was broken.
+    // confusing teachers into thinking the whole module was broken. Neither
+    // half is relevant to Parent/Student — they aren't staff and don't take
+    // leave from school.
     children: [
       ...kids("leave", ["Leave Category", "Leave Assign"]).map((l) => ({ ...l, roles: SCHOOL_MANAGEMENT })),
       ...kids("leave", ["Leave Apply", "Leave Applications"]),
@@ -68,10 +70,10 @@ export const NAV: NavGroup[] = [
   { label: "Library", icon: "library", children: kids("library", ["Members", "Books", "Issue / Return", "E-Books"]) },
   { label: "Transport", icon: "bus", children: kids("transport", ["Routes", "Vehicles", "Members"]) },
   { label: "Hostel", icon: "building", children: kids("hostel", ["Hostels", "Category", "Members"]) },
-  { label: "Sponsorship", icon: "hand-heart", hiddenFrom: ["TEACHER", "STUDENT"], children: kids("sponsorship", ["Candidates", "Sponsors", "Sponsorships"]) },
-  { label: "Account", icon: "rupee", hiddenFrom: ["TEACHER", "STUDENT"], children: kids("account", ["Fee Types", "Invoices", "Payment History", "Expense", "Income", "Bank Payment"]) },
+  { label: "Sponsorship", icon: "hand-heart", hiddenFrom: ["TEACHER", "STUDENT", "PARENT"], children: kids("sponsorship", ["Candidates", "Sponsors", "Sponsorships"]) },
+  { label: "Account", icon: "rupee", hiddenFrom: ["TEACHER", "STUDENT", "PARENT"], children: kids("account", ["Fee Types", "Invoices", "Payment History", "Expense", "Income", "Bank Payment"]) },
   { label: "Announcement", icon: "megaphone", children: kids("announcement", ["Notice", "Event", "Holiday"]) },
-  { label: "Report", icon: "chart", children: kids("report", [
+  { label: "Report", icon: "chart", hiddenFrom: ["PARENT", "STUDENT"], children: kids("report", [
       "Class Report", "Student Report", "ID Card Report", "Admit Card Report", "Exam Schedule Report",
       "Attendance Report", "Attendance Overview", "Library Books Report", "Library Card Report", "Book Issue Report",
       "Terminal Report", "Merit Stage Report", "Tabulation Sheet", "Mark Sheet Report", "Progress Card Report",
