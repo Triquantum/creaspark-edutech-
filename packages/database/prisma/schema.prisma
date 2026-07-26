@@ -69,6 +69,7 @@ model School {
   visitors      Visitor[]
   academicYears AcademicYear[]
   portionReports PortionReport[]
+  courses       Course[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -117,6 +118,7 @@ model User {
   announcementReads AnnouncementRead[]
   portionReportsSubmitted PortionReport[] @relation("PortionReportsByTeacher")
   portionReportsReviewed  PortionReport[] @relation("PortionReportsReviewed")
+  coursesTaught           Course[] @relation("CoursesTaught")
 
   @@index([tenantId, role])
 }
@@ -169,6 +171,7 @@ model Class {
   name     String                           // "Grade 6"
   sections Section[]
   portionReports PortionReport[]
+  courses  Course[]
 
   @@unique([schoolId, name])
   @@index([tenantId])
@@ -224,6 +227,7 @@ model Subject {
   code     String?
   exams    ExamSubject[]
   portionReports PortionReport[]
+  courses  Course[]
 
   @@index([tenantId])
 }
@@ -257,6 +261,9 @@ model Student {
   attendance  AttendanceRecord[]
   invoices    FeeInvoice[]
   examResults ExamResult[]
+  lessonCompletions      LessonCompletion[]
+  assignmentSubmissions  Submission[]
+  quizAttempts           QuizAttempt[]
 
   @@unique([schoolId, admissionNo])
   @@index([tenantId, schoolId, sectionId])
@@ -609,4 +616,168 @@ enum PortionStatus {
   SUBMITTED
   REVIEWED
   FLAGGED
+}
+
+// ────────────────────────── LMS ──────────────────────────
+// A Course is scoped to a school and, optionally, one class (null = whole
+// school) — mirrors how PortionReport/Announcement already target either a
+// specific class or the broader school. Publishing gates student visibility;
+// teachers see and edit their own DRAFT courses freely.
+
+model Course {
+  id          String   @id @default(cuid())
+  tenantId    String
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id])
+  teacherId   String
+  teacher     User     @relation("CoursesTaught", fields: [teacherId], references: [id])
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  classId     String?
+  class       Class?   @relation(fields: [classId], references: [id])
+  title       String
+  description String?
+  status      CourseStatus @default(DRAFT)
+  createdAt   DateTime @default(now())
+
+  lessons     Lesson[]
+  assignments Assignment[]
+  quizzes     Quiz[]
+
+  @@index([tenantId, schoolId, status])
+  @@index([tenantId, classId])
+  @@index([tenantId, teacherId])
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Lesson {
+  id        String   @id @default(cuid())
+  tenantId  String
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  content   String?
+  videoUrl  String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  completions LessonCompletion[]
+
+  @@index([tenantId, courseId, order])
+}
+
+// Per-student "read" marker for a lesson — same shape as AnnouncementRead.
+model LessonCompletion {
+  id          String   @id @default(cuid())
+  tenantId    String
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  completedAt DateTime @default(now())
+
+  @@unique([lessonId, studentId])
+  @@index([tenantId, studentId])
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  dueDate     DateTime?
+  maxMarks    Int?
+  createdAt   DateTime @default(now())
+
+  submissions Submission[]
+
+  @@index([tenantId, courseId])
+}
+
+model Submission {
+  id            String     @id @default(cuid())
+  tenantId      String
+  assignmentId  String
+  assignment    Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  content       String?
+  attachmentUrl String?
+  submittedAt   DateTime   @default(now())
+  status        SubmissionStatus @default(SUBMITTED)
+  marksAwarded  Int?
+  feedback      String?
+  gradedAt      DateTime?
+  gradedBy      String?
+
+  @@unique([assignmentId, studentId])
+  @@index([tenantId, studentId])
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  LATE
+  GRADED
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  tenantId    String
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@index([tenantId, courseId])
+}
+
+// `options` holds the MCQ choices as a JSON string[]; `correctAnswer` matches
+// one of them for auto-grading. SHORT_ANSWER questions carry no
+// correctAnswer — they're excluded from the auto-computed score in v1.
+model QuizQuestion {
+  id            String   @id @default(cuid())
+  tenantId      String
+  quizId        String
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  questionText  String
+  type          QuestionType @default(MCQ)
+  options       Json?
+  correctAnswer String?
+  marks         Int      @default(1)
+  order         Int      @default(0)
+
+  @@index([tenantId, quizId, order])
+}
+
+enum QuestionType {
+  MCQ
+  SHORT_ANSWER
+}
+
+// One attempt per student per quiz in v1 — no retakes. `answers` is a JSON
+// map of questionId -> the student's answer string.
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  tenantId    String
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers     Json
+  score       Int?
+  submittedAt DateTime @default(now())
+
+  @@unique([quizId, studentId])
+  @@index([tenantId, studentId])
 }
