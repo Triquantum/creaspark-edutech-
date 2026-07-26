@@ -16,6 +16,7 @@ export class UpdateTeacherDto {
   @IsOptional() @IsString() fullName?: string;
   @IsOptional() @IsEmail() email?: string;
   @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() schoolId?: string;
   @IsOptional() @IsString() employeeNo?: string;
   @IsOptional() @IsString() designation?: string;
   @IsOptional() @IsString() department?: string;

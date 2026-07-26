@@ -37,10 +37,15 @@ function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
   // schools is still fetching when this dialog can mount, so a schoolId
   // seeded at useState-init time can lock at "" forever — the <select>
   // shows the first option regardless, masking that the real value never
-  // got set. Backfill once schools actually arrives.
+  // got set. Backfill once schools actually arrives — edit mode resolves
+  // the teacher's existing school first (falls back to the first school
+  // for teachers with no staffProfile yet, e.g. ones registered outside
+  // the Add Teacher flow).
   useEffect(() => {
-    if (!form.schoolId && schools[0]) setForm((f) => ({ ...f, schoolId: schools[0].id }));
-  }, [schools, form.schoolId]);
+    if (form.schoolId) return;
+    const fallback = initial?.staffProfile?.schoolId ?? schools[0]?.id;
+    if (fallback) setForm((f) => ({ ...f, schoolId: fallback }));
+  }, [schools, form.schoolId, initial]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,7 +69,7 @@ function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
       } else {
         await api(`/teachers/${initial!.id}`, {
           method: "PATCH",
-          body: JSON.stringify({ ...common, isActive: form.isActive === "true" }),
+          body: JSON.stringify({ ...common, schoolId: form.schoolId, isActive: form.isActive === "true" }),
         });
         onSaved();
       }
@@ -90,30 +95,24 @@ function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
             <input id="ft-phone" value={form.phone ?? ""} onChange={set("phone")} inputMode="tel" className={inputCls} />
           </Field>
         </div>
-        {mode === "edit" && (
-          <Field id="ft-school" label="School">
-            <p className={`${inputCls} flex items-center text-slate-500`}>{initial?.staffProfile?.school?.name ?? "—"}</p>
-          </Field>
-        )}
         <div className="grid grid-cols-2 gap-3">
           <Field id="ft-emp" label="Employee no.">
             <input id="ft-emp" required value={form.employeeNo} onChange={set("employeeNo")} placeholder="EMP-014" className={inputCls} />
           </Field>
-          {mode === "add" ? (
-            <Field id="ft-school" label="School">
-              <select id="ft-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
-                {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </Field>
-          ) : (
-            <Field id="ft-active" label="Status">
-              <select id="ft-active" value={form.isActive} onChange={set("isActive")} className={inputCls}>
-                <option value="true">Active</option>
-                <option value="false">Inactive (blocks sign-in)</option>
-              </select>
-            </Field>
-          )}
+          <Field id="ft-school" label="School">
+            <select id="ft-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
         </div>
+        {mode === "edit" && (
+          <Field id="ft-active" label="Status">
+            <select id="ft-active" value={form.isActive} onChange={set("isActive")} className={inputCls}>
+              <option value="true">Active</option>
+              <option value="false">Inactive (blocks sign-in)</option>
+            </select>
+          </Field>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field id="ft-desig" label="Designation">
             <input id="ft-desig" required value={form.designation} onChange={set("designation")} placeholder="Mathematics Teacher" className={inputCls} />

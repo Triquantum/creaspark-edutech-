@@ -113,20 +113,38 @@ export class TeachersService {
 
   async update(id: string, dto: UpdateTeacherDto, user: AuthUser, actorId: string) {
     const target = await this.findTeacher(id);
-    const { tenantId } = await this.resolveTenant(user, target.staffProfile?.schoolId);
-    if (target.tenantId !== tenantId) throw new NotFoundException("Teacher not found");
+    // The target's own tenantId is already known from the fetched User row —
+    // no need to re-derive it via resolveTenant()/schoolId, which used to
+    // throw for Super Admin whenever the teacher had no staffProfile yet
+    // (schoolId nowhere to resolve from). This also lets Super Admin edit
+    // any teacher regardless of tenant, same as every other Teachers action.
+    const tenantId = target.tenantId;
+
+    if (dto.schoolId) {
+      const school = await this.prisma.school.findFirst({ where: { id: dto.schoolId, tenantId } });
+      if (!school) throw new NotFoundException("School not found in this teacher's organization");
+    }
+    if (!target.staffProfile && dto.schoolId && (!dto.employeeNo?.trim() || !dto.designation?.trim())) {
+      throw new BadRequestException("Employee no. and designation are required to assign a school");
+    }
 
     if (dto.email && dto.email !== target.email) {
       const clash = await this.prisma.user.findUnique({ where: { email: dto.email } });
       if (clash) throw new ConflictException(`A user with email ${dto.email} already exists`);
       await this.supabaseAdmin.updateEmail(id, dto.email);
     }
-    if (dto.employeeNo && target.staffProfile && dto.employeeNo !== target.staffProfile.employeeNo) {
+
+    const effSchoolId = dto.schoolId ?? target.staffProfile?.schoolId;
+    const effEmployeeNo = dto.employeeNo ?? target.staffProfile?.employeeNo;
+    const identityChanged = !!effSchoolId && !!effEmployeeNo
+      && (effSchoolId !== target.staffProfile?.schoolId || effEmployeeNo !== target.staffProfile?.employeeNo);
+    if (identityChanged) {
       const clash = await this.prisma.staffProfile.findUnique({
-        where: { schoolId_employeeNo: { schoolId: target.staffProfile.schoolId, employeeNo: dto.employeeNo } },
+        where: { schoolId_employeeNo: { schoolId: effSchoolId!, employeeNo: effEmployeeNo! } },
       });
-      if (clash) throw new ConflictException(`Employee no. ${dto.employeeNo} already exists in this school`);
+      if (clash && clash.userId !== id) throw new ConflictException(`Employee no. ${effEmployeeNo} already exists in this school`);
     }
+
     if (dto.isActive !== undefined) {
       await this.supabaseAdmin.setBanned(id, !dto.isActive);
     }
@@ -141,13 +159,23 @@ export class TeachersService {
           ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         },
       });
-      if (target.staffProfile && (dto.employeeNo || dto.designation || dto.department !== undefined)) {
-        await tx.staffProfile.update({
-          where: { userId: id },
+      if (target.staffProfile) {
+        if (dto.employeeNo || dto.designation || dto.department !== undefined || dto.schoolId) {
+          await tx.staffProfile.update({
+            where: { userId: id },
+            data: {
+              ...(dto.employeeNo && { employeeNo: dto.employeeNo }),
+              ...(dto.designation && { designation: dto.designation }),
+              ...(dto.department !== undefined && { department: dto.department }),
+              ...(dto.schoolId && { schoolId: dto.schoolId }),
+            },
+          });
+        }
+      } else if (dto.schoolId) {
+        await tx.staffProfile.create({
           data: {
-            ...(dto.employeeNo && { employeeNo: dto.employeeNo }),
-            ...(dto.designation && { designation: dto.designation }),
-            ...(dto.department !== undefined && { department: dto.department }),
+            tenantId, schoolId: dto.schoolId, userId: id,
+            employeeNo: dto.employeeNo!.trim(), designation: dto.designation!.trim(), department: dto.department,
           },
         });
       }
@@ -161,8 +189,10 @@ export class TeachersService {
   /** Removes login + staff profile. Historical records (attendance they marked, etc.) keep their reference by id. */
   async remove(id: string, user: AuthUser, actorId: string) {
     const target = await this.findTeacher(id);
-    const { tenantId } = await this.resolveTenant(user, target.staffProfile?.schoolId);
-    if (target.tenantId !== tenantId) throw new NotFoundException("Teacher not found");
+    // Same fix as update(): the target's tenantId is already known from the
+    // fetched row, so there's no need to resolve one via schoolId — which
+    // used to throw for Super Admin deleting a teacher with no staffProfile.
+    const tenantId = target.tenantId;
 
     await this.supabaseAdmin.deleteUser(id);
     await this.prisma.$transaction([
