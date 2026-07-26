@@ -106,10 +106,17 @@ export class CoursesService {
       throw new NotFoundException("Course not found");
     }
 
-    const completions = await this.prisma.lessonCompletion.findMany({
-      where: { studentId: resolvedStudentId, lessonId: { in: course.lessons.map((l) => l.id) } },
-      select: { lessonId: true },
-    });
+    const [completions] = await Promise.all([
+      this.prisma.lessonCompletion.findMany({
+        where: { studentId: resolvedStudentId, lessonId: { in: course.lessons.map((l) => l.id) } },
+        select: { lessonId: true },
+      }),
+      this.prisma.courseView.upsert({
+        where: { courseId_studentId: { courseId: course.id, studentId: resolvedStudentId } },
+        create: { tenantId: course.tenantId, courseId: course.id, studentId: resolvedStudentId },
+        update: { viewedAt: new Date() },
+      }),
+    ]);
     const completedIds = new Set(completions.map((c) => c.lessonId));
     return {
       ...course,
@@ -175,21 +182,25 @@ export class CoursesService {
     if (!course) throw new NotFoundException("Course not found");
 
     const computeFor = async (sid: string) => {
-      const [completedLessons, submissions, attempts] = await Promise.all([
+      const [completedLessons, gradedSubmissions, attemptedSubmissions, attempts, view] = await Promise.all([
         this.prisma.lessonCompletion.count({ where: { studentId: sid, lessonId: { in: course.lessons.map((l) => l.id) } } }),
         this.prisma.submission.findMany({
           where: { studentId: sid, assignmentId: { in: course.assignments.map((a) => a.id) }, status: "GRADED" },
           select: { marksAwarded: true, assignmentId: true },
         }),
+        this.prisma.submission.count({ where: { studentId: sid, assignmentId: { in: course.assignments.map((a) => a.id) } } }),
         this.prisma.quizAttempt.findMany({ where: { studentId: sid, quizId: { in: course.quizzes.map((q) => q.id) } }, select: { score: true } }),
+        this.prisma.courseView.findUnique({ where: { courseId_studentId: { courseId: course.id, studentId: sid } }, select: { viewedAt: true } }),
       ]);
       const totalLessons = course.lessons.length;
       const avgQuizScore = attempts.length ? Math.round(attempts.reduce((s, a) => s + (a.score ?? 0), 0) / attempts.length) : null;
+      const tried = completedLessons > 0 || attemptedSubmissions > 0 || attempts.length > 0;
       return {
         studentId: sid,
+        opened: !!view, viewedAt: view?.viewedAt ?? null, tried,
         lessonsCompleted: completedLessons, totalLessons,
         percentComplete: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : null,
-        assignmentsGraded: submissions.length, totalAssignments: course.assignments.length,
+        assignmentsGraded: gradedSubmissions.length, assignmentsAttempted: attemptedSubmissions, totalAssignments: course.assignments.length,
         quizzesAttempted: attempts.length, totalQuizzes: course.quizzes.length, avgQuizScore,
       };
     };
@@ -202,7 +213,12 @@ export class CoursesService {
         orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       });
       const roster = await Promise.all(students.map(async (s) => ({ ...s, ...(await computeFor(s.id)) })));
-      return { course: { id: course.id, title: course.title }, roster };
+      const summary = {
+        totalStudents: roster.length,
+        openedCount: roster.filter((r) => r.opened).length,
+        triedCount: roster.filter((r) => r.tried).length,
+      };
+      return { course: { id: course.id, title: course.title }, roster, summary };
     }
 
     const resolvedStudentId = await resolveViewableStudentId(this.prisma, user, studentId);

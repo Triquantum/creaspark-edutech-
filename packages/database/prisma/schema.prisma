@@ -264,6 +264,7 @@ model Student {
   lessonCompletions      LessonCompletion[]
   assignmentSubmissions  Submission[]
   quizAttempts           QuizAttempt[]
+  courseViews            CourseView[]
 
   @@unique([schoolId, admissionNo])
   @@index([tenantId, schoolId, sectionId])
@@ -643,6 +644,7 @@ model Course {
   lessons     Lesson[]
   assignments Assignment[]
   quizzes     Quiz[]
+  views       CourseView[]
 
   @@index([tenantId, schoolId, status])
   @@index([tenantId, classId])
@@ -779,5 +781,20 @@ model QuizAttempt {
   submittedAt DateTime @default(now())
 
   @@unique([quizId, studentId])
+  @@index([tenantId, studentId])
+}
+
+// One row per student per course — records that a student has opened the
+// course at least once, so teachers can see who never looked at it.
+model CourseView {
+  id        String   @id @default(cuid())
+  tenantId  String
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now())
+
+  @@unique([courseId, studentId])
   @@index([tenantId, studentId])
 }
