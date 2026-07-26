@@ -1,4 +1,4 @@
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString, ValidateNested } from "class-validator";
+import { IsArray, IsDateString, IsEnum, IsIn, IsOptional, IsString, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { Gender } from "@educore/database";
 
@@ -17,6 +17,7 @@ export class QueryStudentsDto {
   @IsOptional() @IsString() sectionId?: string;
   @IsOptional() @IsString() cursor?: string;
   @IsOptional() @IsString() schoolId?: string;
+  @IsOptional() @IsIn(["name", "admissionNo", "class", "school"]) sortBy?: "name" | "admissionNo" | "class" | "school";
 }
 
 export class UpdateStudentDto {

@@ -11,12 +11,20 @@ const ACCESS_ROLES = new Set(["SUPER_ADMIN"]);
 const TABS = ["Students", "Teachers", "Parents"] as const;
 type Tab = (typeof TABS)[number];
 const GENDERS = ["MALE", "FEMALE", "OTHER"] as const;
+const STUDENT_SORTS = [
+  { value: "admissionNo", label: "Admission No." },
+  { value: "name", label: "Name" },
+  { value: "class", label: "Class · Division" },
+  { value: "school", label: "School" },
+] as const;
+type StudentSort = (typeof STUDENT_SORTS)[number]["value"];
 
 interface Me { role: string }
 interface Institution { id: string; name: string; institutionType: string }
 interface StudentRow {
   id: string; firstName: string; lastName: string; admissionNo: string; rollNo: string | null; gender: string | null;
   section: { name: string; class: { name: string } } | null;
+  school: { name: string } | null;
 }
 interface TeacherRow { id: string; fullName: string; email: string; phone: string | null; gender: string | null; isActive: boolean; tenant?: { name: string } }
 interface ParentRow { id: string; fullName: string; email: string; phone: string | null; gender: string | null; isActive: boolean }
@@ -170,6 +178,7 @@ function PeopleDirectory() {
   const [schoolId, setSchoolId] = useState("");
   const [q, setQ] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [studentSort, setStudentSort] = useState<StudentSort>("admissionNo");
 
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [teachers, setTeachers] = useState<TeacherRow[]>([]);
@@ -190,7 +199,8 @@ function PeopleDirectory() {
     if (q) params.set("q", q);
     const qs = params.toString() ? `?${params.toString()}` : "";
     if (tab === "Students") {
-      api<{ items: StudentRow[] }>(`/students${qs}`).then((r) => setStudents(r.items)).catch(() => setStudents([]));
+      const p1 = new URLSearchParams(params); p1.set("sortBy", studentSort);
+      api<{ items: StudentRow[] }>(`/students?${p1.toString()}`).then((r) => setStudents(r.items)).catch(() => setStudents([]));
     } else if (tab === "Teachers") {
       const p2 = new URLSearchParams(params); p2.set("role", "TEACHER");
       api<TeacherRow[]>(`/users?${p2.toString()}`).then(setTeachers).catch(() => setTeachers([]));
@@ -198,7 +208,7 @@ function PeopleDirectory() {
       api<ParentRow[]>(`/parents${qs}`).then(setParents).catch(() => setParents([]));
     }
   }
-  useEffect(() => { if (me && ACCESS_ROLES.has(me.role)) reload(); }, [me, tab, schoolId, q]);
+  useEffect(() => { if (me && ACCESS_ROLES.has(me.role)) reload(); }, [me, tab, schoolId, q, studentSort]);
 
   if (!checked) return null;
   if (!me || !ACCESS_ROLES.has(me.role)) {
@@ -230,6 +240,14 @@ function PeopleDirectory() {
           ))}
         </div>
         <InstitutionSelect institutions={institutions} value={schoolId} onChange={setSchoolId} />
+        {tab === "Students" && (
+          <select
+            value={studentSort} onChange={(e) => setStudentSort(e.target.value as StudentSort)}
+            aria-label="Sort students by" className={`${inputCls} max-w-xs`}
+          >
+            {STUDENT_SORTS.map((s) => <option key={s.value} value={s.value}>Sort: {s.label}</option>)}
+          </select>
+        )}
         <form onSubmit={(e) => { e.preventDefault(); setQ(searchInput.trim()); }} className="flex gap-2">
           <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Search by name…" className={inputCls} />
           <Button type="submit" variant="ghost">Search</Button>
@@ -250,6 +268,7 @@ function PeopleDirectory() {
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Admission No.</th>
                   <th className="px-4 py-3 font-medium">Class</th>
+                  <th className="px-4 py-3 font-medium">School</th>
                   <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
@@ -259,6 +278,7 @@ function PeopleDirectory() {
                     <td className="px-4 py-3 font-medium text-night dark:text-white">{s.firstName} {s.lastName}</td>
                     <td className="px-4 py-3 text-slate-500">{s.admissionNo}</td>
                     <td className="px-4 py-3 text-slate-500">{s.section ? `${s.section.class.name} · ${s.section.name}` : "Unassigned"}</td>
+                    <td className="px-4 py-3 text-slate-500">{s.school?.name ?? "—"}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setEditingStudent(s)} aria-label="Edit student"
                         className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-accent/10 hover:text-accent">

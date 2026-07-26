@@ -245,6 +245,10 @@ model Student {
   userId         String?  @unique
   user           User?    @relation("StudentUser", fields: [userId], references: [id])
   admissionNo    String
+  // Platform-generated, distinct from admissionNo (school-assigned) and
+  // rollNo (class-assigned) — a stable identifier that never changes even
+  // if a student moves school/class or admissionNo gets corrected.
+  registerNo     String   @unique @default(dbgenerated("('REG-' || lpad(nextval('student_register_seq')::text, 6, '0'))"))
   rollNo         String?
   firstName      String
   lastName       String

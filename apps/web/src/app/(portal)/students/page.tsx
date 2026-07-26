@@ -8,10 +8,11 @@ import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/
 import { BulkUploadModal } from "@/components/students/bulk-upload-modal";
 
 interface StudentRow {
-  id: string; admissionNo: string; firstName: string; lastName: string;
+  id: string; admissionNo: string; registerNo: string; firstName: string; lastName: string;
   gender?: string | null; dob?: string | null; rollNo?: string | null; status?: string;
   sectionId?: string | null; userId?: string | null;
   section?: { name: string; class: { name: string } } | null;
+  school?: { name: string } | null;
   guardians: { fullName: string; phone: string; relation?: string }[];
 }
 interface StudentDetail extends StudentRow {
@@ -20,6 +21,7 @@ interface StudentDetail extends StudentRow {
 }
 interface SectionOpt { id: string; label: string; schoolId: string }
 interface SchoolOpt { id: string; name: string; tenantName?: string }
+interface Me { role: string }
 
 function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
   mode: "add" | "edit"; initial?: StudentRow; schools: SchoolOpt[]; sections: SectionOpt[];
@@ -96,11 +98,17 @@ function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
         <Field id="fs-adm" label="Admission no.">
           <input id="fs-adm" required value={form.admissionNo} onChange={set("admissionNo")} placeholder="ADM-1041" className={inputCls} />
         </Field>
-        {mode === "add" && (
+        {mode === "add" ? (
           <Field id="fs-school" label="School">
             <select id="fs-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+          </Field>
+        ) : (
+          <Field id="fs-school-ro" label="School">
+            <p className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-500 dark:border-white/10">
+              {initial?.school?.name ?? "—"}
+            </p>
           </Field>
         )}
         <Field id="fs-sec" label="Class & section">
@@ -165,7 +173,9 @@ function ViewStudent({ id, onClose }: { id: string; onClose: () => void }) {
         <div className="space-y-6 text-sm">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
             {[
+              ["School", detail.school?.name ?? "—"],
               ["Admission no.", detail.admissionNo],
+              ["Register no.", detail.registerNo],
               ["Class", detail.section ? `${detail.section.class.name} · ${detail.section.name}` : "—"],
               ["Roll no.", detail.rollNo ?? "—"],
               ["Gender", detail.gender ?? "—"],
@@ -259,18 +269,36 @@ function StudentsPageInner() {
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = useCallback(() => {
     setState("loading");
     api<{ items: StudentRow[] }>(`/students${q ? `?q=${encodeURIComponent(q)}` : ""}`)
-      .then((r) => { setRows(r.items); setState("ready"); })
+      .then((r) => { setRows(r.items); setSelected(new Set()); setState("ready"); })
       .catch(() => setState("error"));
   }, [q]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
   useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
   useEffect(() => { api<SectionOpt[]>("/academic/sections").then(setSections).catch(() => setSections([])); }, []);
+  useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
+
+  const isSuperAdmin = me?.role === "SUPER_ADMIN";
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id))));
+  }
 
   async function confirmDelete() {
     if (!deleting) return;
@@ -288,11 +316,31 @@ function StudentsPageInner() {
     }
   }
 
+  async function confirmBulkDelete() {
+    const ids = Array.from(selected);
+    setBusy(true);
+    const results = await Promise.allSettled(ids.map((id) => api(`/students/${id}`, { method: "DELETE" })));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setToast(
+      failed === 0
+        ? `${ids.length} student${ids.length === 1 ? "" : "s"} deleted`
+        : `${ids.length - failed} deleted, ${failed} failed (likely have payment history)`,
+    );
+    setBulkDeleting(false);
+    setBusy(false);
+    load();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="font-display text-2xl font-semibold text-night dark:text-white">Students</h1>
         <div className="flex gap-2">
+          {selected.size > 0 && (
+            <Button variant="ghost" className="text-danger" onClick={() => setBulkDeleting(true)}>
+              Delete {selected.size} selected
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setBulkUploadOpen(true)}>Bulk upload</Button>
           <Button onClick={() => setDialog({ mode: "add" })}>Add student</Button>
         </div>
@@ -320,8 +368,17 @@ function StudentsPageInner() {
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
               <tr className="border-b border-slate-100 dark:border-white/5">
+                <th className="w-10 px-4 py-3 font-medium">
+                  <input
+                    type="checkbox" aria-label="Select all students"
+                    checked={rows.length > 0 && selected.size === rows.length}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <th className="px-4 py-3 font-medium">Admission no.</th>
+                <th className="px-4 py-3 font-medium">Register no.</th>
                 <th className="px-4 py-3 font-medium">Name</th>
+                {isSuperAdmin && <th className="px-4 py-3 font-medium">School</th>}
                 <th className="px-4 py-3 font-medium">Class</th>
                 <th className="px-4 py-3 font-medium">Primary guardian</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -330,8 +387,16 @@ function StudentsPageInner() {
             <tbody>
               {rows.map((s) => (
                 <tr key={s.id} className="border-b border-slate-50 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox" aria-label={`Select ${s.firstName} ${s.lastName}`}
+                      checked={selected.has(s.id)} onChange={() => toggleSelected(s.id)}
+                    />
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{s.admissionNo}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{s.registerNo}</td>
                   <td className="px-4 py-3 font-medium text-night dark:text-white">{s.firstName} {s.lastName}</td>
+                  {isSuperAdmin && <td className="px-4 py-3 text-slate-500">{s.school?.name ?? "—"}</td>}
                   <td className="px-4 py-3">{s.section ? `${s.section.class.name} · ${s.section.name}` : "—"}</td>
                   <td className="px-4 py-3 text-slate-500">
                     {s.guardians[0] ? `${s.guardians[0].fullName} · ${s.guardians[0].phone}` : "—"}
@@ -374,6 +439,15 @@ function StudentsPageInner() {
           message={`This permanently removes ${deleting.firstName} ${deleting.lastName} (${deleting.admissionNo}) along with their attendance, results and unpaid invoices. Students with payment history can't be deleted — set them to Transferred/Alumni instead.`}
           onConfirm={confirmDelete}
           onClose={() => setDeleting(null)}
+          busy={busy}
+        />
+      )}
+      {bulkDeleting && (
+        <ConfirmDialog
+          title={`Delete ${selected.size} selected students?`}
+          message="This permanently removes each selected student along with their attendance, results and unpaid invoices. Students with payment history can't be deleted and will be reported as failed."
+          onConfirm={confirmBulkDelete}
+          onClose={() => setBulkDeleting(false)}
           busy={busy}
         />
       )}

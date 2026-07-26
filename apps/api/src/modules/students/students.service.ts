@@ -35,6 +35,20 @@ export class StudentsService {
     return { tenantId, schoolId };
   }
 
+  /** Defaults to admissionNo — the school's own roll order — since that's
+   * what admins scan for day to day; the other options cover the People
+   * Directory's explicit sort picker. */
+  private studentOrderBy(sortBy?: QueryStudentsDto["sortBy"]) {
+    switch (sortBy) {
+      case "name": return [{ lastName: "asc" as const }, { firstName: "asc" as const }];
+      case "class": return { section: { class: { name: "asc" as const } } };
+      case "school": return { school: { name: "asc" as const } };
+      case "admissionNo":
+      default:
+        return { admissionNo: "asc" as const };
+    }
+  }
+
   async list(user: AuthUser, query: QueryStudentsDto) {
     const scope = await this.readScope(user, query.schoolId);
     const where = {
@@ -46,6 +60,7 @@ export class StudentsService {
           { firstName: { contains: query.q, mode: "insensitive" as const } },
           { lastName: { contains: query.q, mode: "insensitive" as const } },
           { admissionNo: { contains: query.q, mode: "insensitive" as const } },
+          { registerNo: { contains: query.q, mode: "insensitive" as const } },
         ],
       }),
     };
@@ -54,8 +69,11 @@ export class StudentsService {
         where,
         take: PAGE + 1,
         ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
-        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-        include: { section: { include: { class: true } }, guardians: { where: { isPrimary: true } } },
+        orderBy: this.studentOrderBy(query.sortBy),
+        include: {
+          section: { include: { class: true } }, guardians: { where: { isPrimary: true } },
+          school: { select: { name: true } },
+        },
       }),
       this.prisma.student.count({ where: { ...(scope.tenantId && { tenantId: scope.tenantId }), ...(scope.schoolId && { schoolId: scope.schoolId }) } }),
     ]);
@@ -68,6 +86,7 @@ export class StudentsService {
       where: { id },
       include: {
         section: { include: { class: true } },
+        school: { select: { name: true } },
         guardians: true,
         invoices: { orderBy: { dueDate: "desc" }, take: 5, include: { payments: true } },
         attendance: { orderBy: { date: "desc" }, take: 30 },
