@@ -63,7 +63,7 @@ export function SiteFooter() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Company</p>
             <ul className="mt-3 space-y-2 text-sm text-slate-500">
-              <li>support@creaspark.in</li>
+              <li>connect@creasparkllp.in</li>
               <li>Privacy</li>
               <li>Terms</li>
             </ul>
