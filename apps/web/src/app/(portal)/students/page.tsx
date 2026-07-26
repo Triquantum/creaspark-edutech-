@@ -25,14 +25,11 @@ function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
   mode: "add" | "edit"; initial?: StudentRow; schools: SchoolOpt[]; sections: SectionOpt[];
   onClose: () => void; onSaved: () => void;
 }) {
-  const initialSchoolId = initial?.sectionId
-    ? sections.find((s) => s.id === initial.sectionId)?.schoolId ?? schools[0]?.id ?? ""
-    : schools[0]?.id ?? "";
   const [form, setForm] = useState({
     admissionNo: initial?.admissionNo ?? "",
     firstName: initial?.firstName ?? "",
     lastName: initial?.lastName ?? "",
-    schoolId: initialSchoolId,
+    schoolId: "",
     sectionId: initial?.sectionId ?? "",
     gender: initial?.gender ?? "",
     dob: initial?.dob ? initial.dob.slice(0, 10) : "",
@@ -42,6 +39,20 @@ function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value, ...(k === "schoolId" && { sectionId: "" }) }));
   const sectionsForSchool = sections.filter((s) => s.schoolId === form.schoolId);
+
+  // schools/sections are still fetching when this dialog can mount, so a
+  // schoolId seeded at useState-init time can lock at "" forever — masked
+  // because the <select> visually defaults to showing its first option
+  // regardless. Backfill once the real data arrives (edit resolves the
+  // student's existing section back to its school; add falls back to the
+  // first school).
+  useEffect(() => {
+    if (form.schoolId) return;
+    const fallback = initial?.sectionId
+      ? sections.find((s) => s.id === initial.sectionId)?.schoolId
+      : schools[0]?.id;
+    if (fallback) setForm((f) => ({ ...f, schoolId: fallback }));
+  }, [schools, sections, initial, form.schoolId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,7 +99,7 @@ function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
         {mode === "add" && (
           <Field id="fs-school" label="School">
             <select id="fs-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
-              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` (${s.tenantName})` : ""}</option>)}
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
         )}

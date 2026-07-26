@@ -26,13 +26,21 @@ function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
     employeeNo: initial?.staffProfile?.employeeNo ?? "",
     designation: initial?.staffProfile?.designation ?? "",
     department: initial?.staffProfile?.department ?? "",
-    schoolId: schools[0]?.id ?? "",
+    schoolId: "",
     isActive: initial ? String(initial.isActive) : "true",
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // schools is still fetching when this dialog can mount, so a schoolId
+  // seeded at useState-init time can lock at "" forever — the <select>
+  // shows the first option regardless, masking that the real value never
+  // got set. Backfill once schools actually arrives.
+  useEffect(() => {
+    if (!form.schoolId && schools[0]) setForm((f) => ({ ...f, schoolId: schools[0].id }));
+  }, [schools, form.schoolId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

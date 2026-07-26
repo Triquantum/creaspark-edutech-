@@ -18,13 +18,21 @@ function LogVisitorDialog({ schools, onClose, onSaved }: {
   schools: School[]; onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
-    schoolId: schools[0]?.id ?? "", visitorName: "", phone: "", purpose: "",
+    schoolId: "", visitorName: "", phone: "", purpose: "",
     personToMeet: "", idProofType: "", idProofNumber: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // schools is still fetching when this dialog can mount, so a schoolId
+  // seeded at useState-init time can lock at "" forever — the <select>
+  // shows the first option regardless, masking that the real value never
+  // got set. Backfill once schools actually arrives.
+  useEffect(() => {
+    if (!form.schoolId && schools[0]) setForm((f) => ({ ...f, schoolId: schools[0].id }));
+  }, [schools, form.schoolId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,7 +66,7 @@ function LogVisitorDialog({ schools, onClose, onSaved }: {
       <form onSubmit={submit} className="space-y-4">
         <Field id="schoolId" label="School">
           <select id="schoolId" className={inputCls} value={form.schoolId} onChange={set("schoolId")}>
-            {schools.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.tenantName})</option>)}
+            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
         <div className="grid grid-cols-2 gap-4">

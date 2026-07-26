@@ -34,7 +34,7 @@ function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
     email: initial?.email ?? "",
     phone: initial?.phone ?? "",
     role: initial?.role ?? "TEACHER",
-    schoolId: schools[0]?.id ?? "",
+    schoolId: "",
     password: "",
     isActive: initial ? String(initial.isActive) : "true",
   });
@@ -44,6 +44,14 @@ function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
   const [resetPw, setResetPw] = useState<string | null>(null);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // schools is still fetching when this dialog can mount, so a schoolId
+  // seeded at useState-init time can lock at "" forever — the <select>
+  // shows the first option regardless, masking that the real value never
+  // got set. Backfill once schools actually arrives.
+  useEffect(() => {
+    if (!form.schoolId && schools[0]) setForm((f) => ({ ...f, schoolId: schools[0].id }));
+  }, [schools, form.schoolId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -115,7 +123,7 @@ function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
         {mode === "add" && (
           <Field id="u-school" label="School">
             <select id="u-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
-              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` (${s.tenantName})` : ""}</option>)}
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
         )}

@@ -15,7 +15,7 @@ function EventDialog({ mode, initial, schools, defaultDate, onClose, onSaved }: 
   onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
-    schoolId: schools[0]?.id ?? "",
+    schoolId: "",
     title: initial?.title ?? "", description: initial?.description ?? "", location: initial?.location ?? "",
     startAt: initial ? initial.startAt.slice(0, 16) : defaultDate ? defaultDate.slice(0, 16) : "",
     endAt: initial?.endAt ? initial.endAt.slice(0, 16) : "",
@@ -24,6 +24,14 @@ function EventDialog({ mode, initial, schools, defaultDate, onClose, onSaved }: 
   const [saving, setSaving] = useState(false);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // schools is still fetching when this dialog can mount, so a schoolId
+  // seeded at useState-init time can lock at "" forever — the <select>
+  // shows the first option regardless, masking that the real value never
+  // got set. Backfill once schools actually arrives.
+  useEffect(() => {
+    if (!form.schoolId && schools[0]) setForm((f) => ({ ...f, schoolId: schools[0].id }));
+  }, [schools, form.schoolId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

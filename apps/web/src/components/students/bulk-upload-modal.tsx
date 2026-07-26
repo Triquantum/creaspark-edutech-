@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { api } from "@/lib/api";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
@@ -67,7 +67,17 @@ function parseWorkbook(file: File): Promise<ParsedRow[]> {
 export function BulkUploadModal({ schools, onClose, onDone }: {
   schools: SchoolOpt[]; onClose: () => void; onDone: () => void;
 }) {
-  const [schoolId, setSchoolId] = useState(schools[0]?.id ?? "");
+  const [schoolId, setSchoolId] = useState("");
+  // `schools` is still fetching when this modal can mount, so seeding
+  // schoolId from schools[0] at useState-init time (evaluated once, on
+  // mount) can lock it at "" forever if the list wasn't loaded yet — the
+  // <select> then shows the first option anyway (browsers default-render
+  // it when a controlled value matches none), masking that the real state
+  // never got a value and leaving the submit button disabled. Backfill once
+  // schools actually arrive.
+  useEffect(() => {
+    if (!schoolId && schools[0]) setSchoolId(schools[0].id);
+  }, [schools, schoolId]);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -111,7 +121,7 @@ export function BulkUploadModal({ schools, onClose, onDone }: {
       <div className="space-y-4">
         <Field id="bu-school" label="School">
           <select id="bu-school" required value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className={inputCls}>
-            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` (${s.tenantName})` : ""}</option>)}
+            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </Field>
 
