@@ -22,7 +22,12 @@ const PERSON = { select: { id: true, fullName: true } };
 const ASSIGNMENT_INCLUDE = {
   teacher: PERSON,
   subject: { select: { id: true, name: true } },
-  section: { select: { id: true, name: true, class: { select: { id: true, name: true, schoolId: true } } } },
+  section: {
+    select: {
+      id: true, name: true,
+      class: { select: { id: true, name: true, schoolId: true, school: { select: { name: true } } } },
+    },
+  },
 };
 
 @Injectable()
