@@ -16,6 +16,7 @@ export default function SubjectsPage() {
         { name: "code", label: "Code", placeholder: "MATH" },
       ]}
       deleteHint="Subjects used in exams can't be deleted."
+      manageRoles={["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "COORDINATOR"]}
     />
   );
 }

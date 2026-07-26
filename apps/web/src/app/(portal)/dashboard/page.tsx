@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  BookOpen, CalendarCheck2, GraduationCap, HeartHandshake, MessageSquare,
+  BookOpen, CalendarCheck2, ClipboardList, GraduationCap, HeartHandshake, MessageSquare,
   Megaphone, School, ShieldCheck, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -11,7 +11,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { api } from "@/lib/api";
 import { InstitutionsTable } from "@/components/platform/institutions-table";
 
-interface Me { fullName?: string; tenantName?: string; role: string }
+interface Me { id: string; fullName?: string; tenantName?: string; role: string }
+interface TeacherAssignmentRow {
+  id: string;
+  teacher: { id: string };
+  subject: { id: string; name: string };
+  section: { id: string; name: string; class: { id: string; name: string } };
+}
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
 interface FeesSummary { collected: number; outstanding: number }
 interface AttendanceToday { total: number; present: number; percentage: number | null }
@@ -45,6 +51,7 @@ const SUPER_ADMIN_QUICK: QuickTile[] = [
 
 const TEACHER_QUICK: QuickTile[] = [
   { label: "Take Attendance", href: "/attendance/student-attendance", icon: CalendarCheck2 },
+  { label: "Portion Tracker", href: "/portion", icon: ClipboardList },
   { label: "Students", href: "/students", icon: GraduationCap },
   { label: "Message", href: "/message", icon: MessageSquare },
   { label: "Notices", href: "/announcement/notice", icon: Megaphone },
@@ -107,6 +114,41 @@ function PlatformOverview({ data }: { data: PlatformSummary }) {
   );
 }
 
+function MyClassesCard({ assignments }: { assignments: TeacherAssignmentRow[] }) {
+  const bySection = new Map<string, { className: string; sectionName: string; subjects: string[] }>();
+  for (const a of assignments) {
+    const entry = bySection.get(a.section.id) ?? { className: a.section.class.name, sectionName: a.section.name, subjects: [] };
+    entry.subjects.push(a.subject.name);
+    bySection.set(a.section.id, entry);
+  }
+  const classes = Array.from(bySection.values());
+
+  return (
+    <Card>
+      <h2 className="font-display font-semibold text-night dark:text-white">My Assigned Classes</h2>
+      {classes.length === 0 && <p className="mt-4 text-sm text-slate-500">No classes assigned yet — check with your school admin.</p>}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {classes.map((c) => (
+          <div key={`${c.className}-${c.sectionName}`} className="rounded-xl border border-slate-100 dark:border-white/10 p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                <BookOpen size={16} />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate font-medium text-night dark:text-white">{c.className} · {c.sectionName}</p>
+                <p className="truncate text-xs text-slate-400">{c.subjects.join(", ")}</p>
+              </div>
+            </div>
+            <Link href="/attendance/student-attendance" className="mt-3 inline-block text-xs font-medium text-primary hover:underline">
+              Manage Class →
+            </Link>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function NoticesCard({ announcements }: { announcements: Announcement[] }) {
   return (
     <Card>
@@ -142,6 +184,9 @@ export default function Dashboard() {
   const [myFees, setMyFees] = useState<MyFees | null>(null);
   const [myProgress, setMyProgress] = useState<ProgressOverall | null>(null);
 
+  // Teacher's own assigned classes
+  const [myAssignments, setMyAssignments] = useState<TeacherAssignmentRow[]>([]);
+
   // Super admin platform-wide stats
   const [platform, setPlatform] = useState<PlatformSummary | null>(null);
 
@@ -164,6 +209,11 @@ export default function Dashboard() {
     }
     if (isStaff || isTeacher) {
       api<AttendanceToday>("/attendance/today").then(setAttendance).catch(() => {});
+    }
+    if (isTeacher) {
+      api<TeacherAssignmentRow[]>("/teacher-assignments")
+        .then((rows) => setMyAssignments(rows.filter((r) => r.teacher.id === me.id)))
+        .catch(() => setMyAssignments([]));
     }
     if (isSelf) {
       api<MonthlyAttendance>("/attendance/student/monthly").then(setMyAttendance).catch(() => {});
@@ -220,6 +270,8 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {isTeacher && <MyClassesCard assignments={myAssignments} />}
 
       {isSelf && (
         <div className="grid gap-5 sm:grid-cols-3">

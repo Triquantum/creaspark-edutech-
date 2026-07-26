@@ -18,6 +18,7 @@ export default function AcademicYearPage() {
         { name: "startDate", label: "Start date", type: "date", required: true },
         { name: "endDate", label: "End date", type: "date", required: true },
       ]}
+      manageRoles={["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "COORDINATOR"]}
     />
   );
 }

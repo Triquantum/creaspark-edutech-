@@ -25,9 +25,13 @@ function get(obj: Record<string, unknown>, path: string): unknown {
   return path.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], obj);
 }
 
-export function ResourcePage({ title, singular, group, endpoint, columns, fields, deleteHint }: {
+export function ResourcePage({ title, singular, group, endpoint, columns, fields, deleteHint, manageRoles }: {
   title: string; singular: string; group?: string; endpoint: string;
   columns: ColumnDef[]; fields: FieldDef[]; deleteHint?: string;
+  /** Roles allowed to Add/Edit/Delete, matching this endpoint's real @Roles
+   * set on the backend — everyone else gets a read-only view (View action
+   * only) instead of buttons that would just 403. Omit to leave ungated. */
+  manageRoles?: string[];
 }) {
   type Row = Record<string, unknown> & { id: string };
   const [rows, setRows] = useState<Row[]>([]);
@@ -40,6 +44,13 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
   const [toast, setToast] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!manageRoles) return;
+    api<{ role: string }>("/auth/me").then((r) => setMyRole(r.role)).catch(() => setMyRole(null));
+  }, [manageRoles]);
+  const canManage = !manageRoles || (myRole !== null && manageRoles.includes(myRole));
 
   const load = useCallback(() => {
     setState("loading");
@@ -155,7 +166,7 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
           {group && <p className="text-xs font-medium uppercase tracking-widest text-slate-400">{group}</p>}
           <h1 className="font-display text-2xl font-semibold text-night dark:text-white">{title}</h1>
         </div>
-        <Button onClick={() => openDialog({ mode: "add" })}>Add {singular.toLowerCase()}</Button>
+        {canManage && <Button onClick={() => openDialog({ mode: "add" })}>Add {singular.toLowerCase()}</Button>}
       </div>
 
       <Card className="p-0 overflow-hidden">
@@ -186,8 +197,8 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
                   <td className="px-4 py-3">
                     <RowActions
                       onView={() => setViewing(row)}
-                      onEdit={() => openDialog({ mode: "edit", row })}
-                      onDelete={() => setDeleting(row)}
+                      onEdit={canManage ? () => openDialog({ mode: "edit", row }) : undefined}
+                      onDelete={canManage ? () => setDeleting(row) : undefined}
                     />
                   </td>
                 </tr>

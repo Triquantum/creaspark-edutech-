@@ -18,6 +18,8 @@ interface Assignment {
   section: { id: string; name: string; class: { id: string; name: string; school: { name: string } } };
 }
 
+const MANAGE_ROLES = ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "COORDINATOR"];
+
 let bulkRowKey = 0;
 interface BulkRow { key: number; schoolId: string; classId: string; sectionId: string; subjectId: string; teacherId: string }
 const blankBulkRow = (): BulkRow => ({ key: bulkRowKey++, schoolId: "", classId: "", sectionId: "", subjectId: "", teacherId: "" });
@@ -165,7 +167,10 @@ export default function TeacherAssignmentPage() {
   const [removing, setRemoving] = useState<Assignment | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const canManage = myRole !== null && MANAGE_ROLES.includes(myRole);
 
+  useEffect(() => { api<{ role: string }>("/auth/me").then((r) => setMyRole(r.role)).catch(() => setMyRole(null)); }, []);
   useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
   useEffect(() => { if (!schoolId && schools[0]) setSchoolId(schools[0].id); }, [schools, schoolId]);
 
@@ -248,9 +253,11 @@ export default function TeacherAssignmentPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold text-night dark:text-white">Assign Subjects &amp; Teachers</h1>
-          <p className="mt-1 text-sm text-slate-500">Choose a school, class and division, then pick who teaches each subject.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {canManage ? "Choose a school, class and division, then pick who teaches each subject." : "Read-only — you don't have permission to change assignments."}
+          </p>
         </div>
-        <Button onClick={() => setBulkOpen(true)}><Plus size={16} /> Bulk Assign</Button>
+        {canManage && <Button onClick={() => setBulkOpen(true)}><Plus size={16} /> Bulk Assign</Button>}
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -300,7 +307,7 @@ export default function TeacherAssignmentPage() {
                       <select
                         value={current?.teacher.id ?? ""}
                         onChange={(e) => assign(sectionId, sub.id, e.target.value)}
-                        disabled={savingKey === key}
+                        disabled={savingKey === key || !canManage}
                         aria-label={`Teacher for ${sub.name}`}
                         className={`${inputCls} max-w-xs`}
                       >
@@ -331,7 +338,7 @@ export default function TeacherAssignmentPage() {
                 <th className="px-4 py-3 font-medium">Class</th>
                 <th className="px-4 py-3 font-medium">Subject</th>
                 <th className="px-4 py-3 font-medium">Teacher</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                {canManage && <th className="px-4 py-3 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -343,19 +350,21 @@ export default function TeacherAssignmentPage() {
                     <select
                       value={a.teacher.id}
                       onChange={(e) => assign(a.section.id, a.subject.id, e.target.value)}
-                      disabled={savingKey === `${a.section.id}:${a.subject.id}`}
+                      disabled={savingKey === `${a.section.id}:${a.subject.id}` || !canManage}
                       aria-label={`Teacher for ${a.subject.name} in ${a.section.class.name} ${a.section.name}`}
                       className={`${inputCls} h-10 max-w-xs`}
                     >
                       {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => setRemoving(a)} aria-label="Remove assignment" title="Remove"
-                      className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-danger/10 hover:text-danger">
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
+                  {canManage && (
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => setRemoving(a)} aria-label="Remove assignment" title="Remove"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-danger/10 hover:text-danger">
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

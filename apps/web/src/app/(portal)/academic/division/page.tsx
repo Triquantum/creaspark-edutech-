@@ -17,6 +17,7 @@ export default function DivisionsPage() {
         { name: "name", label: "Division name", required: true, placeholder: "C" },
       ]}
       deleteHint="Divisions with students can't be deleted until students are moved."
+      manageRoles={["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "COORDINATOR"]}
     />
   );
 }

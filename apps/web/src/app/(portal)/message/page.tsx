@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MessageSquare, Send, Trash2, Users } from "lucide-react";
+import { MessageSquare, Reply as ReplyIcon, Send, Trash2, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -237,6 +237,54 @@ function ComposeDialog({ canBroadcast, canAnnounce, onClose, onSent }: {
   );
 }
 
+function ReplyDialog({ to, subject, onClose, onSent }: {
+  to: Person; subject?: string | null; onClose: () => void; onSent: () => void;
+}) {
+  const [body, setBody] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!body.trim()) { setError("Write a reply"); return; }
+    setSending(true);
+    try {
+      await api("/messages", {
+        method: "POST",
+        body: JSON.stringify({
+          recipientId: to.id,
+          subject: subject ? (subject.startsWith("Re: ") ? subject : `Re: ${subject}`) : undefined,
+          body,
+        }),
+      });
+      onSent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Modal title={`Reply to ${to.fullName}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field id="reply-body" label="Message">
+          <textarea
+            value={body} onChange={(e) => setBody(e.target.value)} rows={4} autoFocus
+            className={`${inputCls} h-auto py-3`} placeholder="Type your reply…"
+          />
+        </Field>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={sending}>{sending ? "Sending…" : "Send reply"}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function MessagePage() {
   const [me, setMe] = useState<Me | null>(null);
   const [tab, setTab] = useState<"inbox" | "sent">("inbox");
@@ -255,6 +303,7 @@ export default function MessagePage() {
 
   const [deleting, setDeleting] = useState<MessageRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<MessageRow | null>(null);
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
   useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
@@ -360,6 +409,15 @@ export default function MessagePage() {
                   <span className="text-xs text-slate-400">
                     {new Date(m.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </span>
+                  {tab === "inbox" && m.sender && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setReplyingTo(m); }}
+                      aria-label="Reply" title="Reply"
+                      className="text-slate-400 hover:text-primary"
+                    >
+                      <ReplyIcon size={14} />
+                    </button>
+                  )}
                   {tab === "sent" && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setDeleting(m); }}
@@ -394,6 +452,15 @@ export default function MessagePage() {
           onConfirm={confirmDelete}
           onClose={() => setDeleting(null)}
           busy={busy}
+        />
+      )}
+
+      {replyingTo && replyingTo.sender && (
+        <ReplyDialog
+          to={replyingTo.sender}
+          subject={replyingTo.subject}
+          onClose={() => setReplyingTo(null)}
+          onSent={() => { setReplyingTo(null); reload(); setTab("sent"); setToast("Reply sent"); }}
         />
       )}
 
