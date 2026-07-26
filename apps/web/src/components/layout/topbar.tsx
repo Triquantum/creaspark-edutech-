@@ -123,7 +123,10 @@ export function Topbar() {
 
   const [voiceListening, setVoiceListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const voiceSupported = useMemo(() => getSpeechRecognitionCtor() !== null, []);
+  // Starts false to match the server-rendered HTML (window is unavailable
+  // there); flips after mount once we can actually check the browser.
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  useEffect(() => { setVoiceSupported(getSpeechRecognitionCtor() !== null); }, []);
 
   function startVoiceSearch() {
     const Ctor = getSpeechRecognitionCtor();
