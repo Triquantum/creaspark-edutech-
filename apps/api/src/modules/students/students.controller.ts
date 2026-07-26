@@ -29,6 +29,12 @@ export class StudentsController {
     return listViewableStudents(this.prisma, user);
   }
 
+  @Get("birthdays/today")
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER)
+  todaysBirthdays(@CurrentUser() user: AuthUser, @Query("schoolId") schoolId?: string) {
+    return this.students.todaysBirthdays(user, schoolId);
+  }
+
   @Get(":id")
   @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR)
   get(@Param("id") id: string, @CurrentUser() user: AuthUser) {

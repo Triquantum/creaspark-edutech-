@@ -252,6 +252,56 @@ export class StudentsService {
     return { created, updated, errors };
   }
 
+  /**
+   * Students whose birthday (month+day) is today, scoped by role: Super
+   * Admin sees every school (or one, via schoolId), Org/School Admin see
+   * their own tenant, Teacher sees only students in sections they're
+   * assigned to teach (via TeacherAssignment). Prisma has no date-part
+   * filter, so the scope query runs first and the day/month match happens
+   * in application code.
+   */
+  async todaysBirthdays(user: AuthUser, schoolId?: string) {
+    const scope = user.role === Role.SUPER_ADMIN
+      ? { schoolId }
+      : { tenantId: currentTenant().tenantId, schoolId };
+
+    let sectionIds: string[] | undefined;
+    if (user.role === Role.TEACHER) {
+      const assignments = await this.prisma.teacherAssignment.findMany({
+        where: { teacherId: user.id },
+        select: { sectionId: true },
+      });
+      sectionIds = [...new Set(assignments.map((a) => a.sectionId))];
+      if (!sectionIds.length) return [];
+    }
+
+    const students = await this.prisma.student.findMany({
+      where: {
+        dob: { not: null },
+        status: "ACTIVE",
+        ...(scope.tenantId && { tenantId: scope.tenantId }),
+        ...(scope.schoolId && { schoolId: scope.schoolId }),
+        ...(sectionIds && { sectionId: { in: sectionIds } }),
+      },
+      select: {
+        id: true, firstName: true, lastName: true, dob: true, photoUrl: true,
+        section: { select: { id: true, name: true, class: { select: { name: true } } } },
+        school: { select: { name: true } },
+      },
+    });
+
+    const today = new Date();
+    const month = today.getMonth();
+    const date = today.getDate();
+    return students
+      .filter((s) => s.dob!.getUTCMonth() === month && s.dob!.getUTCDate() === date)
+      .map((s) => ({
+        id: s.id, firstName: s.firstName, lastName: s.lastName, photoUrl: s.photoUrl,
+        section: s.section, school: s.school,
+        age: today.getFullYear() - s.dob!.getUTCFullYear(),
+      }));
+  }
+
   /** Creates a real, standalone login for the student themselves (role
    * STUDENT), separate from any guardian's account. Students don't have
    * real email addresses, so the login uses a synthetic one derived from

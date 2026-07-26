@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  BookOpen, CalendarCheck2, ClipboardList, GraduationCap, HeartHandshake, MessageSquare,
+  BookOpen, Cake, CalendarCheck2, ClipboardList, GraduationCap, HeartHandshake, MessageSquare,
   Megaphone, School, ShieldCheck, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -19,6 +19,11 @@ interface TeacherAssignmentRow {
   section: { id: string; name: string; class: { id: string; name: string } };
 }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
+interface BirthdayStudent {
+  id: string; firstName: string; lastName: string; photoUrl: string | null; age: number;
+  section: { id: string; name: string; class: { name: string } } | null;
+  school: { name: string } | null;
+}
 interface FeesSummary { collected: number; outstanding: number }
 interface AttendanceToday { total: number; present: number; percentage: number | null }
 interface MonthlyAttendance { summary: { percentage: number; total: number } }
@@ -68,6 +73,10 @@ const STAFF_ROLES = new Set([
   "SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL",
   "COORDINATOR", "ACCOUNTANT", "RECEPTION", "HR",
 ]);
+
+// Matches the @Roles list on GET /students/birthdays/today — anyone outside
+// this set would just get a 403, so don't bother fetching for them.
+const BIRTHDAY_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "TEACHER"]);
 
 function greeting() {
   const h = new Date().getHours();
@@ -149,6 +158,40 @@ function MyClassesCard({ assignments }: { assignments: TeacherAssignmentRow[] })
   );
 }
 
+function BirthdaysCard({ students }: { students: BirthdayStudent[] }) {
+  return (
+    <Card>
+      <div className="flex items-center gap-2">
+        <Cake size={18} className="text-primary" />
+        <h2 className="font-display font-semibold text-night dark:text-white">Today&apos;s Birthdays</h2>
+      </div>
+      {students.length === 0 && <p className="mt-4 text-sm text-slate-500">No birthdays today.</p>}
+      <ul className="mt-4 space-y-3">
+        {students.map((s) => (
+          <li key={s.id} className="flex items-center gap-3">
+            {s.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+            ) : (
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                {s.firstName[0]}{s.lastName[0]}
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-night dark:text-white">
+                {s.firstName} {s.lastName} <span className="text-xs font-normal text-slate-400">turns {s.age}</span>
+              </p>
+              <p className="truncate text-xs text-slate-400">
+                {s.section ? `${s.section.class.name} · ${s.section.name}` : s.school?.name ?? ""}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function NoticesCard({ announcements }: { announcements: Announcement[] }) {
   return (
     <Card>
@@ -187,6 +230,9 @@ export default function Dashboard() {
   // Teacher's own assigned classes
   const [myAssignments, setMyAssignments] = useState<TeacherAssignmentRow[]>([]);
 
+  // Today's birthdays (Super Admin / Org Admin / School Admin / Teacher)
+  const [birthdays, setBirthdays] = useState<BirthdayStudent[]>([]);
+
   // Super admin platform-wide stats
   const [platform, setPlatform] = useState<PlatformSummary | null>(null);
 
@@ -222,6 +268,9 @@ export default function Dashboard() {
     }
     if (me.role === "SUPER_ADMIN") {
       loadPlatform();
+    }
+    if (BIRTHDAY_ROLES.has(me.role)) {
+      api<BirthdayStudent[]>("/students/birthdays/today").then(setBirthdays).catch(() => setBirthdays([]));
     }
   }, [me]);
 
@@ -294,6 +343,7 @@ export default function Dashboard() {
       <div className="grid gap-5 lg:grid-cols-3">
         <QuickAccess tiles={quickTiles} />
         <NoticesCard announcements={announcements} />
+        {me && BIRTHDAY_ROLES.has(me.role) && <BirthdaysCard students={birthdays} />}
       </div>
 
       <Calendar />
