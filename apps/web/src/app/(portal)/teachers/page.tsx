@@ -90,6 +90,11 @@ function TeacherDialog({ mode, initial, schools, onClose, onSaved }: {
             <input id="ft-phone" value={form.phone ?? ""} onChange={set("phone")} inputMode="tel" className={inputCls} />
           </Field>
         </div>
+        {mode === "edit" && (
+          <Field id="ft-school" label="School">
+            <p className={`${inputCls} flex items-center text-slate-500`}>{initial?.staffProfile?.school?.name ?? "—"}</p>
+          </Field>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field id="ft-emp" label="Employee no.">
             <input id="ft-emp" required value={form.employeeNo} onChange={set("employeeNo")} placeholder="EMP-014" className={inputCls} />
