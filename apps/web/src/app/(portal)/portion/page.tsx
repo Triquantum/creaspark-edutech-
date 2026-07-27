@@ -178,6 +178,8 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
 }
 
 function MyReports({ reports }: { reports: PortionReport[] }) {
+  const [viewing, setViewing] = useState<PortionReport | null>(null);
+
   return (
     <Card className="p-0 overflow-hidden">
       <div className="border-b border-slate-100 p-4 dark:border-white/5">
@@ -192,14 +194,11 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Subject</th>
               <th className="px-4 py-3 font-medium">Chapter</th>
-              <th className="px-4 py-3 font-medium">Topics</th>
               <th className="px-4 py-3 font-medium">%</th>
               <th className="px-4 py-3 font-medium">Mode</th>
               <th className="px-4 py-3 font-medium">Portion status</th>
               <th className="px-4 py-3 font-medium">Review status</th>
-              <th className="px-4 py-3 font-medium">Review note</th>
-              <th className="px-4 py-3 font-medium">Comments</th>
-              <th className="px-4 py-3 font-medium">Remarks</th>
+              <th className="px-4 py-3 text-right font-medium">Details</th>
             </tr>
           </thead>
           <tbody>
@@ -208,18 +207,51 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
                 <td className="px-4 py-3 text-slate-500">{new Date(r.periodDate).toLocaleDateString("en-IN")} · {r.period === "DAILY" ? "Day" : "Week"}</td>
                 <td className="px-4 py-3 font-medium text-night dark:text-white">{r.subject?.name ?? "—"}</td>
                 <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.chapterName ?? undefined}>{r.chapterName ?? "—"}</td>
-                <td className="px-4 py-3 max-w-xs truncate text-slate-500" title={r.topicsCovered}>{r.topicsCovered}</td>
                 <td className="px-4 py-3 text-night dark:text-white">{r.percentComplete ?? "—"}</td>
                 <td className="px-4 py-3"><ModeBadge mode={r.mode} /></td>
                 <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
-                <td className="px-4 py-3 text-slate-500">{r.reviewNote ?? "—"}</td>
-                <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.reviewComments ?? undefined}>{r.reviewComments ?? "—"}</td>
-                <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.reviewRemarks ?? undefined}>{r.reviewRemarks ?? "—"}</td>
+                <td className="px-4 py-3 text-right">
+                  <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => setViewing(r)}>View</Button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {viewing && (
+        <Modal title={viewing.chapterName ?? viewing.subject?.name ?? "Submission"} onClose={() => setViewing(null)}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ModeBadge mode={viewing.mode} />
+            <CompletionBadge status={viewing.completionStatus} />
+            <StatusBadge status={viewing.status} />
+          </div>
+          <dl className="mt-4 space-y-3 text-sm">
+            {viewing.description && (
+              <div>
+                <dt className="font-medium text-night dark:text-white">Chapter description</dt>
+                <dd className="mt-1 text-slate-500">{viewing.description}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="font-medium text-night dark:text-white">Topics covered</dt>
+              <dd className="mt-1 text-slate-500">{viewing.topicsCovered}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-night dark:text-white">Review note</dt>
+              <dd className="mt-1 text-slate-500">{viewing.reviewNote ?? "No review note yet."}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-night dark:text-white">Comments</dt>
+              <dd className="mt-1 text-slate-500">{viewing.reviewComments ?? "No comments yet."}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-night dark:text-white">Remarks</dt>
+              <dd className="mt-1 text-slate-500">{viewing.reviewRemarks ?? "No remarks yet."}</dd>
+            </div>
+          </dl>
+        </Modal>
       )}
     </Card>
   );
