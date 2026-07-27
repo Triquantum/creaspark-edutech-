@@ -71,20 +71,32 @@ export class MessagesService {
   }
 
   async send(dto: SendMessageDto, user: AuthUser) {
-    const { tenantId } = currentTenant();
     if (!dto.recipientId === !dto.sectionId) {
       throw new BadRequestException("Provide exactly one of recipientId or sectionId");
     }
+
+    /** Super Admin's own tenantId is a placeholder unrelated to any real
+     * school — a message they send must be stamped with the OTHER party's
+     * real tenantId, or it'd never surface in that party's own
+     * tenant-scoped inbox (same bug class already fixed on inbox()/sent()).
+     * Every other role's own tenantId already IS the real school shared
+     * with anyone they can message, so scoping the lookup by it and
+     * reading tenantId back off the found row is equivalent — one code
+     * path covers every role. */
+    const ownScope = user.role === Role.SUPER_ADMIN ? {} : { tenantId: currentTenant().tenantId };
+    let tenantId: string;
 
     if (dto.sectionId) {
       if (!CAN_BROADCAST.includes(user.role as Role)) {
         throw new ForbiddenException("Only staff can broadcast to a class");
       }
-      const section = await this.prisma.section.findFirst({ where: { id: dto.sectionId, tenantId } });
+      const section = await this.prisma.section.findFirst({ where: { id: dto.sectionId, ...ownScope } });
       if (!section) throw new NotFoundException("Section not found");
+      tenantId = section.tenantId;
     } else {
-      const recipient = await this.prisma.user.findFirst({ where: { id: dto.recipientId, tenantId } });
+      const recipient = await this.prisma.user.findFirst({ where: { id: dto.recipientId, ...ownScope } });
       if (!recipient) throw new NotFoundException("Recipient not found");
+      tenantId = recipient.tenantId;
     }
 
     return this.prisma.message.create({
