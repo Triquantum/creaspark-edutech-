@@ -1,4 +1,5 @@
 {
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
-  "ignoreCommand": "exit 1"
+  "ignoreCommand": "exit 1",
+  "crons": [{ "path": "/portion/cron/remind-missing", "schedule": "0 9 * * 1" }]
 }

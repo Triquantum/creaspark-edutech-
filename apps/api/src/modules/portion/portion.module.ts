@@ -1,6 +1,6 @@
 import {
-  Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException,
-  Param, Patch, Post, Query, UseGuards,
+  Body, Controller, ForbiddenException, Get, Headers, Injectable, Module, NotFoundException,
+  Param, Patch, Post, Query, UnauthorizedException, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
@@ -46,6 +46,9 @@ export class ReviewPortionReportDto {
 
 const REVIEW_ROLES = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR] as const;
 const SUBMIT_ROLES = [Role.TEACHER, Role.TRAINER] as const;
+// Priority order for who a school's automated reminder appears to come
+// from — prefers whoever's most directly responsible for that teacher.
+const REMINDER_SENDER_ROLES = [Role.SCHOOL_ADMIN, Role.ORG_ADMIN, Role.PRINCIPAL, Role.COORDINATOR] as const;
 
 /**
  * Teacher-submitted daily/weekly syllabus-coverage entries. There's no
@@ -166,6 +169,69 @@ export class PortionService {
       },
     });
   }
+
+  /** Monday 00:00:00 UTC through the following Monday (exclusive) — the
+   * week this reminder run is checking submissions for. */
+  private currentWeekRange(): { start: Date; end: Date } {
+    const now = new Date();
+    const daysSinceMonday = (now.getUTCDay() + 6) % 7;
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday));
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+    return { start, end };
+  }
+
+  private async findReminderSender(tenantId: string): Promise<string | null> {
+    for (const role of REMINDER_SENDER_ROLES) {
+      const u = await this.prisma.user.findFirst({ where: { tenantId, role, isActive: true }, select: { id: true } });
+      if (u) return u.id;
+    }
+    return null;
+  }
+
+  /** Weekly cron target: every active teacher with no portion submission
+   * (daily or weekly) yet this week gets a reminder message. Attributed to
+   * a reviewer in their own school rather than a system account, since
+   * Message has no concept of a senderless/system message; a tenant with
+   * no reviewer on staff is skipped rather than left unattributed. */
+  async remindMissingSubmissions() {
+    const { start, end } = this.currentWeekRange();
+    const teachers = await this.prisma.user.findMany({
+      where: { role: Role.TEACHER, isActive: true },
+      select: { id: true, tenantId: true, fullName: true },
+    });
+    if (!teachers.length) return { reminded: 0 };
+
+    const submitted = await this.prisma.portionReport.findMany({
+      where: { teacherId: { in: teachers.map((t) => t.id) }, periodDate: { gte: start, lt: end } },
+      select: { teacherId: true },
+      distinct: ["teacherId"],
+    });
+    const submittedIds = new Set(submitted.map((s) => s.teacherId));
+    const missing = teachers.filter((t) => !submittedIds.has(t.id));
+    if (!missing.length) return { reminded: 0 };
+
+    const tenantIds = [...new Set(missing.map((t) => t.tenantId))];
+    const senderByTenant = new Map<string, string>();
+    for (const tenantId of tenantIds) {
+      const senderId = await this.findReminderSender(tenantId);
+      if (senderId) senderByTenant.set(tenantId, senderId);
+    }
+
+    const remindable = missing.filter((t) => senderByTenant.has(t.tenantId));
+    if (!remindable.length) return { reminded: 0 };
+
+    await this.prisma.message.createMany({
+      data: remindable.map((t) => ({
+        tenantId: t.tenantId,
+        senderId: senderByTenant.get(t.tenantId)!,
+        recipientId: t.id,
+        subject: "Portion status reminder",
+        body: `Hi ${t.fullName}, you haven't submitted a portion status update this week yet. Please submit one from the Portion Tracker.`,
+      })),
+    });
+    return { reminded: remindable.length };
+  }
 }
 
 @ApiTags("portion")
@@ -200,5 +266,22 @@ export class PortionController {
   }
 }
 
-@Module({ controllers: [PortionController], providers: [PortionService] })
+/** No JwtAuthGuard here — Vercel's cron invocation carries no user session,
+ * only the `Authorization: Bearer $CRON_SECRET` header Vercel adds
+ * automatically once CRON_SECRET is set as an env var. Guarded manually
+ * instead so a stray/missing secret fails closed rather than open. */
+@Controller("portion/cron")
+export class PortionCronController {
+  constructor(private svc: PortionService) {}
+
+  @Get("remind-missing")
+  remindMissing(@Headers("authorization") auth?: string) {
+    if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+      throw new UnauthorizedException();
+    }
+    return this.svc.remindMissingSubmissions();
+  }
+}
+
+@Module({ controllers: [PortionController, PortionCronController], providers: [PortionService] })
 export class PortionModule {}
