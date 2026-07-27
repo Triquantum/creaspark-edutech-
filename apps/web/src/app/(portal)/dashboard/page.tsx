@@ -16,7 +16,7 @@ interface TeacherAssignmentRow {
   id: string;
   teacher: { id: string };
   subject: { id: string; name: string };
-  section: { id: string; name: string; class: { id: string; name: string } };
+  section: { id: string; name: string; class: { id: string; name: string; schoolId: string } };
 }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
 interface BirthdayStudent {
@@ -124,9 +124,12 @@ function PlatformOverview({ data }: { data: PlatformSummary }) {
 }
 
 function MyClassesCard({ assignments }: { assignments: TeacherAssignmentRow[] }) {
-  const bySection = new Map<string, { className: string; sectionName: string; subjects: string[] }>();
+  const bySection = new Map<string, { schoolId: string; classId: string; sectionId: string; className: string; sectionName: string; subjects: string[] }>();
   for (const a of assignments) {
-    const entry = bySection.get(a.section.id) ?? { className: a.section.class.name, sectionName: a.section.name, subjects: [] };
+    const entry = bySection.get(a.section.id) ?? {
+      schoolId: a.section.class.schoolId, classId: a.section.class.id, sectionId: a.section.id,
+      className: a.section.class.name, sectionName: a.section.name, subjects: [],
+    };
     entry.subjects.push(a.subject.name);
     bySection.set(a.section.id, entry);
   }
@@ -138,7 +141,7 @@ function MyClassesCard({ assignments }: { assignments: TeacherAssignmentRow[] })
       {classes.length === 0 && <p className="mt-4 text-sm text-slate-500">No classes assigned yet — check with your school admin.</p>}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {classes.map((c) => (
-          <div key={`${c.className}-${c.sectionName}`} className="rounded-xl border border-slate-100 dark:border-white/10 p-4">
+          <div key={c.sectionId} className="rounded-xl border border-slate-100 dark:border-white/10 p-4">
             <div className="flex items-center gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                 <BookOpen size={16} />
@@ -148,7 +151,10 @@ function MyClassesCard({ assignments }: { assignments: TeacherAssignmentRow[] })
                 <p className="truncate text-xs text-slate-400">{c.subjects.join(", ")}</p>
               </div>
             </div>
-            <Link href="/attendance/student-attendance" className="mt-3 inline-block text-xs font-medium text-primary hover:underline">
+            <Link
+              href={`/attendance/student-attendance?schoolId=${c.schoolId}&classId=${c.classId}&sectionId=${c.sectionId}`}
+              className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
+            >
               Manage Class →
             </Link>
           </div>

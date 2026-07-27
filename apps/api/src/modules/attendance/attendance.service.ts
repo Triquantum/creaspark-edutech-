@@ -61,6 +61,17 @@ export class AttendanceService {
     return { marked: input.entries.length };
   }
 
+  /** Per-student records for one section on one date — lets the marking UI
+   * prefill already-recorded statuses instead of defaulting everyone to
+   * Present and risking an accidental overwrite on re-open/correction. */
+  async sectionOnDate(sectionId: string, date: string) {
+    const { tenantId } = currentTenant();
+    return this.prisma.attendanceRecord.findMany({
+      where: { tenantId, sectionId, date: new Date(date) },
+      select: { studentId: true, status: true, note: true },
+    });
+  }
+
   async sectionSummary(sectionId: string, from: string, to: string) {
     const { tenantId } = currentTenant();
     const grouped = await this.prisma.attendanceRecord.groupBy({

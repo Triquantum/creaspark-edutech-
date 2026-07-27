@@ -20,6 +20,12 @@ export class AttendanceController {
     return this.attendance.markSection(body, user.id);
   }
 
+  @Get("section")
+  @Roles(Role.TEACHER, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR)
+  section(@Query("sectionId") sectionId: string, @Query("date") date: string) {
+    return this.attendance.sectionOnDate(sectionId, date);
+  }
+
   @Get("summary")
   @Roles(Role.TEACHER, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR)
   summary(@Query("sectionId") sectionId: string, @Query("from") from: string, @Query("to") to: string) {

@@ -40,6 +40,8 @@ export class QueryPortionReportsDto {
 export class ReviewPortionReportDto {
   @IsIn(["REVIEWED", "FLAGGED"]) status: "REVIEWED" | "FLAGGED";
   @IsOptional() @IsString() reviewNote?: string;
+  @IsOptional() @IsString() comments?: string;
+  @IsOptional() @IsString() remarks?: string;
 }
 
 const REVIEW_ROLES = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR] as const;
@@ -157,7 +159,11 @@ export class PortionService {
     }
     return this.prisma.portionReport.update({
       where: { id },
-      data: { status: dto.status, reviewNote: dto.reviewNote, reviewedBy: user.id, reviewedAt: new Date() },
+      data: {
+        status: dto.status, reviewNote: dto.reviewNote,
+        reviewComments: dto.comments, reviewRemarks: dto.remarks,
+        reviewedBy: user.id, reviewedAt: new Date(),
+      },
     });
   }
 }

@@ -13,6 +13,8 @@ interface PortionReport {
   percentComplete: number | null; status: "SUBMITTED" | "REVIEWED" | "FLAGGED";
   mode: "PRACTICAL" | "THEORY" | null; completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | null;
   reviewNote: string | null;
+  reviewComments: string | null;
+  reviewRemarks: string | null;
   subject?: { name: string }; class?: { name: string } | null; section?: { name: string } | null;
   teacher?: { fullName: string; email: string }; reviewer?: { fullName: string } | null;
 }
@@ -196,6 +198,8 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
               <th className="px-4 py-3 font-medium">Portion status</th>
               <th className="px-4 py-3 font-medium">Review status</th>
               <th className="px-4 py-3 font-medium">Review note</th>
+              <th className="px-4 py-3 font-medium">Comments</th>
+              <th className="px-4 py-3 font-medium">Remarks</th>
             </tr>
           </thead>
           <tbody>
@@ -210,6 +214,8 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
                 <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 <td className="px-4 py-3 text-slate-500">{r.reviewNote ?? "—"}</td>
+                <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.reviewComments ?? undefined}>{r.reviewComments ?? "—"}</td>
+                <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.reviewRemarks ?? undefined}>{r.reviewRemarks ?? "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -222,15 +228,22 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
 function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onReviewed: () => void }) {
   const [reviewing, setReviewing] = useState<PortionReport | null>(null);
   const [note, setNote] = useState("");
+  const [comments, setComments] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function act(status: "REVIEWED" | "FLAGGED") {
     if (!reviewing) return;
     setBusy(true);
     try {
-      await api(`/portion/${reviewing.id}/review`, { method: "PATCH", body: JSON.stringify({ status, reviewNote: note || undefined }) });
+      await api(`/portion/${reviewing.id}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, reviewNote: note || undefined, comments: comments || undefined, remarks: remarks || undefined }),
+      });
       setReviewing(null);
       setNote("");
+      setComments("");
+      setRemarks("");
       onReviewed();
     } finally {
       setBusy(false);
@@ -273,7 +286,9 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
                 <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 <td className="px-4 py-3 text-right">
-                  <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => { setReviewing(r); setNote(r.reviewNote ?? ""); }}>
+                  <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => {
+                    setReviewing(r); setNote(r.reviewNote ?? ""); setComments(r.reviewComments ?? ""); setRemarks(r.reviewRemarks ?? "");
+                  }}>
                     {r.status === "SUBMITTED" ? "Review" : "Update"}
                   </Button>
                 </td>
@@ -294,10 +309,18 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
           )}
           {reviewing.description && <p className="mb-2 text-sm text-slate-500">{reviewing.description}</p>}
           <p className="text-sm leading-relaxed text-slate-500">{reviewing.topicsCovered}</p>
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
             <Field id="review-note" label="Review note" optional>
               <textarea id="review-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)}
                 placeholder="Feedback for the teacher" className={`${inputCls} h-auto py-2.5`} />
+            </Field>
+            <Field id="review-comments" label="Comments" optional>
+              <textarea id="review-comments" rows={2} value={comments} onChange={(e) => setComments(e.target.value)}
+                placeholder="Comments visible to the teacher" className={`${inputCls} h-auto py-2.5`} />
+            </Field>
+            <Field id="review-remarks" label="Remarks" optional>
+              <textarea id="review-remarks" rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Remarks visible to the teacher" className={`${inputCls} h-auto py-2.5`} />
             </Field>
           </div>
           <div className="mt-6 flex justify-end gap-3">

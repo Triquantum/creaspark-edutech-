@@ -635,6 +635,8 @@ model PortionReport {
   reviewer        User?    @relation("PortionReportsReviewed", fields: [reviewedBy], references: [id])
   reviewedAt      DateTime?
   reviewNote      String?
+  reviewComments  String?                         // reviewer's freeform comments, separate box from remarks
+  reviewRemarks   String?                         // reviewer's freeform remarks, separate box from comments
   createdAt       DateTime @default(now())
 
   @@index([tenantId, schoolId, periodDate])
