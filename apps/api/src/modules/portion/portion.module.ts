@@ -1,10 +1,13 @@
 import {
-  Body, Controller, ForbiddenException, Get, Headers, Injectable, Module, NotFoundException,
-  Param, Patch, Post, Query, UnauthorizedException, UseGuards,
+  BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Injectable, Module,
+  NotFoundException, Param, Patch, Post, Query, Res, UnauthorizedException, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import type { Response } from "express";
+import PDFDocument from "pdfkit";
+import nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -47,6 +50,14 @@ export class ReviewPortionReportDto {
   @IsOptional() @IsString() reviewNote?: string;
   @IsOptional() @IsString() comments?: string;
   @IsOptional() @IsString() remarks?: string;
+}
+
+/** Same filters as QueryPortionReportsDto — the emailed report is exactly
+ * whatever the reviewer currently has filtered/visible, plus who to send it
+ * to. Named toEmail (not `to`) since QueryPortionReportsDto already has a
+ * `to` field for the date-range filter. */
+export class EmailPortionReportDto extends QueryPortionReportsDto {
+  @IsEmail() toEmail: string;
 }
 
 const REVIEW_ROLES = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR] as const;
@@ -196,6 +207,115 @@ export class PortionService {
     });
   }
 
+  /** Renders the exact rows list() would return into a simple landscape
+   * table PDF — pdfkit has no table primitive, so columns are laid out by
+   * hand at fixed x-offsets, paginating whenever a row would overflow. */
+  private buildReportPdf(rows: Awaited<ReturnType<PortionService["list"]>>): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 36, size: "A4", layout: "landscape" });
+      const chunks: Buffer[] = [];
+      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+
+      doc.fontSize(16).fillColor("#000").text("Portion Status Report");
+      doc.fontSize(9).fillColor("#666")
+        .text(`Generated ${new Date().toLocaleString("en-IN")} · ${rows.length} record${rows.length === 1 ? "" : "s"}`);
+      doc.moveDown();
+
+      const columns = [
+        { label: "Teacher", width: 90 },
+        { label: "School", width: 100 },
+        { label: "Date", width: 85 },
+        { label: "Subject / Class", width: 130 },
+        { label: "Chapter", width: 100 },
+        { label: "%", width: 30 },
+        { label: "Mode", width: 60 },
+        { label: "Portion status", width: 75 },
+        { label: "Review status", width: 75 },
+      ];
+      const startX = doc.page.margins.left;
+      const rowHeight = 16;
+      let y = doc.y;
+
+      const drawHeader = () => {
+        doc.fontSize(8).fillColor("#000").font("Helvetica-Bold");
+        let x = startX;
+        for (const col of columns) {
+          doc.text(col.label, x, y, { width: col.width, ellipsis: true });
+          x += col.width;
+        }
+        doc.font("Helvetica");
+        y += rowHeight;
+        doc.moveTo(startX, y - 3).lineTo(x, y - 3).strokeColor("#ccc").stroke();
+      };
+
+      drawHeader();
+      for (const r of rows) {
+        if (y > doc.page.height - doc.page.margins.bottom - rowHeight) {
+          doc.addPage();
+          y = doc.page.margins.top;
+          drawHeader();
+        }
+        const cells = [
+          r.teacher?.fullName ?? "—",
+          r.school?.name ?? "—",
+          `${new Date(r.periodDate).toLocaleDateString("en-IN")} (${r.period === "DAILY" ? "Day" : "Week"})`,
+          `${r.subject?.name ?? ""}${r.class ? ` · ${r.class.name}` : ""}${r.section ? ` ${r.section.name}` : ""}`,
+          r.chapterName ?? "—",
+          r.percentComplete != null ? String(r.percentComplete) : "—",
+          r.mode ?? "—",
+          r.completionStatus ?? "—",
+          r.status,
+        ];
+        doc.fontSize(8).fillColor("#333");
+        let x = startX;
+        cells.forEach((text, i) => {
+          doc.text(text, x, y, { width: columns[i].width, ellipsis: true });
+          x += columns[i].width;
+        });
+        y += rowHeight;
+      }
+
+      doc.end();
+    });
+  }
+
+  /** Fails fast with a clear message rather than a cryptic SMTP error if
+   * the server has no email credentials configured yet. */
+  private async sendEmail(to: string, subject: string, text: string, attachment: { filename: string; content: Buffer }): Promise<void> {
+    const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+      throw new BadRequestException(
+        "Email sending isn't configured on this server yet — an administrator needs to set SMTP_HOST/SMTP_USER/SMTP_PASS.",
+      );
+    }
+    const transporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT ? Number(SMTP_PORT) : 587,
+      secure: Number(SMTP_PORT) === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+    await transporter.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, attachments: [attachment] });
+  }
+
+  async reportPdf(user: AuthUser, query: QueryPortionReportsDto): Promise<Buffer> {
+    const rows = await this.list(user, query);
+    return this.buildReportPdf(rows);
+  }
+
+  async emailReport(user: AuthUser, dto: EmailPortionReportDto): Promise<{ sent: boolean }> {
+    const rows = await this.list(user, dto);
+    const pdf = await this.buildReportPdf(rows);
+    await this.sendEmail(
+      dto.toEmail,
+      "Portion Status Report",
+      `Attached is the portion status report (${rows.length} record${rows.length === 1 ? "" : "s"}), generated ${new Date().toLocaleString("en-IN")}.`,
+      { filename: "portion-status-report.pdf", content: pdf },
+    );
+    return { sent: true };
+  }
+
   async review(id: string, dto: ReviewPortionReportDto, user: AuthUser) {
     const existing = await this.prisma.portionReport.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Portion report not found");
@@ -299,6 +419,24 @@ export class PortionController {
   @Roles(...REVIEW_ROLES)
   list(@Query() query: QueryPortionReportsDto, @CurrentUser() user: AuthUser) {
     return this.svc.list(user, query);
+  }
+
+  /** Same filters as GET / — "print" is just opening this PDF in a new tab
+   * and using the browser's own print dialog, so it always matches
+   * whatever the reviewer currently has filtered. */
+  @Get("report/pdf")
+  @Roles(...REVIEW_ROLES)
+  async reportPdf(@Query() query: QueryPortionReportsDto, @CurrentUser() user: AuthUser, @Res() res: Response) {
+    const pdf = await this.svc.reportPdf(user, query);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="portion-status-report.pdf"');
+    res.send(pdf);
+  }
+
+  @Post("report/email")
+  @Roles(...REVIEW_ROLES)
+  emailReport(@Body() dto: EmailPortionReportDto, @CurrentUser() user: AuthUser) {
+    return this.svc.emailReport(user, dto);
   }
 
   @Patch(":id/review")

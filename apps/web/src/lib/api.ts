@@ -23,6 +23,21 @@ export async function api<T>(path: string, init?: RequestInit & { skipAuthRedire
   return res.json();
 }
 
+/** Same auth header as api(), but for binary responses (e.g. a PDF report)
+ * that api()'s always-res.json() can't handle. */
+export async function apiBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`${BASE}/api/v1${path}`, {
+    ...init,
+    headers: {
+      ...(session && { Authorization: `Bearer ${session.access_token}` }),
+      ...init?.headers,
+    },
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.message ?? res.statusText);
+  return res.blob();
+}
+
 export const auth = {
   /** Creates the school + its admin identity in Supabase; sign in separately via supabase.auth.signInWithPassword. */
   registerSchool: (body: {

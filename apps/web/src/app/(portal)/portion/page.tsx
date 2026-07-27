@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
-import { api } from "@/lib/api";
+import { api, apiBlob } from "@/lib/api";
 
 interface Me { role: string }
 interface Option { id: string; name: string }
@@ -383,6 +383,11 @@ function ReviewTable() {
   const [comments, setComments] = useState("");
   const [remarks, setRemarks] = useState("");
   const [busy, setBusy] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     api<Option[]>("/academic/subjects").then(setSubjects).catch(() => {});
@@ -395,7 +400,9 @@ function ReviewTable() {
 
   useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
 
-  useEffect(() => {
+  // Shared by the list fetch and the Print/Email report actions, so the
+  // report always matches exactly what's currently filtered on screen.
+  function buildParams(): URLSearchParams {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (schoolId) params.set("schoolId", schoolId);
@@ -405,8 +412,42 @@ function ReviewTable() {
     if (filters.month) params.set("month", filters.month);
     if (filters.year) params.set("year", filters.year);
     if (filters.completionStatus) params.set("completionStatus", filters.completionStatus);
-    api<PortionReport[]>(`/portion?${params.toString()}`).then(setReports).catch(() => setReports([]));
+    return params;
+  }
+
+  useEffect(() => {
+    api<PortionReport[]>(`/portion?${buildParams().toString()}`).then(setReports).catch(() => setReports([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, schoolId, teacherId, filters, reloadKey]);
+
+  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
+
+  async function printReport() {
+    try {
+      const blob = await apiBlob(`/portion/report/pdf?${buildParams().toString()}`);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not generate the report");
+    }
+  }
+
+  async function sendReportEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setEmailError(null);
+    setEmailBusy(true);
+    try {
+      const body: Record<string, string> = { toEmail: emailTo };
+      for (const [key, value] of buildParams().entries()) body[key] = value;
+      await api("/portion/report/email", { method: "POST", body: JSON.stringify(body) });
+      setEmailing(false);
+      setEmailTo("");
+      setToast(`Report emailed to ${emailTo}`);
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : "Could not send the report");
+    } finally {
+      setEmailBusy(false);
+    }
+  }
 
   async function act(status: "REVIEWED" | "FLAGGED") {
     if (!reviewing) return;
@@ -428,8 +469,16 @@ function ReviewTable() {
 
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="border-b border-slate-100 p-4 dark:border-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 dark:border-white/5">
         <h2 className="font-display font-semibold text-night dark:text-white">Portion status reports</h2>
+        <div className="flex gap-2">
+          <Button variant="ghost" className="h-8 px-3 text-xs" onClick={printReport} disabled={reports.length === 0}>
+            Print / Download PDF
+          </Button>
+          <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => setEmailing(true)} disabled={reports.length === 0}>
+            Email report
+          </Button>
+        </div>
       </div>
       <PortionFilterBar
         searchInput={searchInput} onSearchInputChange={setSearchInput}
@@ -513,6 +562,31 @@ function ReviewTable() {
             <Button disabled={busy} onClick={() => act("REVIEWED")}>{busy ? "Saving…" : "Mark reviewed"}</Button>
           </div>
         </Modal>
+      )}
+
+      {emailing && (
+        <Modal title="Email report" onClose={() => setEmailing(false)}>
+          <form onSubmit={sendReportEmail} className="space-y-4">
+            <p className="text-sm text-slate-500">
+              Sends the {reports.length} currently filtered record{reports.length === 1 ? "" : "s"} as a PDF attachment.
+            </p>
+            <Field id="email-to" label="Recipient email">
+              <input id="email-to" type="email" required value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="someone@example.com" className={inputCls} />
+            </Field>
+            {emailError && <p role="alert" className="text-sm text-danger">{emailError}</p>}
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setEmailing(false)}>Cancel</Button>
+              <Button type="submit" disabled={emailBusy}>{emailBusy ? "Sending…" : "Send"}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {toast && (
+        <div role="status" className="fixed bottom-6 right-6 z-50 rounded-xl bg-night px-4 py-3 text-sm text-white shadow-lift">
+          {toast}
+        </div>
       )}
     </Card>
   );
