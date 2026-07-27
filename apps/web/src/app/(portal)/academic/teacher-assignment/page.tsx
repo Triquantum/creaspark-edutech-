@@ -163,6 +163,12 @@ export default function TeacherAssignmentPage() {
   const [classId, setClassId] = useState("");
   const [sectionId, setSectionId] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  // Draft teacher picks for the grid below, keyed by subjectId — kept
+  // separate from `assignments` so each subject's pick stays independent
+  // until Save is pressed, instead of writing to the server (and to every
+  // other row's rendered value) on every single dropdown change.
+  const [pending, setPending] = useState<Record<string, string>>({});
+  const [savingGrid, setSavingGrid] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [removing, setRemoving] = useState<Assignment | null>(null);
   const [busy, setBusy] = useState(false);
@@ -197,6 +203,47 @@ export default function TeacherAssignmentPage() {
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
 
   const currentAssignments = assignments.filter((a) => a.section.id === sectionId);
+
+  // Re-seed the draft grid from the server's own truth whenever the division
+  // changes (a fresh draft per division) or assignments are reloaded (e.g.
+  // after Save) — never on every keystroke/selection, so in-progress picks
+  // for other subjects in the same grid aren't wiped out mid-edit.
+  useEffect(() => {
+    const seed: Record<string, string> = {};
+    for (const a of assignments) {
+      if (a.section.id === sectionId) seed[a.subject.id] = a.teacher.id;
+    }
+    setPending(seed);
+  }, [sectionId, assignments]);
+
+  const gridChanges = subjects.filter((sub) => {
+    const current = currentAssignments.find((a) => a.subject.id === sub.id);
+    return (current?.teacher.id ?? "") !== (pending[sub.id] ?? "");
+  });
+
+  async function saveGrid() {
+    if (gridChanges.length === 0) return;
+    setSavingGrid(true);
+    const results = await Promise.allSettled(
+      gridChanges.map((sub) => {
+        const current = currentAssignments.find((a) => a.subject.id === sub.id);
+        const nextTeacherId = pending[sub.id] ?? "";
+        return nextTeacherId
+          ? api("/teacher-assignments", {
+              method: "POST",
+              body: JSON.stringify({ sectionId, subjectId: sub.id, teacherId: nextTeacherId }),
+            })
+          : api(`/teacher-assignments/${current!.id}`, { method: "DELETE" });
+      }),
+    );
+    setSavingGrid(false);
+    reloadAssignments();
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const count = gridChanges.length;
+    setToast(failed === 0
+      ? `${count} change${count === 1 ? "" : "s"} saved`
+      : `${count - failed} saved, ${failed} failed`);
+  }
 
   async function assign(targetSectionId: string, subjectId: string, teacherId: string) {
     if (!teacherId) return unassign(targetSectionId, subjectId);
@@ -299,15 +346,18 @@ export default function TeacherAssignmentPage() {
             <tbody>
               {subjects.map((sub) => {
                 const current = currentAssignments.find((a) => a.subject.id === sub.id);
-                const key = `${sectionId}:${sub.id}`;
+                const changed = (current?.teacher.id ?? "") !== (pending[sub.id] ?? "");
                 return (
                   <tr key={sub.id} className="border-b border-slate-50 dark:border-white/5">
-                    <td className="px-4 py-3 font-medium text-night dark:text-white">{sub.name}</td>
+                    <td className="px-4 py-3 font-medium text-night dark:text-white">
+                      {sub.name}
+                      {changed && <span className="ml-2 text-xs font-normal text-accent">Unsaved</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <select
-                        value={current?.teacher.id ?? ""}
-                        onChange={(e) => assign(sectionId, sub.id, e.target.value)}
-                        disabled={savingKey === key || !canManage}
+                        value={pending[sub.id] ?? ""}
+                        onChange={(e) => setPending((prev) => ({ ...prev, [sub.id]: e.target.value }))}
+                        disabled={savingGrid || !canManage}
                         aria-label={`Teacher for ${sub.name}`}
                         className={`${inputCls} max-w-xs`}
                       >
@@ -320,6 +370,18 @@ export default function TeacherAssignmentPage() {
               })}
             </tbody>
           </table>
+        )}
+        {canManage && sectionId && subjects.length > 0 && (
+          <div className="flex items-center justify-end gap-3 border-t border-slate-100 dark:border-white/5 px-4 py-3">
+            {gridChanges.length > 0 && (
+              <span className="text-xs text-slate-500">
+                {gridChanges.length} unsaved change{gridChanges.length === 1 ? "" : "s"}
+              </span>
+            )}
+            <Button onClick={saveGrid} disabled={savingGrid || gridChanges.length === 0}>
+              {savingGrid ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
         )}
       </Card>
 
