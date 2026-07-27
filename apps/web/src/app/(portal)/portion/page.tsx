@@ -16,6 +16,7 @@ interface PortionReport {
   reviewComments: string | null;
   reviewRemarks: string | null;
   subject?: { name: string }; class?: { name: string } | null; section?: { name: string } | null;
+  school?: { name: string } | null;
   teacher?: { fullName: string; email: string }; reviewer?: { fullName: string } | null;
 }
 
@@ -51,6 +52,85 @@ function ModeBadge({ mode }: { mode: PortionReport["mode"] }) {
     <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mode === "PRACTICAL" ? "bg-primary/10 text-primary" : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300"}`}>
       {mode === "PRACTICAL" ? "Practical (Lab)" : "Theory (Class)"}
     </span>
+  );
+}
+
+interface FilterValues {
+  subjectId: string; classId: string; month: string; year: string; completionStatus: string;
+}
+const BLANK_FILTERS: FilterValues = { subjectId: "", classId: "", month: "", year: "", completionStatus: "" };
+const MONTH_OPTIONS = [
+  { value: "1", label: "January" }, { value: "2", label: "February" }, { value: "3", label: "March" },
+  { value: "4", label: "April" }, { value: "5", label: "May" }, { value: "6", label: "June" },
+  { value: "7", label: "July" }, { value: "8", label: "August" }, { value: "9", label: "September" },
+  { value: "10", label: "October" }, { value: "11", label: "November" }, { value: "12", label: "December" },
+];
+
+/** Shared by the teacher's own list and the reviewer's list. School/teacher
+ * are reviewer-only dimensions (a teacher's own submissions are already
+ * scoped to themself and their one school) — pass those two props only
+ * from ReviewTable to opt them in. */
+function PortionFilterBar({
+  searchInput, onSearchInputChange, values, onChange, subjects, classes,
+  schools, schoolId, onSchoolChange, teachers, teacherId, onTeacherChange,
+}: {
+  searchInput: string; onSearchInputChange: (v: string) => void;
+  values: FilterValues; onChange: (next: FilterValues) => void;
+  subjects: Option[]; classes: Option[];
+  schools?: Option[]; schoolId?: string; onSchoolChange?: (v: string) => void;
+  teachers?: Option[]; teacherId?: string; onTeacherChange?: (v: string) => void;
+}) {
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear, currentYear - 1, currentYear - 2];
+  return (
+    <div className="flex flex-wrap gap-3 border-b border-slate-100 p-4 dark:border-white/5">
+      <input
+        value={searchInput} onChange={(e) => onSearchInputChange(e.target.value)}
+        placeholder="Search chapter or topics…" aria-label="Search portion status"
+        className={`${inputCls} max-w-[14rem]`}
+      />
+      {schools && (
+        <select value={schoolId ?? ""} onChange={(e) => onSchoolChange?.(e.target.value)}
+          aria-label="Filter by school" className={`${inputCls} max-w-[10rem]`}>
+          <option value="">All schools</option>
+          {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      )}
+      {teachers && (
+        <select value={teacherId ?? ""} onChange={(e) => onTeacherChange?.(e.target.value)}
+          aria-label="Filter by teacher" className={`${inputCls} max-w-[10rem]`}>
+          <option value="">All teachers</option>
+          {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      )}
+      <select value={values.subjectId} onChange={(e) => onChange({ ...values, subjectId: e.target.value })}
+        aria-label="Filter by subject" className={`${inputCls} max-w-[10rem]`}>
+        <option value="">All subjects</option>
+        {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+      <select value={values.classId} onChange={(e) => onChange({ ...values, classId: e.target.value })}
+        aria-label="Filter by class" className={`${inputCls} max-w-[10rem]`}>
+        <option value="">All classes</option>
+        {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <select value={values.month} onChange={(e) => onChange({ ...values, month: e.target.value })}
+        aria-label="Filter by month" className={`${inputCls} max-w-[9rem]`}>
+        <option value="">Any month</option>
+        {MONTH_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+      </select>
+      <select value={values.year} onChange={(e) => onChange({ ...values, year: e.target.value })}
+        aria-label="Filter by year" className={`${inputCls} max-w-[7rem]`}>
+        <option value="">Any year</option>
+        {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+      </select>
+      <select value={values.completionStatus} onChange={(e) => onChange({ ...values, completionStatus: e.target.value })}
+        aria-label="Filter by portion status" className={`${inputCls} max-w-[11rem]`}>
+        <option value="">Any portion status</option>
+        <option value="PENDING">Pending</option>
+        <option value="IN_PROGRESS">In Progress</option>
+        <option value="COMPLETED">Completed</option>
+      </select>
+    </div>
   );
 }
 
@@ -177,16 +257,45 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
   );
 }
 
-function MyReports({ reports }: { reports: PortionReport[] }) {
+function MyReports({ reloadKey }: { reloadKey: number }) {
+  const [reports, setReports] = useState<PortionReport[]>([]);
+  const [subjects, setSubjects] = useState<Option[]>([]);
+  const [classes, setClasses] = useState<Option[]>([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [q, setQ] = useState("");
+  const [filters, setFilters] = useState<FilterValues>(BLANK_FILTERS);
   const [viewing, setViewing] = useState<PortionReport | null>(null);
+
+  useEffect(() => {
+    api<Option[]>("/academic/subjects").then(setSubjects).catch(() => {});
+    api<Option[]>("/academic/classes").then(setClasses).catch(() => {});
+  }, []);
+
+  useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (filters.subjectId) params.set("subjectId", filters.subjectId);
+    if (filters.classId) params.set("classId", filters.classId);
+    if (filters.month) params.set("month", filters.month);
+    if (filters.year) params.set("year", filters.year);
+    if (filters.completionStatus) params.set("completionStatus", filters.completionStatus);
+    api<PortionReport[]>(`/portion/mine?${params.toString()}`).then(setReports).catch(() => setReports([]));
+  }, [q, filters, reloadKey]);
 
   return (
     <Card className="p-0 overflow-hidden">
       <div className="border-b border-slate-100 p-4 dark:border-white/5">
         <h2 className="font-display font-semibold text-night dark:text-white">My submissions</h2>
       </div>
+      <PortionFilterBar
+        searchInput={searchInput} onSearchInputChange={setSearchInput}
+        values={filters} onChange={setFilters}
+        subjects={subjects} classes={classes}
+      />
       {reports.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">No submissions yet.</p>
+        <p className="p-6 text-sm text-slate-500">No submissions match these filters.</p>
       ) : (
         <table className="w-full text-sm">
           <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
@@ -257,12 +366,47 @@ function MyReports({ reports }: { reports: PortionReport[] }) {
   );
 }
 
-function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onReviewed: () => void }) {
+function ReviewTable() {
+  const [reports, setReports] = useState<PortionReport[]>([]);
+  const [subjects, setSubjects] = useState<Option[]>([]);
+  const [classes, setClasses] = useState<Option[]>([]);
+  const [schools, setSchools] = useState<Option[]>([]);
+  const [teachers, setTeachers] = useState<Option[]>([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [q, setQ] = useState("");
+  const [filters, setFilters] = useState<FilterValues>(BLANK_FILTERS);
+  const [schoolId, setSchoolId] = useState("");
+  const [teacherId, setTeacherId] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [reviewing, setReviewing] = useState<PortionReport | null>(null);
   const [note, setNote] = useState("");
   const [comments, setComments] = useState("");
   const [remarks, setRemarks] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<Option[]>("/academic/subjects").then(setSubjects).catch(() => {});
+    api<Option[]>("/academic/classes").then(setClasses).catch(() => {});
+    api<Option[]>("/academic/schools").then(setSchools).catch(() => {});
+    api<{ id: string; fullName: string }[]>("/teachers")
+      .then((rows) => setTeachers(rows.map((t) => ({ id: t.id, name: t.fullName }))))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (schoolId) params.set("schoolId", schoolId);
+    if (teacherId) params.set("teacherId", teacherId);
+    if (filters.subjectId) params.set("subjectId", filters.subjectId);
+    if (filters.classId) params.set("classId", filters.classId);
+    if (filters.month) params.set("month", filters.month);
+    if (filters.year) params.set("year", filters.year);
+    if (filters.completionStatus) params.set("completionStatus", filters.completionStatus);
+    api<PortionReport[]>(`/portion?${params.toString()}`).then(setReports).catch(() => setReports([]));
+  }, [q, schoolId, teacherId, filters, reloadKey]);
 
   async function act(status: "REVIEWED" | "FLAGGED") {
     if (!reviewing) return;
@@ -276,7 +420,7 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
       setNote("");
       setComments("");
       setRemarks("");
-      onReviewed();
+      setReloadKey((k) => k + 1);
     } finally {
       setBusy(false);
     }
@@ -287,13 +431,21 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
       <div className="border-b border-slate-100 p-4 dark:border-white/5">
         <h2 className="font-display font-semibold text-night dark:text-white">Portion status reports</h2>
       </div>
+      <PortionFilterBar
+        searchInput={searchInput} onSearchInputChange={setSearchInput}
+        values={filters} onChange={setFilters}
+        subjects={subjects} classes={classes}
+        schools={schools} schoolId={schoolId} onSchoolChange={setSchoolId}
+        teachers={teachers} teacherId={teacherId} onTeacherChange={setTeacherId}
+      />
       {reports.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">Nothing submitted yet.</p>
+        <p className="p-6 text-sm text-slate-500">No submissions match these filters.</p>
       ) : (
         <table className="w-full text-sm">
           <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
             <tr className="border-b border-slate-100 dark:border-white/5">
               <th className="px-4 py-3 font-medium">Teacher</th>
+              <th className="px-4 py-3 font-medium">School</th>
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Subject / Class</th>
               <th className="px-4 py-3 font-medium">Chapter</th>
@@ -309,6 +461,7 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
             {reports.map((r) => (
               <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
                 <td className="px-4 py-3 font-medium text-night dark:text-white">{r.teacher?.fullName ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-500">{r.school?.name ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-500">{new Date(r.periodDate).toLocaleDateString("en-IN")} · {r.period === "DAILY" ? "Day" : "Week"}</td>
                 <td className="px-4 py-3 text-slate-500">{r.subject?.name}{r.class ? ` · ${r.class.name}` : ""}{r.section ? ` ${r.section.name}` : ""}</td>
                 <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.chapterName ?? undefined}>{r.chapterName ?? "—"}</td>
@@ -367,22 +520,12 @@ function ReviewTable({ reports, onReviewed }: { reports: PortionReport[]; onRevi
 
 export default function PortionStatusPage() {
   const [me, setMe] = useState<Me | null>(null);
-  const [mine, setMine] = useState<PortionReport[]>([]);
-  const [all, setAll] = useState<PortionReport[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
 
   const isReviewer = !!me && REVIEW_ROLES.has(me.role);
   const isSubmitter = !!me && (me.role === "TEACHER" || me.role === "TRAINER");
-
-  useEffect(() => {
-    if (isSubmitter) api<PortionReport[]>("/portion/mine").then(setMine).catch(() => {});
-  }, [isSubmitter, reloadKey]);
-
-  useEffect(() => {
-    if (isReviewer) api<PortionReport[]>("/portion").then(setAll).catch(() => {});
-  }, [isReviewer, reloadKey]);
 
   if (!me) return null;
 
@@ -398,11 +541,11 @@ export default function PortionStatusPage() {
       {isSubmitter && (
         <div className="grid gap-6 lg:grid-cols-2">
           <SubmitForm onSubmitted={() => setReloadKey((k) => k + 1)} />
-          <MyReports reports={mine} />
+          <MyReports reloadKey={reloadKey} />
         </div>
       )}
 
-      {isReviewer && <ReviewTable reports={all} onReviewed={() => setReloadKey((k) => k + 1)} />}
+      {isReviewer && <ReviewTable />}
 
       {!isSubmitter && !isReviewer && (
         <p className="text-sm text-slate-500">Portion status tracking isn&apos;t available for your role.</p>

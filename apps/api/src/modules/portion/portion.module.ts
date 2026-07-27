@@ -30,11 +30,16 @@ export class CreatePortionReportDto {
 export class QueryPortionReportsDto {
   @IsOptional() @IsString() schoolId?: string;
   @IsOptional() @IsString() teacherId?: string;
+  @IsOptional() @IsString() subjectId?: string;
+  @IsOptional() @IsString() classId?: string;
+  @IsOptional() @IsString() q?: string;
   @IsOptional() @IsIn(["SUBMITTED", "REVIEWED", "FLAGGED"]) status?: "SUBMITTED" | "REVIEWED" | "FLAGGED";
   @IsOptional() @IsIn(["PRACTICAL", "THEORY"]) mode?: "PRACTICAL" | "THEORY";
   @IsOptional() @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus?: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
+  @IsOptional() @IsString() month?: string;
+  @IsOptional() @IsString() year?: string;
 }
 
 export class ReviewPortionReportDto {
@@ -119,9 +124,44 @@ export class PortionService {
     });
   }
 
-  async listMine(user: AuthUser) {
+  /** `from`/`to` win when given; otherwise a month (optionally + year) or a
+   * bare year narrows the range — the exact UTC calendar range Prisma needs. */
+  private periodDateFilter(query: QueryPortionReportsDto): { periodDate?: { gte?: Date; lte?: Date; lt?: Date } } {
+    if (query.from || query.to) {
+      return { periodDate: { ...(query.from && { gte: new Date(query.from) }), ...(query.to && { lte: new Date(query.to) }) } };
+    }
+    if (!query.month && !query.year) return {};
+    const now = new Date();
+    const year = query.year ? Number(query.year) : now.getUTCFullYear();
+    if (query.month) {
+      const monthIndex = Number(query.month) - 1;
+      return { periodDate: { gte: new Date(Date.UTC(year, monthIndex, 1)), lt: new Date(Date.UTC(year, monthIndex + 1, 1)) } };
+    }
+    return { periodDate: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } };
+  }
+
+  private textSearchFilter(q?: string) {
+    if (!q) return {};
+    return {
+      OR: [
+        { chapterName: { contains: q, mode: "insensitive" as const } },
+        { topicsCovered: { contains: q, mode: "insensitive" as const } },
+        { description: { contains: q, mode: "insensitive" as const } },
+      ],
+    };
+  }
+
+  async listMine(user: AuthUser, query: QueryPortionReportsDto) {
     return this.prisma.portionReport.findMany({
-      where: { tenantId: currentTenant().tenantId, teacherId: user.id },
+      where: {
+        tenantId: currentTenant().tenantId, teacherId: user.id,
+        ...(query.subjectId && { subjectId: query.subjectId }),
+        ...(query.classId && { classId: query.classId }),
+        ...(query.completionStatus && { completionStatus: query.completionStatus }),
+        ...(query.mode && { mode: query.mode }),
+        ...this.textSearchFilter(query.q),
+        ...this.periodDateFilter(query),
+      },
       include: { subject: { select: { name: true } }, class: { select: { name: true } }, section: { select: { name: true } } },
       orderBy: { periodDate: "desc" },
       take: 60,
@@ -135,18 +175,20 @@ export class PortionService {
         ...(scope.tenantId && { tenantId: scope.tenantId }),
         ...(scope.schoolId && { schoolId: scope.schoolId }),
         ...(query.teacherId && { teacherId: query.teacherId }),
+        ...(query.subjectId && { subjectId: query.subjectId }),
+        ...(query.classId && { classId: query.classId }),
         ...(query.status && { status: query.status }),
         ...(query.mode && { mode: query.mode }),
         ...(query.completionStatus && { completionStatus: query.completionStatus }),
-        ...((query.from || query.to) && {
-          periodDate: { ...(query.from && { gte: new Date(query.from) }), ...(query.to && { lte: new Date(query.to) }) },
-        }),
+        ...this.textSearchFilter(query.q),
+        ...this.periodDateFilter(query),
       },
       include: {
         teacher: { select: { fullName: true, email: true } },
         subject: { select: { name: true } },
         class: { select: { name: true } },
         section: { select: { name: true } },
+        school: { select: { name: true } },
         reviewer: { select: { fullName: true } },
       },
       orderBy: { periodDate: "desc" },
@@ -249,8 +291,8 @@ export class PortionController {
 
   @Get("mine")
   @Roles(...SUBMIT_ROLES)
-  mine(@CurrentUser() user: AuthUser) {
-    return this.svc.listMine(user);
+  mine(@Query() query: QueryPortionReportsDto, @CurrentUser() user: AuthUser) {
+    return this.svc.listMine(user, query);
   }
 
   @Get()
