@@ -2,6 +2,15 @@ import { supabase } from "./supabase";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+/** Dispatched whenever a message/announcement is marked read from somewhere
+ * other than the Topbar's own bell dropdown (e.g. the dedicated /message
+ * page), so the bell's unread badge/list can drop it immediately instead of
+ * waiting for the next route change or poll. */
+export const NOTIFICATIONS_CHANGED_EVENT = "educore:notifications-changed";
+export function notifyNotificationsChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+}
+
 /** skipAuthRedirect: opts out of the 401 -> /login redirect, for calls (like
  * the admission-number password check) where a 401 means "wrong password",
  * not "your session expired". */

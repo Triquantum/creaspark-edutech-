@@ -2,7 +2,7 @@
 import { Bell, KeyRound, LogOut, MessageSquare, Mic, MicOff, Moon, Search, Sun, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { flattenPages, Role } from "@/lib/nav-config";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
@@ -235,6 +235,14 @@ export function Topbar() {
   useEffect(() => {
     const id = setInterval(reloadNotifications, 45_000);
     return () => clearInterval(id);
+  }, []);
+  // A message/announcement can also be marked read without a route change
+  // (e.g. the "View" action on /message, while staying on that page) — that
+  // dispatches this event so the bell drops it immediately instead of
+  // waiting for the next poll.
+  useEffect(() => {
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, reloadNotifications);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, reloadNotifications);
   }, []);
 
   const unreadAnnouncements = announcements.filter((a) => !a.isRead);

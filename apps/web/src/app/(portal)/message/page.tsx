@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MessageSquare, Reply as ReplyIcon, Send, Trash2, Users } from "lucide-react";
-import { api } from "@/lib/api";
+import { Eye, MessageSquare, Reply as ReplyIcon, Send, Trash2, Users } from "lucide-react";
+import { api, notifyNotificationsChanged } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, ConfirmDialog, Field, inputCls } from "@/components/ui/modal";
@@ -304,6 +304,7 @@ export default function MessagePage() {
   const [deleting, setDeleting] = useState<MessageRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageRow | null>(null);
+  const [viewing, setViewing] = useState<MessageRow | null>(null);
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
   useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
@@ -327,9 +328,11 @@ export default function MessagePage() {
   const rows = tab === "inbox" ? inbox : sent;
 
   async function openMessage(m: MessageRow) {
+    setViewing(m);
     if (tab === "inbox" && !m.readAt) {
       await api(`/messages/${m.id}/read`, { method: "PATCH" }).catch(() => {});
       setInbox((prev) => prev.map((x) => (x.id === m.id ? { ...x, readAt: new Date().toISOString() } : x)));
+      notifyNotificationsChanged();
     }
   }
 
@@ -409,6 +412,13 @@ export default function MessagePage() {
                   <span className="text-xs text-slate-400">
                     {new Date(m.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openMessage(m); }}
+                    aria-label="View" title="View"
+                    className="text-slate-400 hover:text-primary"
+                  >
+                    <Eye size={14} />
+                  </button>
                   {tab === "inbox" && m.sender && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setReplyingTo(m); }}
@@ -462,6 +472,24 @@ export default function MessagePage() {
           onClose={() => setReplyingTo(null)}
           onSent={() => { setReplyingTo(null); reload(); setTab("sent"); setToast("Reply sent"); }}
         />
+      )}
+
+      {viewing && (
+        <Modal title={viewing.subject || targetLabel(viewing, tab)} onClose={() => setViewing(null)}>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>{targetLabel(viewing, tab)}</span>
+              <span>{new Date(viewing.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+            </div>
+            <p className="whitespace-pre-wrap text-night dark:text-white">{viewing.body}</p>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            {tab === "inbox" && viewing.sender && (
+              <Button variant="ghost" onClick={() => { setReplyingTo(viewing); setViewing(null); }}>Reply</Button>
+            )}
+            <Button variant="ghost" onClick={() => setViewing(null)}>Close</Button>
+          </div>
+        </Modal>
       )}
 
       {toast && (
