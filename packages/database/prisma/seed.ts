@@ -9,7 +9,7 @@
  *   parent@demo.educore.in    → PARENT
  *   student@demo.educore.in   → STUDENT
  */
-import { PrismaClient, Role, AttendanceStatus } from "@prisma/client";
+import { PrismaClient, Role, AttendanceStatus } from "../generated/client";
 import { randomBytes, scryptSync } from "crypto";
 
 const prisma = new PrismaClient();
