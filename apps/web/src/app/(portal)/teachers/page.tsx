@@ -37,15 +37,21 @@ function TeacherDialog({ mode, initial, schools, schoolsError, onClose, onSaved 
   // schools is still fetching when this dialog can mount, so a schoolId
   // seeded at useState-init time can lock at "" forever — the <select>
   // shows the first option regardless, masking that the real value never
-  // got set. Backfill once schools actually arrives — edit mode resolves
-  // the teacher's existing school first (falls back to the first school
-  // for teachers with no staffProfile yet, e.g. ones registered outside
-  // the Add Teacher flow).
+  // got set. Backfill once schools actually arrives.
+  //
+  // Edit mode only backfills from the teacher's OWN school — never guesses
+  // one for them. schools[] is cross-tenant for Super Admin (every school on
+  // the platform), so falling back to schools[0] here silently pointed
+  // teachers with no staffProfile yet (e.g. ones registered via the Users
+  // page instead of Add Teacher) at some other organization's school,
+  // which the backend then rejected as "School not found in this teacher's
+  // organization." Leaving it unset instead makes the dropdown show its
+  // placeholder, forcing an explicit, correct choice.
   useEffect(() => {
     if (form.schoolId) return;
-    const fallback = initial?.staffProfile?.schoolId ?? schools[0]?.id;
+    const fallback = mode === "edit" ? initial?.staffProfile?.schoolId : schools[0]?.id;
     if (fallback) setForm((f) => ({ ...f, schoolId: fallback }));
-  }, [schools, form.schoolId, initial]);
+  }, [schools, form.schoolId, initial, mode]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,6 +108,7 @@ function TeacherDialog({ mode, initial, schools, schoolsError, onClose, onSaved 
           <Field id="ft-school" label="School">
             <select id="ft-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
               {schools.length === 0 && <option value="" disabled>{schoolsError ? "Unavailable" : "Loading schools…"}</option>}
+              {schools.length > 0 && !form.schoolId && <option value="" disabled>Select a school</option>}
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             {schools.length === 0 && (

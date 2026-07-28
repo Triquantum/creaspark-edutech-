@@ -22,6 +22,7 @@ export class UpdateSchoolDto {
   @IsOptional() @IsString() pincode?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() logoUrl?: string;
   @IsOptional() @IsEnum(Plan) plan?: Plan;
   @IsOptional() @IsEnum(TenantStatus) status?: TenantStatus;
 }

@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 export const BOARDS = ["CBSE", "ICSE", "IB", "IGCSE", "STATE", "OTHER"] as const;
 export const PLANS = ["STARTER", "GROWTH", "ENTERPRISE"] as const;
@@ -12,20 +13,20 @@ export const INSTITUTION_TYPES = ["SCHOOL", "COLLEGE", "INSTITUTE"] as const;
 export interface SchoolFull {
   id: string; name: string; code: string; institutionType: string; board: string;
   address: string | null; city: string | null; state: string | null; country: string | null; pincode: string | null;
-  phone: string | null; email: string | null;
+  phone: string | null; email: string | null; logoUrl: string | null;
   plan: string; status: string;
 }
 export type SchoolForm = {
   name: string; code: string; institutionType: string; board: string;
   address: string; city: string; state: string; country: string; pincode: string;
-  phone: string; email: string; plan: string; status: string;
+  phone: string; email: string; logoUrl: string; plan: string; status: string;
 };
 
 export function toSchoolForm(s: SchoolFull): SchoolForm {
   return {
     name: s.name, code: s.code, institutionType: s.institutionType, board: s.board,
     address: s.address ?? "", city: s.city ?? "", state: s.state ?? "", country: s.country ?? "", pincode: s.pincode ?? "",
-    phone: s.phone ?? "", email: s.email ?? "",
+    phone: s.phone ?? "", email: s.email ?? "", logoUrl: s.logoUrl ?? "",
     plan: s.plan, status: s.status,
   };
 }
@@ -38,9 +39,39 @@ export function SchoolEditModal({ schoolId, onClose, onSaved }: { schoolId: stri
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     api<{ school: SchoolFull }>(`/platform/schools/${schoolId}`).then((r) => setForm(toSchoolForm(r.school))).catch(() => setError("Could not load school"));
   }, [schoolId]);
+
+  function pickLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setLogoError(null);
+    if (file && !file.type.startsWith("image/")) {
+      setLogoError("Choose an image file");
+      return;
+    }
+    setLogoFile(file);
+    setLogoPreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  /** Uploads straight to Supabase Storage from the browser, same as
+   * register-school — the Super Admin already holds a valid Supabase
+   * session, so no backend endpoint is needed just to shuttle the file. */
+  async function uploadLogo(): Promise<string | undefined> {
+    if (!logoFile) return undefined;
+    const ext = logoFile.name.split(".").pop() ?? "png";
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from("school-logos").upload(path, logoFile, {
+      contentType: logoFile.type, upsert: false,
+    });
+    if (uploadErr) throw new Error(`Logo upload failed: ${uploadErr.message}`);
+    return supabase.storage.from("school-logos").getPublicUrl(path).data.publicUrl;
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,7 +79,11 @@ export function SchoolEditModal({ schoolId, onClose, onSaved }: { schoolId: stri
     setError(null);
     setBusy(true);
     try {
-      await api(`/platform/schools/${schoolId}`, { method: "PATCH", body: JSON.stringify(form) });
+      const logoUrl = await uploadLogo();
+      await api(`/platform/schools/${schoolId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ...form, ...(logoUrl && { logoUrl }) }),
+      });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -69,6 +104,20 @@ export function SchoolEditModal({ schoolId, onClose, onSaved }: { schoolId: stri
             </Field>
             <Field id="se-code" label="Code">
               <input id="se-code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className={inputCls} />
+            </Field>
+            <Field id="se-logo" label="Logo" optional>
+              <div className="flex items-center gap-4">
+                {logoPreview || form.logoUrl ? (
+                  <img src={logoPreview ?? form.logoUrl} alt="Logo preview" className="h-16 w-16 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-white/10" />
+                ) : (
+                  <div className="grid h-16 w-16 place-items-center rounded-xl bg-surface text-xs text-slate-400 dark:bg-white/5">No logo</div>
+                )}
+                <div>
+                  <input id="se-logo" ref={fileInputRef} type="file" accept="image/*" onChange={pickLogo}
+                    className="block text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:opacity-90" />
+                  {logoError && <p className="mt-1 text-xs text-danger">{logoError}</p>}
+                </div>
+              </div>
             </Field>
             <Field id="se-type" label="Institution type">
               <select id="se-type" value={form.institutionType} onChange={(e) => setForm({ ...form, institutionType: e.target.value })} className={inputCls}>
