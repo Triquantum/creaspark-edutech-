@@ -43,11 +43,12 @@ export class UsersService {
     return { tenantId: currentTenant().tenantId };
   }
 
-  /** For actions on an *existing* user: SUPER_ADMIN may act on any tenant
-   * (the target already tells us which one); everyone else is confined to
+  /** For actions on an *existing* user: SUPER_ADMIN/ORG_ADMIN may act on any
+   * tenant (the target already tells us which one) — ORG_ADMIN needs this to
+   * reassign a user's school across tenants; everyone else is confined to
    * their own. */
   private assertCanAct(user: AuthUser, targetTenantId: string) {
-    if (user.role === Role.SUPER_ADMIN) return;
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) return;
     if (targetTenantId !== currentTenant().tenantId) throw new NotFoundException("User not found");
   }
 
@@ -110,8 +111,33 @@ export class UsersService {
     const target = await this.findUser(id);
     this.assertCanAct(user, target.tenantId);
 
-    if (dto.role !== undefined) {
-      await this.supabaseAdmin.updateAppMetadata(id, { role: dto.role });
+    let newTenantId: string | undefined;
+    if (dto.schoolId !== undefined) {
+      if (user.role !== Role.SUPER_ADMIN && user.role !== Role.ORG_ADMIN) {
+        throw new BadRequestException("Only Super Admin or Org Admin can reassign a user's school");
+      }
+      const school = await this.prisma.school.findUnique({ where: { id: dto.schoolId } });
+      if (!school) throw new NotFoundException("School not found");
+      newTenantId = school.tenantId;
+
+      // Student/Guardian records carry their own schoolId/links that a
+      // schoolId change here wouldn't touch — leaving them stale and
+      // inconsistent with the new tenant. Redirect to the pages built for
+      // that instead of silently half-moving the user.
+      const links = await this.prisma.user.findUnique({
+        where: { id },
+        select: { studentLink: { select: { id: true } }, guardianLinks: { select: { id: true }, take: 1 } },
+      });
+      if (links?.studentLink || (links?.guardianLinks.length ?? 0) > 0) {
+        throw new BadRequestException("Reassign this person's school from the Students or Parents page instead.");
+      }
+    }
+
+    if (dto.role !== undefined || newTenantId !== undefined) {
+      await this.supabaseAdmin.updateAppMetadata(id, {
+        ...(dto.role !== undefined && { role: dto.role }),
+        ...(newTenantId !== undefined && { tenantId: newTenantId }),
+      });
     }
     if (dto.isActive !== undefined) {
       await this.supabaseAdmin.setBanned(id, !dto.isActive);
@@ -126,10 +152,20 @@ export class UsersService {
           ...(dto.gender !== undefined && { gender: dto.gender }),
           ...(dto.role !== undefined && { role: dto.role }),
           ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+          ...(newTenantId !== undefined && { tenantId: newTenantId }),
         },
       }),
+      // Keep a teacher/staff row's school pointer in sync with the move —
+      // this is exactly the mismatch class (StaffProfile.schoolId under a
+      // different tenant than User.tenantId) that broke teacher edits earlier.
+      ...(newTenantId !== undefined
+        ? [this.prisma.staffProfile.updateMany({
+            where: { userId: id },
+            data: { tenantId: newTenantId, schoolId: dto.schoolId! },
+          })]
+        : []),
       this.prisma.auditLog.create({
-        data: { tenantId: target.tenantId, userId: actorId, action: "user.update", entity: "User", entityId: id },
+        data: { tenantId: newTenantId ?? target.tenantId, userId: actorId, action: "user.update", entity: "User", entityId: id },
       }),
     ]);
     return this.findUser(id);

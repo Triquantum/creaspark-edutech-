@@ -18,6 +18,9 @@ export class UpdateUserDto {
   @IsOptional() @IsEnum(Gender) gender?: Gender;
   @IsOptional() @IsEnum(Role) role?: Role;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  /** Moves the user to a different school (and its tenant) — only
+   * SUPER_ADMIN/ORG_ADMIN may set this. */
+  @IsOptional() @IsString() schoolId?: string;
 }
 
 export class QueryUsersDto {

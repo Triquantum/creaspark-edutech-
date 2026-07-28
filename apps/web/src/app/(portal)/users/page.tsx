@@ -25,10 +25,13 @@ interface UserRow {
 interface Me { id: string; role: string }
 interface SchoolOpt { id: string; name: string; tenantName?: string }
 
-function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
-  mode: "add" | "edit"; initial?: UserRow; schools: SchoolOpt[];
+const SCHOOL_ASSIGN_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN"]);
+
+function RegisterDialog({ mode, initial, schools, meRole, onClose, onSaved }: {
+  mode: "add" | "edit"; initial?: UserRow; schools: SchoolOpt[]; meRole?: string;
   onClose: () => void; onSaved: (tempPassword?: string) => void;
 }) {
+  const canAssignSchool = !!meRole && SCHOOL_ASSIGN_ROLES.has(meRole);
   const [form, setForm] = useState({
     fullName: initial?.fullName ?? "",
     email: initial?.email ?? "",
@@ -48,10 +51,13 @@ function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
   // schools is still fetching when this dialog can mount, so a schoolId
   // seeded at useState-init time can lock at "" forever — the <select>
   // shows the first option regardless, masking that the real value never
-  // got set. Backfill once schools actually arrives.
+  // got set. Backfill once schools actually arrives — add mode only: in
+  // edit mode an empty schoolId deliberately means "don't reassign", so
+  // auto-filling it here would silently move every edited user to
+  // schools[0] the moment they save.
   useEffect(() => {
-    if (!form.schoolId && schools[0]) setForm((f) => ({ ...f, schoolId: schools[0].id }));
-  }, [schools, form.schoolId]);
+    if (mode === "add" && !form.schoolId && schools[0]) setForm((f) => ({ ...f, schoolId: schools[0].id }));
+  }, [schools, form.schoolId, mode]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +85,7 @@ function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
             ...(form.phone !== undefined && { phone: form.phone.trim() || null }),
             role: form.role,
             isActive: form.isActive === "true",
+            ...(canAssignSchool && form.schoolId && { schoolId: form.schoolId }),
           }),
         });
         onSaved();
@@ -123,8 +130,17 @@ function RegisterDialog({ mode, initial, schools, onClose, onSaved }: {
         {mode === "add" && (
           <Field id="u-school" label="School">
             <select id="u-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
-              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` — ${s.tenantName}` : ""}</option>)}
             </select>
+          </Field>
+        )}
+        {mode === "edit" && canAssignSchool && (
+          <Field id="u-school" label="School access" optional>
+            <select id="u-school" value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
+              <option value="">Keep current school</option>
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` — ${s.tenantName}` : ""}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">Moves this account to a different registered school/organization.</p>
           </Field>
         )}
         <div className="grid grid-cols-2 gap-3">
@@ -306,6 +322,7 @@ export default function UsersPage() {
           mode={dialog.mode}
           initial={dialog.mode === "edit" ? dialog.row : undefined}
           schools={schools}
+          meRole={me?.role}
           onClose={() => setDialog(null)}
           onSaved={(tempPassword) => {
             if (dialog.mode === "add") {
