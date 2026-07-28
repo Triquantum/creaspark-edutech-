@@ -1,10 +1,12 @@
 "use client";
-import { Bell, LogOut, MessageSquare, Mic, MicOff, Moon, Search, Sun, WifiOff } from "lucide-react";
+import { Bell, KeyRound, LogOut, MessageSquare, Mic, MicOff, Moon, Search, Sun, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { flattenPages, Role } from "@/lib/nav-config";
+import { Modal, Field, inputCls } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 
 interface SearchHit { id: string; label: string; sub: string; type: "Student" | "Teacher" | "Page"; href: string }
 
@@ -78,6 +80,61 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
 function initials(name?: string, email?: string) {
   if (name) return name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
   return (email?.[0] ?? "?").toUpperCase();
+}
+
+/** Self-service password change for the signed-in user, any role — backed
+ * directly by Supabase Auth's own session, same call the recovery-link flow
+ * uses, so it works identically for admission-number logins (synthetic
+ * email) as for a normal email/password account. */
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (password !== confirm) { setError("Passwords don't match"); return; }
+    setSaving(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw new Error(updateError.message);
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update password");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Change password" onClose={onClose}>
+      {done ? (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">Password updated.</p>
+          <div className="flex justify-end"><Button onClick={onClose}>Done</Button></div>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-4">
+          <Field id="cp-pw" label="New password">
+            <input id="cp-pw" type="password" required minLength={8} value={password}
+              onChange={(e) => setPassword(e.target.value)} className={inputCls} />
+          </Field>
+          <Field id="cp-pw2" label="Confirm new password">
+            <input id="cp-pw2" type="password" required minLength={8} value={confirm}
+              onChange={(e) => setConfirm(e.target.value)} className={inputCls} />
+          </Field>
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <div className="flex justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Updating…" : "Update password"}</Button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
 }
 
 export function Topbar() {
@@ -199,6 +256,7 @@ export function Topbar() {
 
   const [avatarOpen, setAvatarOpen] = useState(false);
   const avatarRef = useClickOutside(() => setAvatarOpen(false));
+  const [changePwOpen, setChangePwOpen] = useState(false);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -321,6 +379,10 @@ export function Topbar() {
                   <p className="truncate text-xs text-slate-400">{me.email}</p>
                 </div>
               )}
+              <button onClick={() => { setChangePwOpen(true); setAvatarOpen(false); }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-night hover:bg-black/5 dark:text-white dark:hover:bg-white/10">
+                <KeyRound size={15} /> Change password
+              </button>
               <button onClick={signOut}
                 className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-danger/10">
                 <LogOut size={15} /> Sign out
@@ -329,6 +391,8 @@ export function Topbar() {
           )}
         </div>
       </div>
+
+      {changePwOpen && <ChangePasswordModal onClose={() => setChangePwOpen(false)} />}
     </header>
   );
 }
