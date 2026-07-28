@@ -12,6 +12,8 @@ interface ParentRow {
 }
 interface StudentPick { id: string; label: string }
 interface ChildPick { studentId: string; label: string; relation: string; isPrimary: boolean }
+interface SchoolOpt { id: string; name: string; tenantName?: string }
+interface Me { role: string }
 
 function StudentPicker({ excludeIds, onPick }: { excludeIds: string[]; onPick: (s: StudentPick) => void }) {
   const [q, setQ] = useState("");
@@ -190,6 +192,9 @@ function ParentDialog({ mode, initial, onClose, onSaved }: {
 export default function ParentsPage() {
   const [rows, setRows] = useState<ParentRow[]>([]);
   const [q, setQ] = useState("");
+  const [schools, setSchools] = useState<SchoolOpt[]>([]);
+  const [schoolIdFilter, setSchoolIdFilter] = useState("");
+  const [me, setMe] = useState<Me | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: ParentRow } | null>(null);
   const [viewing, setViewing] = useState<ParentRow | null>(null);
@@ -198,14 +203,22 @@ export default function ParentsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const canFilterBySchool = me?.role === "SUPER_ADMIN" || me?.role === "ORG_ADMIN";
+
   const load = useCallback(() => {
     setState("loading");
-    api<ParentRow[]>(`/parents${q ? `?q=${encodeURIComponent(q)}` : ""}`)
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (schoolIdFilter) params.set("schoolId", schoolIdFilter);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    api<ParentRow[]>(`/parents${qs}`)
       .then((r) => { setRows(r); setState("ready"); })
       .catch(() => setState("error"));
-  }, [q]);
+  }, [q, schoolIdFilter]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
+  useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
   async function confirmDelete() {
@@ -239,12 +252,19 @@ export default function ParentsPage() {
       )}
 
       <Card className="p-0 overflow-hidden">
-        <div className="border-b border-slate-100 dark:border-white/5 p-4">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 dark:border-white/5 p-4">
           <input
             value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Search by name or email" aria-label="Search parents"
             className="h-10 w-full max-w-sm rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
+          {canFilterBySchool && (
+            <select value={schoolIdFilter} onChange={(e) => setSchoolIdFilter(e.target.value)} aria-label="Filter by school"
+              className="h-10 max-w-xs rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20">
+              <option value="">All schools</option>
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` — ${s.tenantName}` : ""}</option>)}
+            </select>
+          )}
         </div>
 
         {state === "error" && (

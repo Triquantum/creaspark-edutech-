@@ -18,11 +18,15 @@ interface PlatformSummary { schools: InstitutionRow[] }
  * view of registered institutions is needed: Dashboard's overview, the
  * dedicated Registered Schools page, and the Registered Colleges &
  * Institutes page. */
+const STATUS_OPTIONS = ["ACTIVE", "SUSPENDED", "TRIAL"] as const;
+
 export function InstitutionsTable({ title, icon: Icon, typeFilter, emptyMessage }: {
   title: string; icon: LucideIcon; typeFilter: (institutionType: string) => boolean; emptyMessage: string;
 }) {
   const router = useRouter();
-  const [rows, setRows] = useState<InstitutionRow[]>([]);
+  const [allRows, setAllRows] = useState<InstitutionRow[]>([]);
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<InstitutionRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,10 +34,15 @@ export function InstitutionsTable({ title, icon: Icon, typeFilter, emptyMessage 
 
   function load() {
     api<PlatformSummary>("/platform/summary")
-      .then((r) => setRows(r.schools.filter((s) => typeFilter(s.institutionType))))
+      .then((r) => setAllRows(r.schools.filter((s) => typeFilter(s.institutionType))))
       .catch(() => {});
   }
   useEffect(load, []);
+
+  const rows = allRows.filter((s) =>
+    (!q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase())) &&
+    (!statusFilter || s.status === statusFilter),
+  );
 
   async function confirmDelete() {
     if (!deleting) return;
@@ -52,12 +61,22 @@ export function InstitutionsTable({ title, icon: Icon, typeFilter, emptyMessage 
 
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-slate-100 p-4 dark:border-white/5">
-        <Icon size={16} className="text-primary" />
-        <h2 className="font-display font-semibold text-night dark:text-white">{title}</h2>
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4 dark:border-white/5">
+        <Icon size={16} className="text-primary shrink-0" />
+        <h2 className="font-display font-semibold text-night dark:text-white shrink-0">{title}</h2>
+        <input
+          value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder="Search by name" aria-label="Search institutions"
+          className="ml-auto h-9 w-full max-w-xs rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+        />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status"
+          className="h-9 rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20">
+          <option value="">All statuses</option>
+          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
+        </select>
       </div>
       {rows.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">{emptyMessage}</p>
+        <p className="p-6 text-sm text-slate-500">{allRows.length === 0 ? emptyMessage : "No institutions match this search."}</p>
       ) : (
         <table className="w-full text-sm">
           <thead className="text-left text-xs uppercase tracking-wide text-slate-400">

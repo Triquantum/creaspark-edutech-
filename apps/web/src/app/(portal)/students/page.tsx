@@ -273,12 +273,18 @@ function StudentsPageInner() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const [schoolIdFilter, setSchoolIdFilter] = useState("");
+
   const load = useCallback(() => {
     setState("loading");
-    api<{ items: StudentRow[] }>(`/students${q ? `?q=${encodeURIComponent(q)}` : ""}`)
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (schoolIdFilter) params.set("schoolId", schoolIdFilter);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    api<{ items: StudentRow[] }>(`/students${qs}`)
       .then((r) => { setRows(r.items); setSelected(new Set()); setState("ready"); })
       .catch(() => setState("error"));
-  }, [q]);
+  }, [q, schoolIdFilter]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
   useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
@@ -286,7 +292,7 @@ function StudentsPageInner() {
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
-  const isSuperAdmin = me?.role === "SUPER_ADMIN";
+  const isSuperAdmin = me?.role === "SUPER_ADMIN" || me?.role === "ORG_ADMIN";
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -347,12 +353,19 @@ function StudentsPageInner() {
       </div>
 
       <Card className="p-0 overflow-hidden">
-        <div className="border-b border-slate-100 dark:border-white/5 p-4">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 dark:border-white/5 p-4">
           <input
             value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Search by name or admission no." aria-label="Search students"
             className="h-10 w-full max-w-sm rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
+          {isSuperAdmin && (
+            <select value={schoolIdFilter} onChange={(e) => setSchoolIdFilter(e.target.value)} aria-label="Filter by school"
+              className="h-10 max-w-xs rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20">
+              <option value="">All schools</option>
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` — ${s.tenantName}` : ""}</option>)}
+            </select>
+          )}
         </div>
 
         {state === "error" && (

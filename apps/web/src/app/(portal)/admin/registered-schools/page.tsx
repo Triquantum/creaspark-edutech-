@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { InstitutionsTable } from "@/components/platform/institutions-table";
 
-const ACCESS_ROLES = new Set(["SUPER_ADMIN"]);
+const ACCESS_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN"]);
 
 interface Me { role: string }
 
