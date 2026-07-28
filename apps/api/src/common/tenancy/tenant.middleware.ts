@@ -29,7 +29,7 @@ export class TenantMiddleware implements NestMiddleware {
         where: { id: claims.tenantId }, select: { id: true, slug: true, status: true },
       });
       if (!tenant || tenant.status === "SUSPENDED") throw new NotFoundException("Unknown or suspended tenant");
-      return tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug }, next);
+      return tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => next());
     }
 
     const slug = (req.headers["x-tenant"] as string | undefined)?.toLowerCase();
@@ -38,6 +38,6 @@ export class TenantMiddleware implements NestMiddleware {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true, slug: true, status: true } });
     if (!tenant || tenant.status === "SUSPENDED") throw new NotFoundException("Unknown or suspended tenant");
 
-    tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug }, next);
+    tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => next());
   }
 }
