@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Role } from "@educore/database";
 
@@ -21,23 +21,23 @@ export class SupabaseAdminService {
     const { data, error } = await this.client.auth.admin.createUser({
       email, password, email_confirm: true, app_metadata: meta,
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new BadRequestException(error.message);
     return data.user;
   }
 
   async updateAppMetadata(userId: string, meta: Partial<AdminUserMeta>) {
     const { error } = await this.client.auth.admin.updateUserById(userId, { app_metadata: meta });
-    if (error) throw new Error(error.message);
+    if (error) throw new BadRequestException(error.message);
   }
 
   async setPassword(userId: string, password: string) {
     const { error } = await this.client.auth.admin.updateUserById(userId, { password });
-    if (error) throw new Error(error.message);
+    if (error) throw new BadRequestException(error.message);
   }
 
   async updateEmail(userId: string, email: string) {
     const { error } = await this.client.auth.admin.updateUserById(userId, { email, email_confirm: true });
-    if (error) throw new Error(error.message);
+    if (error) throw new BadRequestException(error.message);
   }
 
   /** Blocks sign-in without deleting the identity — backs the "Inactive" status. */
@@ -45,12 +45,12 @@ export class SupabaseAdminService {
     const { error } = await this.client.auth.admin.updateUserById(userId, {
       ban_duration: banned ? "87600h" : "none",
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new BadRequestException(error.message);
   }
 
   async deleteUser(userId: string) {
     const { error } = await this.client.auth.admin.deleteUser(userId);
-    if (error) throw new Error(error.message);
+    if (error) throw new BadRequestException(error.message);
   }
 
   /** Checks a password server-side (used by the admission-number login
