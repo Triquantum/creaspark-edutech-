@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Role } from "@educore/database";
+import { Prisma, Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
@@ -207,7 +207,7 @@ export class TeachersService {
           select: {
             messagesSent: true, messagesReceived: true, auditLogs: true,
             announcementReads: true, portionReportsSubmitted: true,
-            portionReportsReviewed: true, coursesTaught: true,
+            portionReportsReviewed: true, coursesTaught: true, teacherAssignments: true,
           },
         },
       },
@@ -219,17 +219,28 @@ export class TeachersService {
       );
     }
 
+    try {
+      await this.prisma.$transaction([
+        this.prisma.staffProfile.deleteMany({ where: { userId: id } }),
+        this.prisma.user.delete({ where: { id } }),
+        this.prisma.auditLog.create({
+          data: {
+            tenantId, userId: actorId, action: "teacher.delete", entity: "User", entityId: id,
+            metadata: { email: target.email, name: target.fullName },
+          },
+        }),
+      ]);
+    } catch (error) {
+      // Safety net for any relation not covered by the counts check above.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        throw new ConflictException(
+          `${target.fullName} has related records that must be preserved. Set them Inactive instead (Edit → Status).`,
+        );
+      }
+      throw error;
+    }
+
     await this.supabaseAdmin.deleteUser(id);
-    await this.prisma.$transaction([
-      this.prisma.staffProfile.deleteMany({ where: { userId: id } }),
-      this.prisma.user.delete({ where: { id } }),
-      this.prisma.auditLog.create({
-        data: {
-          tenantId, userId: actorId, action: "teacher.delete", entity: "User", entityId: id,
-          metadata: { email: target.email, name: target.fullName },
-        },
-      }),
-    ]);
     return { deleted: true };
   }
 }

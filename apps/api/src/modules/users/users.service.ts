@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Role } from "@educore/database";
+import { Prisma, Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
@@ -146,21 +146,37 @@ export class UsersService {
     return { tempPassword };
   }
 
+  /** Postgres delete runs first: if it fails (e.g. FK violation below), the
+   * Supabase Auth identity is left untouched instead of being orphaned. */
   async remove(id: string, user: AuthUser, actorId: string) {
     if (id === actorId) throw new BadRequestException("You can't delete your own account");
     const target = await this.findUser(id);
     this.assertCanAct(user, target.tenantId);
 
+    try {
+      await this.prisma.$transaction([
+        this.prisma.user.delete({ where: { id } }),
+        this.prisma.auditLog.create({
+          data: {
+            tenantId: target.tenantId, userId: actorId, action: "user.delete", entity: "User", entityId: id,
+            metadata: { email: target.email, name: target.fullName, role: target.role },
+          },
+        }),
+      ]);
+    } catch (error) {
+      // P2003: this user still has related records (messages, portion
+      // reports, assignments, audit history, ...) — none of those relations
+      // cascade-delete on purpose, so surface a clear reason instead of a
+      // raw 500 and instead of silently destroying that history.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        throw new ConflictException(
+          `${target.fullName} has related records (messages, portion reports, assignments, etc.) and can't be deleted. Set them to Inactive instead.`,
+        );
+      }
+      throw error;
+    }
+
     await this.supabaseAdmin.deleteUser(id);
-    await this.prisma.$transaction([
-      this.prisma.user.delete({ where: { id } }),
-      this.prisma.auditLog.create({
-        data: {
-          tenantId: target.tenantId, userId: actorId, action: "user.delete", entity: "User", entityId: id,
-          metadata: { email: target.email, name: target.fullName, role: target.role },
-        },
-      }),
-    ]);
     return { deleted: true };
   }
 }
