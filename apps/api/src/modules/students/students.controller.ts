@@ -18,7 +18,7 @@ export class StudentsController {
   constructor(private students: StudentsService, private prisma: PrismaService) {}
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.RECEPTION)
   list(@Query() query: QueryStudentsDto, @CurrentUser() user: AuthUser) {
     return this.students.list(user, query);
   }
@@ -36,7 +36,7 @@ export class StudentsController {
   }
 
   @Get(":id")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR)
   get(@Param("id") id: string, @CurrentUser() user: AuthUser) {
     return this.students.get(user, id);
   }

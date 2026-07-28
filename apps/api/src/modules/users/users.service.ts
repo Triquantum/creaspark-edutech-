@@ -29,10 +29,12 @@ export class UsersService {
     return { tenantId: currentTenant().tenantId };
   }
 
-  /** Read-only scope: cross-tenant (every school) for SUPER_ADMIN when no
-   * schoolId filter is given, else the caller's own tenant. Never throws. */
+  /** Read-only scope: cross-tenant (every school) for SUPER_ADMIN/ORG_ADMIN
+   * when no schoolId filter is given, else the caller's own tenant. Never
+   * throws. ORG_ADMIN's cross-tenant access is view-only — write actions
+   * (resolveTenant/assertCanAct below) stay confined to their own tenant. */
   private async readScope(user: AuthUser, schoolId?: string): Promise<{ tenantId?: string }> {
-    if (user.role === Role.SUPER_ADMIN) {
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) {
       if (!schoolId) return { tenantId: undefined };
       const school = await this.prisma.school.findUnique({ where: { id: schoolId } });
       if (!school) throw new NotFoundException("School not found");
@@ -51,7 +53,7 @@ export class UsersService {
 
   async list(user: AuthUser, query: QueryUsersDto) {
     const scope = await this.readScope(user, query.schoolId);
-    const crossTenant = user.role === Role.SUPER_ADMIN && !scope.tenantId;
+    const crossTenant = (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) && !scope.tenantId;
     return this.prisma.user.findMany({
       where: {
         ...(scope.tenantId && { tenantId: scope.tenantId }),

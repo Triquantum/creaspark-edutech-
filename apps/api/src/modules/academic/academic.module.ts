@@ -58,7 +58,7 @@ export class AcademicService {
 
   // ── Schools (picker) ──
   async schools(user: AuthUser) {
-    if (user.role === Role.SUPER_ADMIN) {
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) {
       const rows = await this.prisma.school.findMany({
         select: { id: true, name: true, code: true, tenant: { select: { name: true } } },
         orderBy: { name: "asc" },
@@ -76,7 +76,7 @@ export class AcademicService {
    * resolveTenant(), never throws — reads have a sensible "show everything"
    * default, only writes must pin down a single school. */
   private async readScope(user: AuthUser, schoolId?: string): Promise<{ tenantId?: string; schoolId?: string }> {
-    if (user.role === Role.SUPER_ADMIN) return { schoolId };
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) return { schoolId };
     const { tenantId } = currentTenant();
     return { tenantId, schoolId };
   }

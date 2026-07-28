@@ -225,19 +225,19 @@ export class PlatformController {
   constructor(private svc: PlatformService) {}
 
   @Get("summary")
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN)
   summary() {
     return this.svc.summary();
   }
 
   @Get("schools")
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN)
   schools() {
     return this.svc.schools();
   }
 
   @Get("schools/:id")
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN)
   schoolDetail(@Param("id") id: string) {
     return this.svc.schoolDetail(id);
   }

@@ -21,10 +21,11 @@ const PARENT_SELECT = {
 export class ParentsService {
   constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
 
-  /** SUPER_ADMIN has no real school of their own; tenantId for a *new*
-   * login is resolved from an explicit schoolId instead of currentTenant(). */
+  /** Only used by list()'s schoolId-filter branch (view path) — SUPER_ADMIN/
+   * ORG_ADMIN have no real school of their own, so the tenant to filter by
+   * is resolved from the explicit schoolId instead of currentTenant(). */
   private async resolveTenant(user: AuthUser, schoolId?: string): Promise<{ tenantId: string }> {
-    if (user.role === Role.SUPER_ADMIN) {
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) {
       if (!schoolId) throw new BadRequestException("schoolId is required for Super Admin");
       const school = await this.prisma.school.findUnique({ where: { id: schoolId } });
       if (!school) throw new NotFoundException("School not found");
@@ -41,7 +42,7 @@ export class ParentsService {
   }
 
   async list(user: AuthUser, query: QueryParentsDto) {
-    const crossTenant = user.role === Role.SUPER_ADMIN && !query.schoolId;
+    const crossTenant = (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) && !query.schoolId;
     const tenantId = crossTenant ? undefined : (await this.resolveTenant(user, query.schoolId)).tenantId;
     return this.prisma.user.findMany({
       where: {

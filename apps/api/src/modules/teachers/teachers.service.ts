@@ -25,10 +25,11 @@ export class TeachersService {
     return { tenantId, schoolId };
   }
 
-  /** Read-only scope: cross-tenant (all schools) for SUPER_ADMIN when no
-   * schoolId filter is given, else the caller's own tenant. Never throws. */
+  /** Read-only scope: cross-tenant (all schools) for SUPER_ADMIN/ORG_ADMIN
+   * when no schoolId filter is given, else the caller's own tenant. Never
+   * throws. Write actions (resolveTenant above) stay tenant-scoped. */
   private async readScope(user: AuthUser, schoolId?: string): Promise<{ tenantId?: string; schoolId?: string }> {
-    if (user.role === Role.SUPER_ADMIN) return { schoolId };
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) return { schoolId };
     const { tenantId } = currentTenant();
     return { tenantId, schoolId };
   }
