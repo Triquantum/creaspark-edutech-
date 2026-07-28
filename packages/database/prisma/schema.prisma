@@ -554,15 +554,26 @@ model Event {
   schoolId    String
   school      School   @relation(fields: [schoolId], references: [id])
   title       String
+  category    EventCategory @default(GENERAL)
   description String?
   location    String?
+  photoUrl    String?
+  pdfUrl      String?
   startAt     DateTime
   endAt       DateTime?
+  registrationDeadline DateTime?
   audience    Role[]                          // which roles see it; empty = everyone
   createdBy   String?
   createdAt   DateTime @default(now())
 
   @@index([tenantId, schoolId, startAt])
+}
+
+enum EventCategory {
+  COMPETITION
+  CONFERENCE
+  EXHIBITION
+  GENERAL
 }
 
 model Visitor {
