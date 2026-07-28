@@ -296,7 +296,15 @@ export class PortionService {
       secure: Number(SMTP_PORT) === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
     });
-    await transporter.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, attachments: [attachment] });
+    try {
+      await transporter.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, attachments: [attachment] });
+    } catch (error) {
+      // nodemailer throws a plain Error, which NestJS's default filter turns
+      // into a bare 500 "Internal server error" — surface the real SMTP
+      // failure (auth, rejected recipient, connection, ...) instead.
+      const message = error instanceof Error ? error.message : "Unknown SMTP error";
+      throw new BadRequestException(`Could not send email: ${message}`);
+    }
   }
 
   async reportPdf(user: AuthUser, query: QueryPortionReportsDto): Promise<Buffer> {
