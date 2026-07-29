@@ -25,13 +25,18 @@ function get(obj: Record<string, unknown>, path: string): unknown {
   return path.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], obj);
 }
 
-export function ResourcePage({ title, singular, group, endpoint, columns, fields, deleteHint, manageRoles }: {
+export function ResourcePage({ title, singular, group, endpoint, columns, fields, deleteHint, manageRoles, schoolFilterable }: {
   title: string; singular: string; group?: string; endpoint: string;
   columns: ColumnDef[]; fields: FieldDef[]; deleteHint?: string;
   /** Roles allowed to Add/Edit/Delete, matching this endpoint's real @Roles
    * set on the backend — everyone else gets a read-only view (View action
    * only) instead of buttons that would just 403. Omit to leave ungated. */
   manageRoles?: string[];
+  /** Adds a School filter dropdown that narrows the list server-side via
+   * `?schoolId=`. Rows across different schools can otherwise look
+   * identical (e.g. every school has its own "Grade 1 - A") — this doesn't
+   * change what a row IS, just lets the admin narrow down which one. */
+  schoolFilterable?: boolean;
 }) {
   type Row = Record<string, unknown> & { id: string };
   const [rows, setRows] = useState<Row[]>([]);
@@ -45,6 +50,8 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
+  const [schoolOptions, setSchoolOptions] = useState<{ id: string; name: string }[]>([]);
+  const [schoolFilter, setSchoolFilter] = useState("");
 
   useEffect(() => {
     if (!manageRoles) return;
@@ -52,10 +59,16 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
   }, [manageRoles]);
   const canManage = !manageRoles || (myRole !== null && manageRoles.includes(myRole));
 
+  useEffect(() => {
+    if (!schoolFilterable) return;
+    api<{ id: string; name: string }[]>("/academic/schools").then(setSchoolOptions).catch(() => setSchoolOptions([]));
+  }, [schoolFilterable]);
+
   const load = useCallback(() => {
     setState("loading");
-    api<Row[]>(endpoint).then((r) => { setRows(r); setState("ready"); }).catch(() => setState("error"));
-  }, [endpoint]);
+    const url = schoolFilterable && schoolFilter ? `${endpoint}?schoolId=${schoolFilter}` : endpoint;
+    api<Row[]>(url).then((r) => { setRows(r); setState("ready"); }).catch(() => setState("error"));
+  }, [endpoint, schoolFilterable, schoolFilter]);
 
   useEffect(load, [load]);
   useEffect(() => {
@@ -166,7 +179,15 @@ export function ResourcePage({ title, singular, group, endpoint, columns, fields
           {group && <p className="text-xs font-medium uppercase tracking-widest text-slate-400">{group}</p>}
           <h1 className="font-display text-2xl font-semibold text-night dark:text-white">{title}</h1>
         </div>
-        {canManage && <Button onClick={() => openDialog({ mode: "add" })}>Add {singular.toLowerCase()}</Button>}
+        <div className="flex items-center gap-3">
+          {schoolFilterable && (
+            <select value={schoolFilter} onChange={(e) => setSchoolFilter(e.target.value)} className={`${inputCls} w-auto`}>
+              <option value="">All schools</option>
+              {schoolOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          {canManage && <Button onClick={() => openDialog({ mode: "add" })}>Add {singular.toLowerCase()}</Button>}
+        </div>
       </div>
 
       <Card className="p-0 overflow-hidden">

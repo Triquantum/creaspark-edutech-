@@ -17,6 +17,7 @@ export default function ClassesPage() {
       ]}
       deleteHint="Classes with divisions can't be deleted until the divisions are removed."
       manageRoles={["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "COORDINATOR"]}
+      schoolFilterable
     />
   );
 }

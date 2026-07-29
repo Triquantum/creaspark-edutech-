@@ -149,12 +149,15 @@ export class AcademicService {
         ...(scope.schoolId && { class: { schoolId: scope.schoolId } }),
         ...(user.role === Role.TEACHER && { teacherAssignments: { some: { teacherId: user.id } } }),
       },
-      include: { class: { select: { name: true, schoolId: true } }, _count: { select: { students: true } } },
+      include: {
+        class: { select: { name: true, schoolId: true, school: { select: { name: true } } } },
+        _count: { select: { students: true } },
+      },
       orderBy: [{ class: { name: "asc" } }, { name: "asc" }],
     });
     return rows.map((s) => ({
       id: s.id, name: s.name, classId: s.classId, className: s.class.name,
-      schoolId: s.class.schoolId, studentCount: s._count.students,
+      schoolId: s.class.schoolId, schoolName: s.class.school.name, studentCount: s._count.students,
       label: `${s.class.name} · ${s.name}`,
     }));
   }

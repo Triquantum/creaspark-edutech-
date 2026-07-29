@@ -9,6 +9,7 @@ export default function DivisionsPage() {
       columns={[
         { key: "name", label: "Division" },
         { key: "className", label: "Class", muted: true },
+        { key: "schoolName", label: "School", muted: true },
         { key: "studentCount", label: "Students" },
       ]}
       fields={[
@@ -18,6 +19,7 @@ export default function DivisionsPage() {
       ]}
       deleteHint="Divisions with students can't be deleted until students are moved."
       manageRoles={["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "COORDINATOR"]}
+      schoolFilterable
     />
   );
 }
