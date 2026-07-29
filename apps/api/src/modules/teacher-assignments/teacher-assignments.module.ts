@@ -78,7 +78,10 @@ export class TeacherAssignmentsService {
     if (section.tenantId !== tenantId) throw new NotFoundException("Division not found");
 
     const [subject, teacher] = await Promise.all([
-      this.prisma.subject.findFirst({ where: { id: dto.subjectId, tenantId } }),
+      // Subject is now a shared cross-tenant catalog entry — "belongs to this
+      // school's organization" means it's toggled onto a School in this
+      // tenant, not that Subject.tenantId itself matches.
+      this.prisma.subject.findFirst({ where: { id: dto.subjectId, schools: { some: { tenantId } } } }),
       this.prisma.user.findFirst({ where: { id: dto.teacherId, tenantId, role: Role.TEACHER } }),
     ]);
     if (!subject) throw new NotFoundException("Subject not found in this school's organization");

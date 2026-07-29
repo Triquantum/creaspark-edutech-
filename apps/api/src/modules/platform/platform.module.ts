@@ -127,7 +127,7 @@ export class PlatformService {
         orderBy: { name: "asc" },
       }),
       this.prisma.subject.findMany({
-        where: { OR: [{ schoolIdRef: id }, { tenantId: school.tenantId, schoolIdRef: null }] },
+        where: { schools: { some: { id } } },
         select: { id: true, name: true, code: true },
         orderBy: { name: "asc" },
       }),

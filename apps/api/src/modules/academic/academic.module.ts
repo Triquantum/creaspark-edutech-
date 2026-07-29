@@ -4,7 +4,7 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
-import { IsDateString, IsOptional, IsString } from "class-validator";
+import { ArrayMinSize, IsArray, IsDateString, IsOptional, IsString } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -17,8 +17,16 @@ export class ClassDto { @IsString() schoolId: string; @IsString() name: string }
 export class ClassUpdateDto { @IsOptional() @IsString() name?: string }
 export class SectionDto { @IsString() classId: string; @IsString() name: string }
 export class SectionUpdateDto { @IsOptional() @IsString() classId?: string; @IsOptional() @IsString() name?: string }
-export class SubjectDto { @IsOptional() @IsString() schoolId?: string; @IsString() name: string; @IsOptional() @IsString() code?: string }
-export class SubjectUpdateDto { @IsOptional() @IsString() name?: string; @IsOptional() @IsString() code?: string }
+export class SubjectDto {
+  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) schoolIds: string[];
+  @IsString() name: string;
+  @IsOptional() @IsString() code?: string;
+}
+export class SubjectUpdateDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) schoolIds?: string[];
+}
 export class DepartmentDto { @IsString() schoolId: string; @IsString() name: string }
 export class DepartmentUpdateDto { @IsOptional() @IsString() name?: string }
 export class AcademicYearDto {
@@ -60,14 +68,14 @@ export class AcademicService {
   async schools(user: AuthUser) {
     if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) {
       const rows = await this.prisma.school.findMany({
-        select: { id: true, name: true, code: true, tenant: { select: { name: true } } },
+        select: { id: true, name: true, code: true, institutionType: true, tenant: { select: { name: true } } },
         orderBy: { name: "asc" },
       });
-      return rows.map((r) => ({ id: r.id, name: r.name, code: r.code, tenantName: r.tenant.name }));
+      return rows.map((r) => ({ id: r.id, name: r.name, code: r.code, institutionType: r.institutionType, tenantName: r.tenant.name }));
     }
     const { tenantId } = currentTenant();
     return this.prisma.school.findMany({
-      where: { tenantId }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" },
+      where: { tenantId }, select: { id: true, name: true, code: true, institutionType: true }, orderBy: { name: "asc" },
     });
   }
 
@@ -180,38 +188,90 @@ export class AcademicService {
   }
 
   // ── Subjects ──
+  // Subjects are a shared catalog, toggled onto any number of schools/
+  // colleges/institutes (cross-tenant) rather than owned by one tenant —
+  // access for ordinary staff is "is this subject assigned to one of my
+  // schools", not a tenantId match. SUPER_ADMIN/ORG_ADMIN manage the full
+  // catalog with no such restriction (same platform-wide pattern used
+  // elsewhere for these two roles).
+  private isPlatformAdmin(user: AuthUser) {
+    return user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
+  }
+  private readonly SUBJECT_INCLUDE = {
+    schools: { select: { id: true, name: true, code: true, institutionType: true, tenant: { select: { name: true } } } },
+  } as const;
+  private shapeSubject<T extends { schools: { id: string }[] }>(s: T) {
+    return { ...s, schoolIds: s.schools.map((sc) => sc.id) };
+  }
+
   async subjects(user: AuthUser, schoolId?: string) {
-    const scope = await this.readScope(user, schoolId);
-    return this.prisma.subject.findMany({
+    const platformAdmin = this.isPlatformAdmin(user);
+    const rows = await this.prisma.subject.findMany({
       where: {
-        ...(scope.tenantId && { tenantId: scope.tenantId }),
+        ...(schoolId
+          ? { schools: { some: { id: schoolId } } }
+          : !platformAdmin && { schools: { some: { tenantId: currentTenant().tenantId } } }),
         ...(user.role === Role.TEACHER && { teacherAssignments: { some: { teacherId: user.id } } }),
       },
+      include: this.SUBJECT_INCLUDE,
       orderBy: { name: "asc" },
     });
+    return rows.map((s) => this.shapeSubject(s));
   }
   async createSubject(dto: SubjectDto, user: AuthUser, actor: string) {
-    const { tenantId } = await this.resolveTenant(user, dto.schoolId);
-    const s = await this.prisma.subject.create({ data: { tenantId, name: dto.name, code: dto.code, schoolIdRef: dto.schoolId } });
+    const schools = await this.prisma.school.findMany({ where: { id: { in: dto.schoolIds } } });
+    if (schools.length !== dto.schoolIds.length) throw new NotFoundException("One or more schools not found");
+    if (!this.isPlatformAdmin(user)) {
+      const { tenantId } = currentTenant();
+      if (schools.some((sc) => sc.tenantId !== tenantId))
+        throw new BadRequestException("Can only assign schools in your own organization");
+    }
+    const tenantId = schools[0].tenantId;
+    const s = await this.prisma.subject.create({
+      data: { tenantId, name: dto.name, code: dto.code, schools: { connect: dto.schoolIds.map((id) => ({ id })) } },
+      include: this.SUBJECT_INCLUDE,
+    });
     await this.audit(actor, "subject.create", "Subject", s.id, tenantId);
-    return s;
+    return this.shapeSubject(s);
   }
   async updateSubject(id: string, dto: SubjectUpdateDto, user: AuthUser, actor: string) {
-    const existing = await this.prisma.subject.findUnique({ where: { id } });
+    const existing = await this.prisma.subject.findUnique({ where: { id }, include: { schools: true } });
     if (!existing) throw new NotFoundException("Subject not found");
-    const { tenantId } = await this.resolveTenant(user, existing.schoolIdRef ?? undefined);
-    if (existing.tenantId !== tenantId) throw new NotFoundException("Subject not found");
-    const s = await this.prisma.subject.update({ where: { id }, data: dto });
+    const platformAdmin = this.isPlatformAdmin(user);
+    let tenantId = existing.tenantId;
+    if (!platformAdmin) {
+      tenantId = currentTenant().tenantId;
+      if (existing.tenantId !== tenantId && !existing.schools.some((sc) => sc.tenantId === tenantId))
+        throw new NotFoundException("Subject not found");
+    }
+    let schoolsUpdate = {};
+    if (dto.schoolIds) {
+      const schools = await this.prisma.school.findMany({ where: { id: { in: dto.schoolIds } } });
+      if (schools.length !== dto.schoolIds.length) throw new NotFoundException("One or more schools not found");
+      if (!platformAdmin && schools.some((sc) => sc.tenantId !== tenantId))
+        throw new BadRequestException("Can only assign schools in your own organization");
+      schoolsUpdate = { schools: { set: dto.schoolIds.map((sid) => ({ id: sid })) } };
+    }
+    const s = await this.prisma.subject.update({
+      where: { id },
+      data: { ...(dto.name !== undefined && { name: dto.name }), ...(dto.code !== undefined && { code: dto.code }), ...schoolsUpdate },
+      include: this.SUBJECT_INCLUDE,
+    });
     await this.audit(actor, "subject.update", "Subject", id, tenantId);
-    return s;
+    return this.shapeSubject(s);
   }
   async deleteSubject(id: string, user: AuthUser, actor: string) {
     const existing = await this.prisma.subject.findUnique({
-      where: { id }, include: { _count: { select: { exams: true } } },
+      where: { id }, include: { schools: true, _count: { select: { exams: true } } },
     });
     if (!existing) throw new NotFoundException("Subject not found");
-    const { tenantId } = await this.resolveTenant(user, existing.schoolIdRef ?? undefined);
-    if (existing.tenantId !== tenantId) throw new NotFoundException("Subject not found");
+    const platformAdmin = this.isPlatformAdmin(user);
+    let tenantId = existing.tenantId;
+    if (!platformAdmin) {
+      tenantId = currentTenant().tenantId;
+      if (existing.tenantId !== tenantId && !existing.schools.some((sc) => sc.tenantId === tenantId))
+        throw new NotFoundException("Subject not found");
+    }
     if (existing._count.exams > 0)
       throw new ConflictException("This subject is used in exams and can't be deleted");
     await this.prisma.subject.delete({ where: { id } });
@@ -326,6 +386,11 @@ export class AcademicService {
 
 const MANAGE = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR] as const;
 const DELETE_ONLY = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN] as const;
+// Subjects are a cross-tenant shared catalog (unlike Class/Section/Department/
+// AcademicYear, which stay tenant-local) — ORG_ADMIN gets manage/delete rights
+// here specifically, matching the platform-wide pattern used for this feature.
+const SUBJECT_MANAGE = [...MANAGE, Role.ORG_ADMIN] as const;
+const SUBJECT_DELETE = [...DELETE_ONLY, Role.ORG_ADMIN] as const;
 
 @ApiTags("academic")
 @ApiBearerAuth()
@@ -356,11 +421,11 @@ export class AcademicController {
 
   // Subjects
   @Get("subjects") subjects(@CurrentUser() u: AuthUser, @Query("schoolId") schoolId?: string) { return this.svc.subjects(u, schoolId); }
-  @Post("subjects") @Roles(...MANAGE)
+  @Post("subjects") @Roles(...SUBJECT_MANAGE)
   createSubject(@Body() dto: SubjectDto, @CurrentUser() u: AuthUser) { return this.svc.createSubject(dto, u, u.id); }
-  @Patch("subjects/:id") @Roles(...MANAGE)
+  @Patch("subjects/:id") @Roles(...SUBJECT_MANAGE)
   updateSubject(@Param("id") id: string, @Body() dto: SubjectUpdateDto, @CurrentUser() u: AuthUser) { return this.svc.updateSubject(id, dto, u, u.id); }
-  @Delete("subjects/:id") @Roles(...DELETE_ONLY)
+  @Delete("subjects/:id") @Roles(...SUBJECT_DELETE)
   deleteSubject(@Param("id") id: string, @CurrentUser() u: AuthUser) { return this.svc.deleteSubject(id, u, u.id); }
 
   // Departments

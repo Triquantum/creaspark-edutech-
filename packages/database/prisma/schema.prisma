@@ -72,6 +72,7 @@ model School {
   academicYears AcademicYear[]
   portionReports PortionReport[]
   courses       Course[]
+  subjects      Subject[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -225,10 +226,10 @@ model AcademicYear {
 
 model Subject {
   id       String @id @default(cuid())
-  tenantId String
-  schoolIdRef String?
+  tenantId String                          // home tenant (creator, for audit attribution)
   name     String
   code     String?
+  schools  School[]                        // schools/colleges/institutes this subject is assigned to (cross-tenant)
   exams    ExamSubject[]
   portionReports PortionReport[]
   courses  Course[]
