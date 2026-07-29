@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Modal, Field, inputCls } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, Field, inputCls } from "@/components/ui/modal";
 import { api, apiBlob } from "@/lib/api";
 
 interface Me { role: string }
 interface Option { id: string; name: string }
 interface PortionReport {
   id: string; period: "DAILY" | "WEEKLY"; periodDate: string;
+  subjectId: string; classId: string | null; sectionId: string | null;
   chapterName: string | null; description: string | null; topicsCovered: string;
   percentComplete: number | null; status: "SUBMITTED" | "REVIEWED" | "FLAGGED";
   mode: "PRACTICAL" | "THEORY" | null; completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | null;
@@ -366,10 +367,12 @@ function MyReports({ reloadKey }: { reloadKey: number }) {
   );
 }
 
-function ReviewTable() {
+function ReviewTable({ role }: { role: string }) {
+  const isSuperAdmin = role === "SUPER_ADMIN";
   const [reports, setReports] = useState<PortionReport[]>([]);
   const [subjects, setSubjects] = useState<Option[]>([]);
   const [classes, setClasses] = useState<Option[]>([]);
+  const [sections, setSections] = useState<(Option & { classId: string })[]>([]);
   const [schools, setSchools] = useState<Option[]>([]);
   const [teachers, setTeachers] = useState<Option[]>([]);
   const [searchInput, setSearchInput] = useState("");
@@ -388,6 +391,22 @@ function ReviewTable() {
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [editing, setEditing] = useState<PortionReport | null>(null);
+  const [editSubjectId, setEditSubjectId] = useState("");
+  const [editClassId, setEditClassId] = useState("");
+  const [editSectionId, setEditSectionId] = useState("");
+  const [editPeriod, setEditPeriod] = useState<"DAILY" | "WEEKLY">("DAILY");
+  const [editPeriodDate, setEditPeriodDate] = useState("");
+  const [editChapterName, setEditChapterName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editTopicsCovered, setEditTopicsCovered] = useState("");
+  const [editPercentComplete, setEditPercentComplete] = useState("");
+  const [editMode, setEditMode] = useState<"PRACTICAL" | "THEORY">("THEORY");
+  const [editCompletionStatus, setEditCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<PortionReport | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     api<Option[]>("/academic/subjects").then(setSubjects).catch(() => {});
@@ -396,6 +415,8 @@ function ReviewTable() {
     api<{ id: string; fullName: string }[]>("/teachers?activeOnly=true")
       .then((rows) => setTeachers(rows.map((t) => ({ id: t.id, name: t.fullName }))))
       .catch(() => {});
+    if (isSuperAdmin) api<(Option & { classId: string })[]>("/academic/sections").then(setSections).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
@@ -467,6 +488,65 @@ function ReviewTable() {
     }
   }
 
+  function openEdit(r: PortionReport) {
+    setEditError(null);
+    setEditing(r);
+    setEditSubjectId(r.subjectId ?? "");
+    setEditClassId(r.classId ?? "");
+    setEditSectionId(r.sectionId ?? "");
+    setEditPeriod(r.period);
+    setEditPeriodDate(r.periodDate.slice(0, 10));
+    setEditChapterName(r.chapterName ?? "");
+    setEditDescription(r.description ?? "");
+    setEditTopicsCovered(r.topicsCovered);
+    setEditPercentComplete(r.percentComplete != null ? String(r.percentComplete) : "");
+    setEditMode(r.mode ?? "THEORY");
+    setEditCompletionStatus(r.completionStatus ?? "IN_PROGRESS");
+  }
+
+  async function submitEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setEditError(null);
+    setEditBusy(true);
+    try {
+      await api(`/portion/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          subjectId: editSubjectId || undefined, classId: editClassId || undefined, sectionId: editSectionId || undefined,
+          period: editPeriod, periodDate: editPeriodDate, chapterName: editChapterName || undefined,
+          description: editDescription || undefined, topicsCovered: editTopicsCovered,
+          percentComplete: editPercentComplete ? Number(editPercentComplete) : undefined,
+          mode: editMode, completionStatus: editCompletionStatus,
+        }),
+      });
+      setEditing(null);
+      setReloadKey((k) => k + 1);
+      setToast("Submission updated");
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Could not save changes");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    try {
+      await api(`/portion/${deleting.id}`, { method: "DELETE" });
+      setDeleting(null);
+      setReloadKey((k) => k + 1);
+      setToast("Submission deleted");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not delete");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  const editSectionsForClass = sections.filter((s) => s.classId === editClassId);
+
   return (
     <Card className="p-0 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 dark:border-white/5">
@@ -519,12 +599,18 @@ function ReviewTable() {
                 <td className="px-4 py-3"><ModeBadge mode={r.mode} /></td>
                 <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                   <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => {
                     setReviewing(r); setNote(r.reviewNote ?? ""); setComments(r.reviewComments ?? ""); setRemarks(r.reviewRemarks ?? "");
                   }}>
                     {r.status === "SUBMITTED" ? "Review" : "Update"}
                   </Button>
+                  {isSuperAdmin && (
+                    <>
+                      <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => openEdit(r)}>Edit</Button>
+                      <Button variant="ghost" className="h-8 px-3 text-xs !text-danger" onClick={() => setDeleting(r)}>Delete</Button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
@@ -562,6 +648,87 @@ function ReviewTable() {
             <Button disabled={busy} onClick={() => act("REVIEWED")}>{busy ? "Saving…" : "Mark reviewed"}</Button>
           </div>
         </Modal>
+      )}
+
+      {editing && (
+        <Modal title={`Edit submission — ${editing.teacher?.fullName ?? "report"}`} onClose={() => setEditing(null)} wide>
+          <form onSubmit={submitEdit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="ef-subject" label="Subject">
+                <select id="ef-subject" required value={editSubjectId} onChange={(e) => setEditSubjectId(e.target.value)} className={inputCls}>
+                  <option value="" disabled>Select subject</option>
+                  {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field id="ef-period" label="Period">
+                <select id="ef-period" value={editPeriod} onChange={(e) => setEditPeriod(e.target.value as "DAILY" | "WEEKLY")} className={inputCls}>
+                  <option value="DAILY">Daily</option>
+                  <option value="WEEKLY">Weekly</option>
+                </select>
+              </Field>
+              <Field id="ef-class" label="Class" optional>
+                <select id="ef-class" value={editClassId} onChange={(e) => { setEditClassId(e.target.value); setEditSectionId(""); }} className={inputCls}>
+                  <option value="">Any</option>
+                  {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
+              <Field id="ef-section" label="Division" optional>
+                <select id="ef-section" value={editSectionId} onChange={(e) => setEditSectionId(e.target.value)} className={inputCls} disabled={!editClassId}>
+                  <option value="">Any</option>
+                  {editSectionsForClass.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field id="ef-date" label={editPeriod === "DAILY" ? "Date" : "Week starting"}>
+                <input id="ef-date" type="date" required value={editPeriodDate} onChange={(e) => setEditPeriodDate(e.target.value)} className={inputCls} />
+              </Field>
+              <Field id="ef-percent" label="Syllabus complete (%)" optional>
+                <input id="ef-percent" type="number" min={0} max={100} value={editPercentComplete}
+                  onChange={(e) => setEditPercentComplete(e.target.value)} placeholder="e.g. 65" className={inputCls} />
+              </Field>
+              <Field id="ef-chapter" label="Chapter / Portion name">
+                <input id="ef-chapter" value={editChapterName} onChange={(e) => setEditChapterName(e.target.value)}
+                  placeholder="e.g. Chapter 4 — Fractions" className={inputCls} />
+              </Field>
+              <Field id="ef-mode" label="Mode">
+                <select id="ef-mode" value={editMode} onChange={(e) => setEditMode(e.target.value as "PRACTICAL" | "THEORY")} className={inputCls}>
+                  <option value="THEORY">Theory (from Class)</option>
+                  <option value="PRACTICAL">Practical (on Lab)</option>
+                </select>
+              </Field>
+              <Field id="ef-completion" label="Portion status">
+                <select id="ef-completion" value={editCompletionStatus}
+                  onChange={(e) => setEditCompletionStatus(e.target.value as "PENDING" | "IN_PROGRESS" | "COMPLETED")} className={inputCls}>
+                  <option value="PENDING">Pending</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+              </Field>
+            </div>
+            <Field id="ef-description" label="Chapter description" optional>
+              <textarea id="ef-description" rows={2} value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="What this chapter covers overall" className={`${inputCls} h-auto py-2.5`} />
+            </Field>
+            <Field id="ef-topics" label="Topics covered">
+              <textarea id="ef-topics" required rows={3} value={editTopicsCovered} onChange={(e) => setEditTopicsCovered(e.target.value)}
+                placeholder="What was taught in this period" className={`${inputCls} h-auto py-2.5`} />
+            </Field>
+            {editError && <p role="alert" className="text-sm text-danger">{editError}</p>}
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button type="submit" disabled={editBusy}>{editBusy ? "Saving…" : "Save"}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Delete this submission?"
+          message={`This permanently removes ${deleting.teacher?.fullName ?? "this"}'s ${deleting.chapterName ? `"${deleting.chapterName}" ` : ""}submission. This cannot be undone.`}
+          onConfirm={confirmDelete}
+          onClose={() => setDeleting(null)}
+          busy={deleteBusy}
+        />
       )}
 
       {emailing && (
@@ -619,7 +786,7 @@ export default function PortionStatusPage() {
         </div>
       )}
 
-      {isReviewer && <ReviewTable />}
+      {isReviewer && <ReviewTable role={me.role} />}
 
       {!isSubmitter && !isReviewer && (
         <p className="text-sm text-slate-500">Portion status tracking isn&apos;t available for your role.</p>

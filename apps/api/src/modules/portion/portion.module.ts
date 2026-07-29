@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Injectable, Module,
+  BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Headers, Injectable, Module,
   NotFoundException, Param, Patch, Post, Query, Res, UnauthorizedException, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
@@ -50,6 +50,23 @@ export class ReviewPortionReportDto {
   @IsOptional() @IsString() reviewNote?: string;
   @IsOptional() @IsString() comments?: string;
   @IsOptional() @IsString() remarks?: string;
+}
+
+/** Super-Admin-only correction of the teacher's own submitted content
+ * (as opposed to ReviewPortionReportDto, which only ever touches the
+ * review side) — every field optional so a caller can fix just what's wrong. */
+export class AdminUpdatePortionReportDto {
+  @IsOptional() @IsString() subjectId?: string;
+  @IsOptional() @IsString() classId?: string;
+  @IsOptional() @IsString() sectionId?: string;
+  @IsOptional() @IsIn(["DAILY", "WEEKLY"]) period?: "DAILY" | "WEEKLY";
+  @IsOptional() @IsDateString() periodDate?: string;
+  @IsOptional() @IsString() chapterName?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() topicsCovered?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
+  @IsOptional() @IsIn(["PRACTICAL", "THEORY"]) mode?: "PRACTICAL" | "THEORY";
+  @IsOptional() @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus?: "PENDING" | "IN_PROGRESS" | "COMPLETED";
 }
 
 /** Same filters as QueryPortionReportsDto — the emailed report is exactly
@@ -340,6 +357,46 @@ export class PortionService {
     });
   }
 
+  /** Super-Admin-only correction of a teacher's submitted content — fixes a
+   * wrong subject/chapter/topics/etc. after the fact, distinct from
+   * review() which only ever writes the review-side fields. */
+  async adminUpdate(id: string, dto: AdminUpdatePortionReportDto) {
+    const existing = await this.prisma.portionReport.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Portion report not found");
+    return this.prisma.portionReport.update({
+      where: { id },
+      data: {
+        ...(dto.subjectId !== undefined && { subjectId: dto.subjectId }),
+        ...(dto.classId !== undefined && { classId: dto.classId }),
+        ...(dto.sectionId !== undefined && { sectionId: dto.sectionId }),
+        ...(dto.period !== undefined && { period: dto.period }),
+        ...(dto.periodDate !== undefined && { periodDate: new Date(dto.periodDate) }),
+        ...(dto.chapterName !== undefined && { chapterName: dto.chapterName }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.topicsCovered !== undefined && { topicsCovered: dto.topicsCovered }),
+        ...(dto.percentComplete !== undefined && { percentComplete: dto.percentComplete }),
+        ...(dto.mode !== undefined && { mode: dto.mode }),
+        ...(dto.completionStatus !== undefined && { completionStatus: dto.completionStatus }),
+      },
+      include: {
+        teacher: { select: { fullName: true, email: true } },
+        subject: { select: { name: true } },
+        class: { select: { name: true } },
+        section: { select: { name: true } },
+        school: { select: { name: true } },
+        reviewer: { select: { fullName: true } },
+      },
+    });
+  }
+
+  /** Super-Admin-only permanent removal of a teacher's submission. */
+  async remove(id: string) {
+    const existing = await this.prisma.portionReport.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Portion report not found");
+    await this.prisma.portionReport.delete({ where: { id } });
+    return { deleted: true };
+  }
+
   /** Monday 00:00:00 UTC through the following Monday (exclusive) — the
    * week this reminder run is checking submissions for. */
   private currentWeekRange(): { start: Date; end: Date } {
@@ -451,6 +508,20 @@ export class PortionController {
   @Roles(...REVIEW_ROLES)
   review(@Param("id") id: string, @Body() dto: ReviewPortionReportDto, @CurrentUser() user: AuthUser) {
     return this.svc.review(id, dto, user);
+  }
+
+  /** Super Admin only — corrects a teacher's submitted content (subject,
+   * chapter, topics, etc.), separate from the review-side PATCH above. */
+  @Patch(":id")
+  @Roles(Role.SUPER_ADMIN)
+  adminUpdate(@Param("id") id: string, @Body() dto: AdminUpdatePortionReportDto) {
+    return this.svc.adminUpdate(id, dto);
+  }
+
+  @Delete(":id")
+  @Roles(Role.SUPER_ADMIN)
+  remove(@Param("id") id: string) {
+    return this.svc.remove(id);
   }
 }
 
