@@ -16,7 +16,7 @@ export class TeachersController {
   constructor(private teachers: TeachersService) {}
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR, Role.STUDENT)
   list(
     @CurrentUser() user: AuthUser, @Query("q") q?: string, @Query("schoolId") schoolId?: string,
     @Query("activeOnly") activeOnly?: string,

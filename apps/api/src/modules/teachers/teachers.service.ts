@@ -36,12 +36,22 @@ export class TeachersService {
 
   async list(user: AuthUser, q?: string, schoolId?: string, activeOnly?: string) {
     const scope = await this.readScope(user, schoolId);
+    // STUDENT only ever sees the teachers actually assigned to their own
+    // section, never the full staff directory — resolved via the same
+    // TeacherAssignment link the Teacher Assignment picker uses.
+    let mySectionId: string | undefined;
+    if (user.role === Role.STUDENT) {
+      const student = await this.prisma.student.findFirst({ where: { userId: user.id }, select: { sectionId: true } });
+      if (!student?.sectionId) return [];
+      mySectionId = student.sectionId;
+    }
     return this.prisma.user.findMany({
       where: {
         ...(scope.tenantId && { tenantId: scope.tenantId }),
         role: Role.TEACHER,
         ...(scope.schoolId && { staffProfile: { schoolId: scope.schoolId } }),
         ...(activeOnly === "true" && { isActive: true }),
+        ...(mySectionId && { teacherAssignments: { some: { sectionId: mySectionId } } }),
         ...(q && {
           OR: [
             { fullName: { contains: q, mode: "insensitive" as const } },

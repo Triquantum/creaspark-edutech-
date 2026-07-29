@@ -165,6 +165,8 @@ function TeachersPageInner() {
   const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [schoolsError, setSchoolsError] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const canManage = role !== null && role !== "STUDENT";
 
   const load = useCallback(() => {
     setState("loading");
@@ -174,11 +176,13 @@ function TeachersPageInner() {
   }, [q]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  useEffect(() => { api<{ role: string }>("/auth/me").then((r) => setRole(r.role)).catch(() => setRole(null)); }, []);
   useEffect(() => {
+    if (role === "STUDENT") return;
     api<SchoolOpt[]>("/academic/schools")
       .then((r) => { setSchools(r); setSchoolsError(r.length === 0 ? "No schools are registered yet." : null); })
       .catch((err) => { setSchools([]); setSchoolsError(err instanceof Error ? err.message : "Could not load schools"); });
-  }, []);
+  }, [role]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
   async function confirmDelete() {
@@ -201,7 +205,7 @@ function TeachersPageInner() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="font-display text-2xl font-semibold text-night dark:text-white">Teachers</h1>
-        <Button onClick={() => setDialog({ mode: "add" })}>Add teacher</Button>
+        {canManage && <Button onClick={() => setDialog({ mode: "add" })}>Add teacher</Button>}
       </div>
 
       {notice && (
@@ -262,8 +266,8 @@ function TeachersPageInner() {
                   <td className="px-4 py-3">
                     <RowActions
                       onView={() => setViewing(t)}
-                      onEdit={() => setDialog({ mode: "edit", row: t })}
-                      onDelete={() => setDeleting(t)}
+                      onEdit={canManage ? () => setDialog({ mode: "edit", row: t }) : undefined}
+                      onDelete={canManage ? () => setDeleting(t) : undefined}
                     />
                   </td>
                 </tr>
