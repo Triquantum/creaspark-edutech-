@@ -94,7 +94,7 @@ export class MessagesService {
       if (!section) throw new NotFoundException("Section not found");
       tenantId = section.tenantId;
     } else {
-      const recipient = await this.prisma.user.findFirst({ where: { id: dto.recipientId, ...ownScope } });
+      const recipient = await this.prisma.user.findFirst({ where: { id: dto.recipientId, isActive: true, ...ownScope } });
       if (!recipient) throw new NotFoundException("Recipient not found");
       tenantId = recipient.tenantId;
     }

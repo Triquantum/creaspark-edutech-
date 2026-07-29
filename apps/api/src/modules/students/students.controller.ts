@@ -23,10 +23,12 @@ export class StudentsController {
     return this.students.list(user, query);
   }
 
-  /** No @Roles: every student a STUDENT/PARENT account may view — powers the frontend child picker. */
+  /** No @Roles: every student a STUDENT/PARENT account may view — powers the
+   * frontend child picker. activeOnly: a suspended/transferred child's own
+   * records are still reachable directly, just not offered as a fresh pick. */
   @Get("mine")
   mine(@CurrentUser() user: AuthUser) {
-    return listViewableStudents(this.prisma, user);
+    return listViewableStudents(this.prisma, user, true);
   }
 
   @Get("birthdays/today")

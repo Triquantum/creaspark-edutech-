@@ -49,6 +49,7 @@ export class ParentsService {
         ...(tenantId && { tenantId }),
         role: Role.PARENT,
         ...(query.schoolId && { guardianLinks: { some: { student: { schoolId: query.schoolId } } } }),
+        ...(query.activeOnly === "true" && { isActive: true }),
         ...(query.q && {
           OR: [
             { fullName: { contains: query.q, mode: "insensitive" as const } },

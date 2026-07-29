@@ -18,6 +18,11 @@ export class QueryStudentsDto {
   @IsOptional() @IsString() cursor?: string;
   @IsOptional() @IsString() schoolId?: string;
   @IsOptional() @IsIn(["name", "admissionNo", "class", "school"]) sortBy?: "name" | "admissionNo" | "class" | "school";
+  /** "true" restricts to status: ACTIVE — used by pickers/search (topbar,
+   * attendance roster, parent registration) so inactive/transferred/alumni
+   * students don't show up as selectable. The full People Directory list
+   * omits this so admins can still find and reactivate them. */
+  @IsOptional() @IsString() activeOnly?: string;
 }
 
 export class UpdateStudentDto {

@@ -77,9 +77,12 @@ export class PlatformService {
     };
   }
 
-  /** Every physical school (not tenant) across the platform, for cross-tenant pickers. */
+  /** Every physical school (not tenant) across the platform, for cross-tenant
+   * pickers (visitor registration, message compose, People Directory
+   * filter) — excludes suspended tenants' schools, same as academic/schools. */
   async schools() {
     const rows = await this.prisma.school.findMany({
+      where: { tenant: { status: { not: "SUSPENDED" } } },
       select: { id: true, name: true, code: true, institutionType: true, tenant: { select: { name: true } } },
       orderBy: { name: "asc" },
     });

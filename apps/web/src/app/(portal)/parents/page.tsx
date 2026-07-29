@@ -23,7 +23,7 @@ function StudentPicker({ excludeIds, onPick }: { excludeIds: string[]; onPick: (
   useEffect(() => {
     if (q.trim().length < 2) { setResults([]); return; }
     const t = setTimeout(() => {
-      api<{ items: { id: string; firstName: string; lastName: string; admissionNo: string }[] }>(`/students?q=${encodeURIComponent(q)}`)
+      api<{ items: { id: string; firstName: string; lastName: string; admissionNo: string }[] }>(`/students?q=${encodeURIComponent(q)}&activeOnly=true`)
         .then((r) => setResults(
           r.items.filter((s) => !excludeIds.includes(s.id))
             .map((s) => ({ id: s.id, label: `${s.firstName} ${s.lastName} · ${s.admissionNo}` })),

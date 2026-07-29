@@ -168,9 +168,9 @@ export function Topbar() {
     if (q.trim().length < 2) { setHits([]); return; }
     const t = setTimeout(() => {
       Promise.all([
-        api<{ items: { id: string; firstName: string; lastName: string; admissionNo: string }[] }>(`/students?q=${encodeURIComponent(q)}`).catch(() => ({ items: [] })),
+        api<{ items: { id: string; firstName: string; lastName: string; admissionNo: string }[] }>(`/students?q=${encodeURIComponent(q)}&activeOnly=true`).catch(() => ({ items: [] })),
         canSearchTeachers
-          ? api<{ id: string; fullName: string; email: string }[]>(`/teachers?q=${encodeURIComponent(q)}`).catch(() => [])
+          ? api<{ id: string; fullName: string; email: string }[]>(`/teachers?q=${encodeURIComponent(q)}&activeOnly=true`).catch(() => [])
           : Promise.resolve([]),
       ]).then(([students, teachers]) => {
         setHits([

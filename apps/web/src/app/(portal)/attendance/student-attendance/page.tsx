@@ -37,7 +37,7 @@ async function fetchAllStudents(sectionId: string): Promise<StudentRow[]> {
   let cursor: string | undefined;
   for (let i = 0; i < 20; i++) {
     const page = await api<{ items: StudentRow[]; nextCursor: string | null }>(
-      `/students?sectionId=${sectionId}${cursor ? `&cursor=${cursor}` : ""}`,
+      `/students?sectionId=${sectionId}&activeOnly=true${cursor ? `&cursor=${cursor}` : ""}`,
     );
     all.push(...page.items);
     if (!page.nextCursor) break;

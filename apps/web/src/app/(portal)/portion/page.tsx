@@ -393,7 +393,7 @@ function ReviewTable() {
     api<Option[]>("/academic/subjects").then(setSubjects).catch(() => {});
     api<Option[]>("/academic/classes").then(setClasses).catch(() => {});
     api<Option[]>("/academic/schools").then(setSchools).catch(() => {});
-    api<{ id: string; fullName: string }[]>("/teachers")
+    api<{ id: string; fullName: string }[]>("/teachers?activeOnly=true")
       .then((rows) => setTeachers(rows.map((t) => ({ id: t.id, name: t.fullName }))))
       .catch(() => {});
   }, []);

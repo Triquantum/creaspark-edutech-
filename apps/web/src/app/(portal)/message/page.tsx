@@ -109,13 +109,13 @@ function ComposeDialog({ canBroadcast, canAnnounce, onClose, onSent }: {
 
   const searchStudents = async (q: string) => {
     const r = await api<{ items: { id: string; userId?: string | null; firstName: string; lastName: string; admissionNo: string }[] }>(
-      `/students?q=${encodeURIComponent(q)}`,
+      `/students?q=${encodeURIComponent(q)}&activeOnly=true`,
     );
     return r.items.filter((s) => s.userId).map((s) => ({ id: s.userId as string, label: `${s.firstName} ${s.lastName} · ${s.admissionNo}` }));
   };
   const searchGuardians = async (q: string) => {
     const r = await api<{ id: string; fullName: string; guardianLinks: { student: { firstName: string; lastName: string } }[] }[]>(
-      `/parents?q=${encodeURIComponent(q)}`,
+      `/parents?q=${encodeURIComponent(q)}&activeOnly=true`,
     );
     return r.map((p) => ({
       id: p.id,

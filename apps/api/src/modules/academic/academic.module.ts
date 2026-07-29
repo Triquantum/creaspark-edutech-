@@ -65,9 +65,13 @@ export class AcademicService {
   }
 
   // ── Schools (picker) ──
+  /** Every usage of this endpoint (Grep-audited) is a picker/dropdown, never
+   * a management listing — so a suspended tenant's school never appears as
+   * a selectable option here, regardless of caller role. */
   async schools(user: AuthUser) {
     if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) {
       const rows = await this.prisma.school.findMany({
+        where: { tenant: { status: { not: "SUSPENDED" } } },
         select: { id: true, name: true, code: true, institutionType: true, tenant: { select: { name: true } } },
         orderBy: { name: "asc" },
       });
@@ -75,7 +79,8 @@ export class AcademicService {
     }
     const { tenantId } = currentTenant();
     return this.prisma.school.findMany({
-      where: { tenantId }, select: { id: true, name: true, code: true, institutionType: true }, orderBy: { name: "asc" },
+      where: { tenantId, tenant: { status: { not: "SUSPENDED" } } },
+      select: { id: true, name: true, code: true, institutionType: true }, orderBy: { name: "asc" },
     });
   }
 

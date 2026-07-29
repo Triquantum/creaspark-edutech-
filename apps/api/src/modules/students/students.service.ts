@@ -56,6 +56,7 @@ export class StudentsService {
       ...(scope.tenantId && { tenantId: scope.tenantId }),
       ...(scope.schoolId && { schoolId: scope.schoolId }),
       ...(query.sectionId && { sectionId: query.sectionId }),
+      ...(query.activeOnly === "true" && { status: "ACTIVE" as const }),
       ...(query.q && {
         OR: [
           { firstName: { contains: query.q, mode: "insensitive" as const } },

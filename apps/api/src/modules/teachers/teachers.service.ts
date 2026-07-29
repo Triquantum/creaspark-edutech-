@@ -34,13 +34,14 @@ export class TeachersService {
     return { tenantId, schoolId };
   }
 
-  async list(user: AuthUser, q?: string, schoolId?: string) {
+  async list(user: AuthUser, q?: string, schoolId?: string, activeOnly?: string) {
     const scope = await this.readScope(user, schoolId);
     return this.prisma.user.findMany({
       where: {
         ...(scope.tenantId && { tenantId: scope.tenantId }),
         role: Role.TEACHER,
         ...(scope.schoolId && { staffProfile: { schoolId: scope.schoolId } }),
+        ...(activeOnly === "true" && { isActive: true }),
         ...(q && {
           OR: [
             { fullName: { contains: q, mode: "insensitive" as const } },

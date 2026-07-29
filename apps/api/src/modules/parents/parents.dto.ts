@@ -28,4 +28,6 @@ export class UpdateParentDto {
 export class QueryParentsDto {
   @IsOptional() @IsString() q?: string;
   @IsOptional() @IsString() schoolId?: string;
+  /** "true" restricts to isActive: true — used by the message-compose guardian picker. */
+  @IsOptional() @IsString() activeOnly?: string;
 }

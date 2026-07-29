@@ -39,7 +39,7 @@ function BulkAssignModal({ schools, onClose, onDone }: {
     api<ClassOpt[]>("/academic/classes").then(setAllClasses).catch(() => setAllClasses([]));
     api<SectionOpt[]>("/academic/sections").then(setAllSections).catch(() => setAllSections([]));
     api<SubjectOpt[]>("/academic/subjects").then(setAllSubjects).catch(() => setAllSubjects([]));
-    api<TeacherOpt[]>("/teachers").then(setAllTeachers).catch(() => setAllTeachers([]));
+    api<TeacherOpt[]>("/teachers?activeOnly=true").then(setAllTeachers).catch(() => setAllTeachers([]));
   }, []);
 
   function updateRow(key: number, patch: Partial<BulkRow>) {
@@ -192,7 +192,7 @@ export default function TeacherAssignmentPage() {
     api<ClassOpt[]>(`/academic/classes?schoolId=${schoolId}`).then(setClasses).catch(() => setClasses([]));
     api<SectionOpt[]>(`/academic/sections?schoolId=${schoolId}`).then(setSections).catch(() => setSections([]));
     api<SubjectOpt[]>(`/academic/subjects?schoolId=${schoolId}`).then(setSubjects).catch(() => setSubjects([]));
-    api<TeacherOpt[]>(`/teachers?schoolId=${schoolId}`).then(setTeachers).catch(() => setTeachers([]));
+    api<TeacherOpt[]>(`/teachers?schoolId=${schoolId}&activeOnly=true`).then(setTeachers).catch(() => setTeachers([]));
     reloadAssignments();
     setClassId(""); setSectionId("");
   }, [schoolId]);

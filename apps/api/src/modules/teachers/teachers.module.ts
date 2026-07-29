@@ -17,8 +17,11 @@ export class TeachersController {
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR)
-  list(@CurrentUser() user: AuthUser, @Query("q") q?: string, @Query("schoolId") schoolId?: string) {
-    return this.teachers.list(user, q, schoolId);
+  list(
+    @CurrentUser() user: AuthUser, @Query("q") q?: string, @Query("schoolId") schoolId?: string,
+    @Query("activeOnly") activeOnly?: string,
+  ) {
+    return this.teachers.list(user, q, schoolId, activeOnly);
   }
 
   @Post()

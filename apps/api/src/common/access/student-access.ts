@@ -46,13 +46,17 @@ export async function resolveViewableStudentId(
   return requestedStudentId;
 }
 
-/** Every student a PARENT's account may view — powers the child picker in the UI. */
-export async function listViewableStudents(prisma: PrismaService, user: AuthUser) {
+/** Every student a PARENT's account may view — powers the child picker in the
+ * UI. `activeOnly` restricts to status: ACTIVE (used by the /students/mine
+ * picker route); left false for internal callers like MessagesService that
+ * need every linked child regardless of status (e.g. section broadcasts for
+ * a transferred child shouldn't just vanish from their inbox). */
+export async function listViewableStudents(prisma: PrismaService, user: AuthUser, activeOnly = false) {
   const { tenantId } = currentTenant();
 
   if (user.role === "STUDENT") {
     const student = await prisma.student.findFirst({
-      where: { userId: user.id, tenantId },
+      where: { userId: user.id, tenantId, ...(activeOnly && { status: "ACTIVE" }) },
       select: { id: true, firstName: true, lastName: true },
     });
     return student ? [student] : [];
@@ -60,7 +64,7 @@ export async function listViewableStudents(prisma: PrismaService, user: AuthUser
 
   if (user.role === "PARENT") {
     const links = await prisma.guardian.findMany({
-      where: { userId: user.id, tenantId },
+      where: { userId: user.id, tenantId, ...(activeOnly && { student: { status: "ACTIVE" } }) },
       orderBy: { isPrimary: "desc" },
       select: { student: { select: { id: true, firstName: true, lastName: true } } },
     });
