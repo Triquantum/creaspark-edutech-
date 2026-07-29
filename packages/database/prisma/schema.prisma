@@ -73,6 +73,7 @@ model School {
   portionReports PortionReport[]
   courses       Course[]
   subjects      Subject[]
+  media         MediaItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -575,6 +576,28 @@ enum EventCategory {
   CONFERENCE
   EXHIBITION
   GENERAL
+}
+
+// Photo/video gallery — uploaded by staff (Super/Org/School Admin, Teacher),
+// viewable by the wider school community (+ Parent, Student).
+model MediaItem {
+  id          String    @id @default(cuid())
+  tenantId    String
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id])
+  title       String
+  description String?
+  type        MediaType
+  url         String
+  uploadedBy  String
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, schoolId, createdAt])
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
 }
 
 model Visitor {

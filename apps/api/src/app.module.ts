@@ -24,6 +24,7 @@ import { PortionModule } from "./modules/portion/portion.module";
 import { CoursesModule } from "./modules/courses/courses.module";
 import { AssignmentsModule } from "./modules/assignments/assignments.module";
 import { QuizzesModule } from "./modules/quizzes/quizzes.module";
+import { MediaModule } from "./modules/media/media.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -53,6 +54,7 @@ import { HealthController } from "./modules/health.controller";
     CoursesModule,
     AssignmentsModule,
     QuizzesModule,
+    MediaModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
