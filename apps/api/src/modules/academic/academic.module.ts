@@ -267,7 +267,11 @@ export class AcademicService {
   }
   async deleteSubject(id: string, user: AuthUser, actor: string) {
     const existing = await this.prisma.subject.findUnique({
-      where: { id }, include: { schools: true, _count: { select: { exams: true } } },
+      where: { id },
+      include: {
+        schools: true,
+        _count: { select: { exams: true, teacherAssignments: true, portionReports: true, courses: true } },
+      },
     });
     if (!existing) throw new NotFoundException("Subject not found");
     const platformAdmin = this.isPlatformAdmin(user);
@@ -277,8 +281,16 @@ export class AcademicService {
       if (existing.tenantId !== tenantId && !existing.schools.some((sc) => sc.tenantId === tenantId))
         throw new NotFoundException("Subject not found");
     }
-    if (existing._count.exams > 0)
-      throw new ConflictException("This subject is used in exams and can't be deleted");
+    // Every one of these FKs lacks onDelete: Cascade on purpose (academic/
+    // audit history shouldn't vanish with the subject), so a plain delete
+    // would otherwise hit a raw Postgres FK violation and surface as a bare
+    // 500 — same bug class as the Users/Teachers/Parents delete fixes.
+    const blockers = Object.entries(existing._count).filter(([, count]) => count > 0).map(([key]) => key);
+    if (blockers.length > 0) {
+      throw new ConflictException(
+        `This subject has ${blockers.join(", ")} on record that must be preserved. Unassign it from every school instead of deleting it.`,
+      );
+    }
     await this.prisma.subject.delete({ where: { id } });
     await this.audit(actor, "subject.delete", "Subject", id, tenantId);
     return { deleted: true };
