@@ -74,6 +74,7 @@ model School {
   courses       Course[]
   subjects      Subject[]
   media         MediaItem[]
+  inventoryItems InventoryItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -598,6 +599,26 @@ model MediaItem {
 enum MediaType {
   PHOTO
   VIDEO
+}
+
+// Physical stock tracked and distributed to a specific school/college/institute.
+model InventoryItem {
+  id          String   @id @default(cuid())
+  tenantId    String
+  schoolId    String                          // distributed to this school
+  school      School   @relation(fields: [schoolId], references: [id])
+  name        String
+  category    String?                         // free-text, picked from the existing Category list on the frontend
+  description String?
+  quantity    Int      @default(1)
+  imageUrl    String?
+  submittedAt DateTime @default(now())        // date of submission
+  remarks     String?
+  comments    String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, schoolId, submittedAt])
 }
 
 model Visitor {

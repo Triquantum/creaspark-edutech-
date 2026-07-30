@@ -25,6 +25,7 @@ import { CoursesModule } from "./modules/courses/courses.module";
 import { AssignmentsModule } from "./modules/assignments/assignments.module";
 import { QuizzesModule } from "./modules/quizzes/quizzes.module";
 import { MediaModule } from "./modules/media/media.module";
+import { InventoryItemModule } from "./modules/inventory-item/inventory-item.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -55,6 +56,7 @@ import { HealthController } from "./modules/health.controller";
     AssignmentsModule,
     QuizzesModule,
     MediaModule,
+    InventoryItemModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
