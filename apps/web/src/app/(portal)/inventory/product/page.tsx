@@ -138,6 +138,7 @@ export default function InventoryProductPage() {
   const [schools, setSchools] = useState<SchoolOpt[]>([]);
   const [q, setQ] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: InventoryItemRow } | null>(null);
   const [viewing, setViewing] = useState<InventoryItemRow | null>(null);
   const [deleting, setDeleting] = useState<InventoryItemRow | null>(null);
@@ -152,7 +153,10 @@ export default function InventoryProductPage() {
     setState("loading");
     api<InventoryItemRow[]>(`/inventory-items${q ? `?q=${encodeURIComponent(q)}` : ""}`)
       .then((r) => { setRows(r); setState("ready"); })
-      .catch(() => setState("error"));
+      .catch((err) => {
+        setLoadError(err instanceof Error ? err.message : "Could not load inventory items");
+        setState("error");
+      });
   }
 
   useEffect(() => { if (canManage) { const t = setTimeout(load, 250); return () => clearTimeout(t); } }, [canManage, q]);
@@ -202,7 +206,7 @@ export default function InventoryProductPage() {
           </div>
 
           {state === "error" && (
-            <p className="p-6 text-sm text-slate-500">Couldn&apos;t reach the API. Start it with <code>docker compose up</code>, then reload.</p>
+            <p className="p-6 text-sm text-slate-500">{loadError ?? "Couldn't load inventory items."}</p>
           )}
           {state === "ready" && rows.length === 0 && (
             <p className="p-6 text-sm text-slate-500">No items yet — add the first one.</p>
