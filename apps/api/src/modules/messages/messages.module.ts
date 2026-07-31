@@ -130,9 +130,11 @@ export class MessagesService {
    * (e.g. portion-status alerts) land in the sending teacher's tenant, not
    * Super Admin's own placeholder one — currentTenant() would hide every
    * one of them, so Super Admin reads by recipientId alone, across every
-   * tenant. */
+   * tenant. ORG_ADMIN gets the same treatment: they see cross-tenant
+   * everywhere else in the app, so their own notifications (sent from
+   * whichever tenant triggered them) must be readable the same way. */
   async inbox(user: AuthUser, query: QueryMessagesDto) {
-    const scope = user.role === Role.SUPER_ADMIN ? {} : { tenantId: currentTenant().tenantId };
+    const scope = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN ? {} : { tenantId: currentTenant().tenantId };
     const mySectionIds = new Set<string>();
     if (user.role === "STUDENT" || user.role === "PARENT") {
       const students = await listViewableStudents(this.prisma, user);
@@ -163,7 +165,7 @@ export class MessagesService {
    * own placeholder tenant — currentTenant() would hide every one of them,
    * so Super Admin reads by senderId alone, across every tenant. */
   sent(user: AuthUser, query: QueryMessagesDto) {
-    const scope = user.role === Role.SUPER_ADMIN ? {} : { tenantId: currentTenant().tenantId };
+    const scope = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN ? {} : { tenantId: currentTenant().tenantId };
     const recipientFilter = this.personFilter(query.role, query.schoolId);
     return this.prisma.message.findMany({
       where: {
@@ -180,8 +182,8 @@ export class MessagesService {
   }
 
   async markRead(id: string, user: AuthUser) {
-    const { tenantId } = currentTenant();
-    const message = await this.prisma.message.findFirst({ where: { id, tenantId, recipientId: user.id } });
+    const scope = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN ? {} : { tenantId: currentTenant().tenantId };
+    const message = await this.prisma.message.findFirst({ where: { id, ...scope, recipientId: user.id } });
     if (!message) throw new NotFoundException("Message not found");
     return this.prisma.message.update({ where: { id }, data: { readAt: new Date() } });
   }

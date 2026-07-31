@@ -101,10 +101,11 @@ export class PortionService {
     return { tenantId: profile.tenantId, schoolId: profile.schoolId };
   }
 
-  /** Read-only scope for the review/list side: cross-tenant for SUPER_ADMIN
-   * when no schoolId filter is given, else the caller's own tenant. */
+  /** Read-only scope for the review/list side: cross-tenant for
+   * SUPER_ADMIN/ORG_ADMIN when no schoolId filter is given, else the
+   * caller's own tenant. */
   private async readScope(user: AuthUser, schoolId?: string): Promise<{ tenantId?: string; schoolId?: string }> {
-    if (user.role === Role.SUPER_ADMIN) return { schoolId };
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) return { schoolId };
     const { tenantId } = currentTenant();
     return { tenantId, schoolId };
   }
@@ -344,7 +345,10 @@ export class PortionService {
   async review(id: string, dto: ReviewPortionReportDto, user: AuthUser) {
     const existing = await this.prisma.portionReport.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Portion report not found");
-    if (user.role !== Role.SUPER_ADMIN && existing.tenantId !== currentTenant().tenantId) {
+    if (
+      user.role !== Role.SUPER_ADMIN && user.role !== Role.ORG_ADMIN
+      && existing.tenantId !== currentTenant().tenantId
+    ) {
       throw new NotFoundException("Portion report not found");
     }
     return this.prisma.portionReport.update({
