@@ -1,5 +1,5 @@
 "use client";
-import { Bell, KeyRound, LogOut, MessageSquare, Mic, MicOff, Moon, Search, Sun, WifiOff } from "lucide-react";
+import { Bell, KeyRound, LogOut, Menu, MessageSquare, Mic, MicOff, Moon, Search, Sun, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/api";
@@ -137,7 +137,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const [dark, setDark] = useState(false);
@@ -273,6 +273,13 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-slate-200/70 dark:border-white/5 bg-white/70 dark:bg-night/70 backdrop-blur px-4 md:px-8">
+      <button
+        aria-label="Open menu"
+        onClick={onMenuClick}
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl hover:bg-black/5 dark:hover:bg-white/10 md:hidden"
+      >
+        <Menu size={20} />
+      </button>
       <div ref={searchRef} className="relative flex-1 max-w-md">
         <label className="relative block">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight, X, type LucideIcon } from "lucide-react";
 import {
   Home, User, Users, UserCheck, Shield, Book, CalendarCheck2, ClipboardList, Percent,
   MessageSquare, Image as ImageIcon, Mail, Monitor, Wallet, Box, Package, LogOut, Heart,
@@ -89,7 +89,7 @@ function Group({ group, path }: { group: NavGroup; path: string }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const path = usePathname();
   const [role, setRole] = useState<Role | null>(null);
   useEffect(() => {
@@ -97,25 +97,56 @@ export function Sidebar() {
   }, []);
   const nav = filterNav(NAV, role);
 
+  // Closes the mobile drawer on every navigation (desktop is unaffected —
+  // the aside is always visible there regardless of `open`).
+  useEffect(() => { onClose(); }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [open, onClose]);
+
   return (
-    <aside className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar text-slate-300">
-      <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
-        <img
-          src="/creaspark-logo.png"
-          alt="Creaspark logo"
-          className="h-[34px] w-[34px] rounded-[9px] bg-white object-cover p-0.5"
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-night/50 md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
         />
-        <span className="font-display text-[15px] font-semibold tracking-wide text-white">
-          Creaspark<span className="align-super text-[10px] text-accent">™</span>
-        </span>
-      </div>
-      <nav
-        aria-label="Main"
-        className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.15)_transparent]"
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col bg-sidebar text-slate-300
+          transition-transform duration-200 md:static md:z-auto md:translate-x-0
+          ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
-        {nav.map((g) => <Group key={g.label} group={g} path={path} />)}
-      </nav>
-      <p className="shrink-0 px-6 py-4 text-xs text-slate-500">Creaspark Demo School · 2026–27</p>
-    </aside>
+        <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
+          <img
+            src="/creaspark-logo.png"
+            alt="Creaspark logo"
+            className="h-[34px] w-[34px] rounded-[9px] bg-white object-cover p-0.5"
+          />
+          <span className="font-display text-[15px] font-semibold tracking-wide text-white">
+            Creaspark<span className="align-super text-[10px] text-accent">™</span>
+          </span>
+          <button
+            aria-label="Close menu"
+            onClick={onClose}
+            className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white md:hidden"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <nav
+          aria-label="Main"
+          className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.15)_transparent]"
+        >
+          {nav.map((g) => <Group key={g.label} group={g} path={path} />)}
+        </nav>
+        <p className="shrink-0 px-6 py-4 text-xs text-slate-500">Creaspark Demo School · 2026–27</p>
+      </aside>
+    </>
   );
 }
