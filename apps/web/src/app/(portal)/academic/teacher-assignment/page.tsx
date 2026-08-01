@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Modal, ConfirmDialog, inputCls } from "@/components/ui/modal";
+import { Modal, RowActions, inputCls } from "@/components/ui/modal";
 
 interface SchoolOpt { id: string; name: string }
 interface ClassOpt { id: string; name: string; schoolId: string }
@@ -151,6 +151,109 @@ function BulkAssignModal({ schools, onClose, onDone }: {
   );
 }
 
+/** Per-division editor, opened from a row's View/Edit action — the old
+ * division-picker-then-grid flow required three dropdowns before any
+ * current assignment was even visible; this opens straight from the row
+ * that was clicked and shows every subject's current teacher at once,
+ * matching the Subjects page's table-of-badges-then-modal-to-edit pattern. */
+function AssignmentEditorModal({ title, sectionId, subjects, teachers, assignments, canManage, onClose, onSaved }: {
+  title: string; sectionId: string; subjects: SubjectOpt[]; teachers: TeacherOpt[]; assignments: Assignment[];
+  canManage: boolean; onClose: () => void; onSaved: (msg: string) => void;
+}) {
+  const [pending, setPending] = useState<Record<string, string>>(() => {
+    const seed: Record<string, string> = {};
+    for (const a of assignments) seed[a.subject.id] = a.teacher.id;
+    return seed;
+  });
+  const [saving, setSaving] = useState(false);
+
+  const changes = subjects.filter((sub) => {
+    const current = assignments.find((a) => a.subject.id === sub.id);
+    return (current?.teacher.id ?? "") !== (pending[sub.id] ?? "");
+  });
+
+  async function save() {
+    if (changes.length === 0) return;
+    setSaving(true);
+    const results = await Promise.allSettled(
+      changes.map((sub) => {
+        const current = assignments.find((a) => a.subject.id === sub.id);
+        const nextTeacherId = pending[sub.id] ?? "";
+        return nextTeacherId
+          ? api("/teacher-assignments", {
+              method: "POST",
+              body: JSON.stringify({ sectionId, subjectId: sub.id, teacherId: nextTeacherId }),
+            })
+          : api(`/teacher-assignments/${current!.id}`, { method: "DELETE" });
+      }),
+    );
+    setSaving(false);
+    const failed = results.filter((r) => r.status === "rejected").length;
+    onSaved(failed === 0
+      ? `${changes.length} change${changes.length === 1 ? "" : "s"} saved`
+      : `${changes.length - failed} saved, ${failed} failed`);
+  }
+
+  return (
+    <Modal title={title} onClose={onClose} wide>
+      <div className="space-y-4">
+        {subjects.length === 0 ? (
+          <p className="text-sm text-slate-500">No subjects registered for this school yet.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-slate-100 dark:border-white/5">
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Teacher</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subjects.map((sub) => {
+                  const current = assignments.find((a) => a.subject.id === sub.id);
+                  const changed = (current?.teacher.id ?? "") !== (pending[sub.id] ?? "");
+                  return (
+                    <tr key={sub.id} className="border-b border-slate-50 dark:border-white/5">
+                      <td className="px-4 py-3 font-medium text-night dark:text-white">
+                        {sub.name}
+                        {changed && <span className="ml-2 text-xs font-normal text-accent">Unsaved</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={pending[sub.id] ?? ""}
+                          onChange={(e) => setPending((prev) => ({ ...prev, [sub.id]: e.target.value }))}
+                          disabled={saving || !canManage}
+                          aria-label={`Teacher for ${sub.name}`}
+                          className={`${inputCls} h-10`}
+                        >
+                          <option value="">Unassigned</option>
+                          {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3">
+          {changes.length > 0 && (
+            <span className="text-xs text-slate-500">{changes.length} unsaved change{changes.length === 1 ? "" : "s"}</span>
+          )}
+          <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
+          {canManage && (
+            <Button type="button" onClick={save} disabled={saving || changes.length === 0}>
+              {saving ? "Saving…" : "Save Changes"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function TeacherAssignmentPage() {
   const [schools, setSchools] = useState<SchoolOpt[]>([]);
   const [classes, setClasses] = useState<ClassOpt[]>([]);
@@ -160,20 +263,8 @@ export default function TeacherAssignmentPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   const [schoolId, setSchoolId] = useState("");
-  const [classId, setClassId] = useState("");
-  const [sectionId, setSectionId] = useState("");
-  // Draft teacher picks for the grid below, keyed by subjectId — kept
-  // separate from `assignments` so each subject's pick stays independent
-  // until Save is pressed, instead of writing to the server (and to every
-  // other row's rendered value) on every single dropdown change.
-  const [pending, setPending] = useState<Record<string, string>>({});
-  const [savingGrid, setSavingGrid] = useState(false);
-  // Same draft pattern for the "All Assignments" table, keyed by assignment.id.
-  const [pendingAll, setPendingAll] = useState<Record<string, string>>({});
-  const [savingAllTable, setSavingAllTable] = useState(false);
+  const [editingSection, setEditingSection] = useState<SectionOpt | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [removing, setRemoving] = useState<Assignment | null>(null);
-  const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
   const canManage = myRole !== null && MANAGE_ROLES.includes(myRole);
@@ -194,102 +285,57 @@ export default function TeacherAssignmentPage() {
     api<SubjectOpt[]>(`/academic/subjects?schoolId=${schoolId}`).then(setSubjects).catch(() => setSubjects([]));
     api<TeacherOpt[]>(`/teachers?schoolId=${schoolId}&activeOnly=true`).then(setTeachers).catch(() => setTeachers([]));
     reloadAssignments();
-    setClassId(""); setSectionId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
-
-  useEffect(() => { if (!classId && classes[0]) setClassId(classes[0].id); }, [classes, classId]);
-
-  const sectionsForClass = sections.filter((s) => s.classId === classId);
-  useEffect(() => { if (!sectionId && sectionsForClass[0]) setSectionId(sectionsForClass[0].id); }, [sectionsForClass, sectionId]);
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
 
-  const currentAssignments = assignments.filter((a) => a.section.id === sectionId);
+  const divisions = sections
+    .map((s) => ({ section: s, className: classes.find((c) => c.id === s.classId)?.name ?? "—" }))
+    .sort((a, b) => a.className.localeCompare(b.className) || a.section.name.localeCompare(b.section.name));
 
-  // Re-seed the draft grid from the server's own truth whenever the division
-  // changes (a fresh draft per division) or assignments are reloaded (e.g.
-  // after Save) — never on every keystroke/selection, so in-progress picks
-  // for other subjects in the same grid aren't wiped out mid-edit.
-  useEffect(() => {
-    const seed: Record<string, string> = {};
-    for (const a of assignments) {
-      if (a.section.id === sectionId) seed[a.subject.id] = a.teacher.id;
-    }
-    setPending(seed);
-  }, [sectionId, assignments]);
-
-  const gridChanges = subjects.filter((sub) => {
-    const current = currentAssignments.find((a) => a.subject.id === sub.id);
-    return (current?.teacher.id ?? "") !== (pending[sub.id] ?? "");
-  });
-
-  async function saveGrid() {
-    if (gridChanges.length === 0) return;
-    setSavingGrid(true);
-    const results = await Promise.allSettled(
-      gridChanges.map((sub) => {
-        const current = currentAssignments.find((a) => a.subject.id === sub.id);
-        const nextTeacherId = pending[sub.id] ?? "";
-        return nextTeacherId
-          ? api("/teacher-assignments", {
-              method: "POST",
-              body: JSON.stringify({ sectionId, subjectId: sub.id, teacherId: nextTeacherId }),
-            })
-          : api(`/teacher-assignments/${current!.id}`, { method: "DELETE" });
-      }),
+  // Teachers get a flat list of just their own assignments (the backend
+  // already scopes /teacher-assignments to the caller for this role) rather
+  // than the admin-facing school/division browser below, which would show
+  // every subject at the school as "Unassigned" except the ones this
+  // teacher happens to teach — misleading for someone who isn't managing
+  // the whole school's roster.
+  if (myRole === "TEACHER") {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-display text-2xl font-semibold text-night dark:text-white">My Assignments</h1>
+          <p className="mt-1 text-sm text-slate-500">Every subject and class/division you&apos;re assigned to teach.</p>
+        </div>
+        <Card className="p-0 overflow-hidden">
+          {assignments.length === 0 ? (
+            <p className="p-6 text-sm text-slate-500">No classes assigned to you yet.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-slate-100 dark:border-white/5">
+                  <th className="px-4 py-3 font-medium">Class</th>
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignments.map((a) => (
+                  <tr key={a.id} className="border-b border-slate-50 dark:border-white/5">
+                    <td className="px-4 py-3 text-slate-500">{a.section.class.name} · {a.section.name}</td>
+                    <td className="px-4 py-3 font-medium text-night dark:text-white">{a.subject.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+        {toast && (
+          <div role="status" className="fixed bottom-6 right-6 z-50 rounded-xl bg-night px-4 py-3 text-sm text-white shadow-lift">
+            {toast}
+          </div>
+        )}
+      </div>
     );
-    setSavingGrid(false);
-    reloadAssignments();
-    const failed = results.filter((r) => r.status === "rejected").length;
-    const count = gridChanges.length;
-    setToast(failed === 0
-      ? `${count} change${count === 1 ? "" : "s"} saved`
-      : `${count - failed} saved, ${failed} failed`);
-  }
-
-  // Draft picks for the "All Assignments" table, reset whenever the
-  // underlying data is reloaded (e.g. after this table's own Save, or a
-  // Bulk Assign) so it always starts from the server's own truth.
-  useEffect(() => {
-    const seed: Record<string, string> = {};
-    for (const a of assignments) seed[a.id] = a.teacher.id;
-    setPendingAll(seed);
-  }, [assignments]);
-
-  const allChanges = assignments.filter((a) => (pendingAll[a.id] ?? a.teacher.id) !== a.teacher.id);
-
-  async function saveAllTable() {
-    if (allChanges.length === 0) return;
-    setSavingAllTable(true);
-    const results = await Promise.allSettled(
-      allChanges.map((a) => api("/teacher-assignments", {
-        method: "POST",
-        body: JSON.stringify({ sectionId: a.section.id, subjectId: a.subject.id, teacherId: pendingAll[a.id] }),
-      })),
-    );
-    setSavingAllTable(false);
-    reloadAssignments();
-    const failed = results.filter((r) => r.status === "rejected").length;
-    const count = allChanges.length;
-    setToast(failed === 0
-      ? `${count} change${count === 1 ? "" : "s"} saved`
-      : `${count - failed} saved, ${failed} failed`);
-  }
-
-  async function confirmRemove() {
-    if (!removing) return;
-    setBusy(true);
-    try {
-      await api(`/teacher-assignments/${removing.id}`, { method: "DELETE" });
-      setAssignments((prev) => prev.filter((x) => x.id !== removing.id));
-      setRemoving(null);
-      setToast("Removed");
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : "Could not remove");
-      setRemoving(null);
-    } finally {
-      setBusy(false);
-    }
   }
 
   return (
@@ -298,176 +344,92 @@ export default function TeacherAssignmentPage() {
         <div>
           <h1 className="font-display text-2xl font-semibold text-night dark:text-white">Assign Subjects &amp; Teachers</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {canManage ? "Choose a school, class and division, then pick who teaches each subject." : "Read-only — you don't have permission to change assignments."}
+            {canManage ? "Pick a school, then open a class/division to assign who teaches each subject." : "Read-only — you don't have permission to change assignments."}
           </p>
         </div>
         {canManage && <Button onClick={() => setBulkOpen(true)}><Plus size={16} /> Bulk Assign</Button>}
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <select
-          value={schoolId} onChange={(e) => setSchoolId(e.target.value)}
-          aria-label="School" className={`${inputCls} max-w-xs`}
-        >
-          {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <select
-          value={classId} onChange={(e) => setClassId(e.target.value)}
-          aria-label="Class" className={`${inputCls} max-w-xs`}
-        >
-          <option value="" disabled>Select a class…</option>
-          {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select
-          value={sectionId} onChange={(e) => setSectionId(e.target.value)}
-          aria-label="Division" disabled={!classId} className={`${inputCls} max-w-xs`}
-        >
-          <option value="" disabled>Select a division…</option>
-          {sectionsForClass.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </div>
+      <select
+        value={schoolId} onChange={(e) => setSchoolId(e.target.value)}
+        aria-label="School" className={`${inputCls} max-w-xs`}
+      >
+        {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
 
       <Card className="p-0 overflow-hidden">
-        {!sectionId ? (
-          <p className="p-6 text-sm text-slate-500">Choose a school, class and division to assign teachers.</p>
-        ) : subjects.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">No subjects registered for this school yet.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <tr className="border-b border-slate-100 dark:border-white/5">
-                <th className="px-4 py-3 font-medium">Subject</th>
-                <th className="px-4 py-3 font-medium">Teacher</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subjects.map((sub) => {
-                const current = currentAssignments.find((a) => a.subject.id === sub.id);
-                const changed = (current?.teacher.id ?? "") !== (pending[sub.id] ?? "");
-                return (
-                  <tr key={sub.id} className="border-b border-slate-50 dark:border-white/5">
-                    <td className="px-4 py-3 font-medium text-night dark:text-white">
-                      {sub.name}
-                      {changed && <span className="ml-2 text-xs font-normal text-accent">Unsaved</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={pending[sub.id] ?? ""}
-                        onChange={(e) => setPending((prev) => ({ ...prev, [sub.id]: e.target.value }))}
-                        disabled={savingGrid || !canManage}
-                        aria-label={`Teacher for ${sub.name}`}
-                        className={`${inputCls} max-w-xs`}
-                      >
-                        <option value="">Unassigned</option>
-                        {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
-                      </select>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        {canManage && sectionId && subjects.length > 0 && (
-          <div className="flex items-center justify-end gap-3 border-t border-slate-100 dark:border-white/5 px-4 py-3">
-            {gridChanges.length > 0 && (
-              <span className="text-xs text-slate-500">
-                {gridChanges.length} unsaved change{gridChanges.length === 1 ? "" : "s"}
-              </span>
-            )}
-            <Button onClick={saveGrid} disabled={savingGrid || gridChanges.length === 0}>
-              {savingGrid ? "Saving…" : "Save Changes"}
-            </Button>
-          </div>
-        )}
-      </Card>
-
-      <div>
-        <h2 className="font-display text-lg font-semibold text-night dark:text-white">{myRole === "TEACHER" ? "My Assignments" : "All Assignments"}</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          {myRole === "TEACHER"
-            ? "Every subject and class/division you're assigned to teach."
-            : "Every subject-teacher assignment at this school, across all classes and divisions."}
-        </p>
-      </div>
-
-      <Card className="p-0 overflow-hidden">
-        {assignments.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">{myRole === "TEACHER" ? "No classes assigned to you yet." : "No assignments yet at this school."}</p>
+        {divisions.length === 0 ? (
+          <p className="p-6 text-sm text-slate-500">No classes or divisions registered for this school yet.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
               <tr className="border-b border-slate-100 dark:border-white/5">
                 <th className="px-4 py-3 font-medium">Class</th>
-                <th className="px-4 py-3 font-medium">Subject</th>
-                <th className="px-4 py-3 font-medium">Teacher</th>
-                {canManage && <th className="px-4 py-3 text-right font-medium">Actions</th>}
+                <th className="px-4 py-3 font-medium">Division</th>
+                <th className="px-4 py-3 font-medium">Subjects</th>
+                <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {assignments.map((a) => {
-                const changed = (pendingAll[a.id] ?? a.teacher.id) !== a.teacher.id;
+              {divisions.map(({ section, className }) => {
+                const sectionAssignments = assignments.filter((a) => a.section.id === section.id);
                 return (
-                  <tr key={a.id} className="border-b border-slate-50 dark:border-white/5">
-                    <td className="px-4 py-3 text-slate-500">{a.section.class.name} · {a.section.name}</td>
-                    <td className="px-4 py-3 font-medium text-night dark:text-white">
-                      {a.subject.name}
-                      {changed && <span className="ml-2 text-xs font-normal text-accent">Unsaved</span>}
+                  <tr key={section.id} className="border-b border-slate-50 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
+                    <td className="px-4 py-3 font-medium text-night dark:text-white">{className}</td>
+                    <td className="px-4 py-3 text-slate-500">{section.name}</td>
+                    <td className="px-4 py-3">
+                      {subjects.length === 0 ? (
+                        <span className="text-slate-400">No subjects</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {subjects.map((sub) => {
+                            const assigned = sectionAssignments.find((a) => a.subject.id === sub.id);
+                            return (
+                              <span
+                                key={sub.id}
+                                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                  assigned ? "bg-accent/10 text-accent" : "bg-slate-100 text-slate-400 dark:bg-white/5 dark:text-slate-500"
+                                }`}
+                              >
+                                {sub.name}{assigned ? ` — ${assigned.teacher.fullName}` : " — Unassigned"}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <select
-                        value={pendingAll[a.id] ?? a.teacher.id}
-                        onChange={(e) => setPendingAll((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                        disabled={savingAllTable || !canManage}
-                        aria-label={`Teacher for ${a.subject.name} in ${a.section.class.name} ${a.section.name}`}
-                        className={`${inputCls} h-10 max-w-xs`}
-                      >
-                        {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
-                      </select>
+                      <RowActions
+                        onView={() => setEditingSection(section)}
+                        onEdit={canManage ? () => setEditingSection(section) : undefined}
+                      />
                     </td>
-                    {canManage && (
-                      <td className="px-4 py-3 text-right">
-                        <button onClick={() => setRemoving(a)} aria-label="Remove assignment" title="Remove"
-                          className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-danger/10 hover:text-danger">
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    )}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         )}
-        {canManage && assignments.length > 0 && (
-          <div className="flex items-center justify-end gap-3 border-t border-slate-100 dark:border-white/5 px-4 py-3">
-            {allChanges.length > 0 && (
-              <span className="text-xs text-slate-500">
-                {allChanges.length} unsaved change{allChanges.length === 1 ? "" : "s"}
-              </span>
-            )}
-            <Button onClick={saveAllTable} disabled={savingAllTable || allChanges.length === 0}>
-              {savingAllTable ? "Saving…" : "Save Changes"}
-            </Button>
-          </div>
-        )}
       </Card>
+
+      {editingSection && (
+        <AssignmentEditorModal
+          title={`${classes.find((c) => c.id === editingSection.classId)?.name ?? "—"} · ${editingSection.name}`}
+          sectionId={editingSection.id}
+          subjects={subjects}
+          teachers={teachers}
+          assignments={assignments.filter((a) => a.section.id === editingSection.id)}
+          canManage={canManage}
+          onClose={() => setEditingSection(null)}
+          onSaved={(msg) => { setEditingSection(null); reloadAssignments(); setToast(msg); }}
+        />
+      )}
 
       {bulkOpen && (
         <BulkAssignModal
           schools={schools}
           onClose={() => setBulkOpen(false)}
           onDone={(msg) => { setBulkOpen(false); reloadAssignments(); setToast(msg); }}
-        />
-      )}
-
-      {removing && (
-        <ConfirmDialog
-          title="Remove assignment?"
-          message={`This unassigns ${removing.teacher.fullName} from ${removing.subject.name} in ${removing.section.class.name} · ${removing.section.name}.`}
-          onConfirm={confirmRemove}
-          onClose={() => setRemoving(null)}
-          busy={busy}
         />
       )}
 
