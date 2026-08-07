@@ -272,6 +272,8 @@ export default function TasksPage() {
   const [status, setStatus] = useState("");
   const [creating, setCreating] = useState(false);
   const [viewing, setViewing] = useState<TaskRow | null>(null);
+  const [deletingRow, setDeletingRow] = useState<TaskRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const isManager = !!me && MANAGE_ROLES.includes(me.role);
@@ -290,6 +292,22 @@ export default function TasksPage() {
   }, []);
   useEffect(load, [load]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
+
+  async function confirmDeleteRow() {
+    if (!deletingRow) return;
+    setDeleteBusy(true);
+    try {
+      await api(`/tasks/${deletingRow.id}`, { method: "DELETE" });
+      setToast("Task deleted");
+      setDeletingRow(null);
+      load();
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not delete");
+      setDeletingRow(null);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -351,7 +369,11 @@ export default function TasksPage() {
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLS[row.status]}`}>{STATUS_LABEL[row.status]}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <RowActions onView={() => setViewing(row)} />
+                      <RowActions
+                        onView={() => setViewing(row)}
+                        onEdit={isManager ? () => setViewing(row) : undefined}
+                        onDelete={isManager ? () => setDeletingRow(row) : undefined}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -371,6 +393,16 @@ export default function TasksPage() {
           onClose={() => setViewing(null)}
           onSaved={() => { setViewing(null); setToast("Task updated"); load(); }}
           onDeleted={() => { setViewing(null); setToast("Task deleted"); load(); }}
+        />
+      )}
+
+      {deletingRow && (
+        <ConfirmDialog
+          title="Delete task?"
+          message={`Permanently remove "${deletingRow.serialNo} · ${deletingRow.subject}"?`}
+          onConfirm={confirmDeleteRow}
+          onClose={() => setDeletingRow(null)}
+          busy={deleteBusy}
         />
       )}
 
