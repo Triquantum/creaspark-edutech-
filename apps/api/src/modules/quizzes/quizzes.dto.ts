@@ -1,15 +1,27 @@
 import { IsArray, IsEnum, IsInt, IsObject, IsOptional, IsString, Min } from "class-validator";
-import { QuestionType } from "@educore/database";
+import { ContentStatus, QuestionType } from "@educore/database";
 
 export class CreateQuizDto {
-  @IsString() courseId: string;
+  @IsString() subjectId: string;
+  @IsString() schoolId: string;
+  @IsOptional() @IsString() classId?: string;
   @IsString() title: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsEnum(ContentStatus) status?: ContentStatus;
 }
 
 export class UpdateQuizDto {
+  @IsOptional() @IsString() subjectId?: string;
+  @IsOptional() @IsString() classId?: string;
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsEnum(ContentStatus) status?: ContentStatus;
+}
+
+export class QueryQuizzesDto {
+  @IsOptional() @IsString() subjectId?: string;
+  @IsOptional() @IsString() schoolId?: string;
+  @IsOptional() @IsString() classId?: string;
 }
 
 export class CreateQuestionDto {

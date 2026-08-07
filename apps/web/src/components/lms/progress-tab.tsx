@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
+import type { ContentContext } from "./lessons-tab";
 
 interface RosterEntry {
   studentId: string; firstName: string; lastName: string;
@@ -15,18 +16,25 @@ interface SelfProgress extends Omit<RosterEntry, "firstName" | "lastName"> {}
 interface RosterSummary { totalStudents: number; openedCount: number; triedCount: number }
 interface ProgressResponse { roster?: RosterEntry[]; self?: SelfProgress; summary?: RosterSummary }
 
-export function ProgressTab({ courseId, isManager }: { courseId: string; isManager: boolean }) {
+export function ProgressTab({ context, isManager }: { context: ContentContext; isManager: boolean }) {
   const [data, setData] = useState<ProgressResponse | null>(null);
 
   useEffect(() => {
-    api<ProgressResponse>(`/courses/${courseId}/progress`).then(setData).catch(() => setData(null));
-  }, [courseId]);
+    // schoolId/classId are required for a manager's roster view (the
+    // caller picks a school/class explicitly); STUDENT/PARENT omit both --
+    // the backend derives their own enrollment instead.
+    if (isManager && !context.schoolId) { setData({ roster: [] }); return; }
+    const params = new URLSearchParams({ subjectId: context.subjectId });
+    if (context.schoolId) params.set("schoolId", context.schoolId);
+    if (context.classId) params.set("classId", context.classId);
+    api<ProgressResponse>(`/lessons/progress?${params.toString()}`).then(setData).catch(() => setData(null));
+  }, [context.subjectId, context.schoolId, context.classId, isManager]);
 
   if (!data) return <p className="text-sm text-slate-500">Loading…</p>;
 
   if (isManager) {
     if (!data.roster || data.roster.length === 0) {
-      return <Card><p className="text-sm text-slate-500">Assign this course to a class to see roster progress.</p></Card>;
+      return <Card><p className="text-sm text-slate-500">Pick a class to see roster progress.</p></Card>;
     }
     return (
       <div className="space-y-4">

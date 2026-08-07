@@ -5,12 +5,13 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
+import type { ContentContext } from "./lessons-tab";
 
 export interface QuizRow { id: string; title: string; description: string | null; _count?: { questions: number } }
 interface Question { id: string; questionText: string; type: string; options: string[] | null; marks: number; correctAnswer?: string | null }
 interface Attempt { score: number | null }
 
-function CreateQuizModal({ courseId, onClose, onSaved }: { courseId: string; onClose: () => void; onSaved: () => void }) {
+function CreateQuizModal({ context, onClose, onSaved }: { context: ContentContext; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ title: "", description: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,7 @@ function CreateQuizModal({ courseId, onClose, onSaved }: { courseId: string; onC
     setError(null);
     setBusy(true);
     try {
-      await api("/quizzes", { method: "POST", body: JSON.stringify({ courseId, title: form.title.trim(), description: form.description.trim() || undefined }) });
+      await api("/quizzes", { method: "POST", body: JSON.stringify({ ...context, title: form.title.trim(), description: form.description.trim() || undefined }) });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create quiz");
@@ -207,8 +208,8 @@ function TakeQuizModal({ quizId, onClose, onSaved }: { quizId: string; onClose: 
   );
 }
 
-export function QuizzesTab({ courseId, quizzes, isManager, onChanged }: {
-  courseId: string; quizzes: QuizRow[]; isManager: boolean; onChanged: () => void;
+export function QuizzesTab({ context, quizzes, isManager, onChanged }: {
+  context: ContentContext; quizzes: QuizRow[]; isManager: boolean; onChanged: () => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState<QuizRow | null>(null);
@@ -231,7 +232,7 @@ export function QuizzesTab({ courseId, quizzes, isManager, onChanged }: {
           </Card>
         ))
       )}
-      {creating && <CreateQuizModal courseId={courseId} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); onChanged(); }} />}
+      {creating && <CreateQuizModal context={context} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); onChanged(); }} />}
       {managing && <ManageQuizModal quiz={managing} onClose={() => setManaging(null)} onChanged={onChanged} />}
       {taking && <TakeQuizModal quizId={taking} onClose={() => setTaking(null)} onSaved={() => { setTaking(null); onChanged(); }} />}
     </div>

@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { BookOpen } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -149,11 +151,21 @@ export default function SubjectsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <RowActions
-                      onView={() => openDialog({ mode: "edit", row })}
-                      onEdit={canManage ? () => openDialog({ mode: "edit", row }) : undefined}
-                      onDelete={canManage ? () => setDeleting(row) : undefined}
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/academic/subject/${row.id}/content`}
+                        aria-label={`Manage ${row.name} content`}
+                        title="Lessons, assignments & quizzes"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-black/5 hover:text-night dark:hover:bg-white/10 dark:hover:text-white transition-colors"
+                      >
+                        <BookOpen size={15} />
+                      </Link>
+                      <RowActions
+                        onView={() => openDialog({ mode: "edit", row })}
+                        onEdit={canManage ? () => openDialog({ mode: "edit", row }) : undefined}
+                        onDelete={canManage ? () => setDeleting(row) : undefined}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

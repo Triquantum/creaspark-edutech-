@@ -1,46 +1,65 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { CourseStatus, QuestionType, Role } from "@educore/database";
+import { ContentStatus, QuestionType, Role } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { resolveViewableStudentId } from "../../common/access/student-access";
-import { ADMIN_ROLES } from "../courses/courses.service";
-import { CreateQuizDto, UpdateQuizDto, CreateQuestionDto, UpdateQuestionDto, SubmitAttemptDto } from "./quizzes.dto";
+import { canManageContent, teacherSchool, studentClass } from "../../common/access/content-access";
+import { CreateQuizDto, UpdateQuizDto, QueryQuizzesDto, CreateQuestionDto, UpdateQuestionDto, SubmitAttemptDto } from "./quizzes.dto";
 
 @Injectable()
 export class QuizzesService {
   constructor(private prisma: PrismaService) {}
 
-  private canManageCourse(user: AuthUser, course: { teacherId: string }): boolean {
-    if ((ADMIN_ROLES as readonly string[]).includes(user.role)) return true;
-    return user.role === Role.TEACHER && course.teacherId === user.id;
+  private contentWhere(user: AuthUser, query: { subjectId?: string; schoolId?: string; classId?: string }) {
+    const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
+    return {
+      ...(!crossTenant && { tenantId: currentTenant().tenantId }),
+      ...(query.subjectId && { subjectId: query.subjectId }),
+      ...(query.schoolId && { schoolId: query.schoolId }),
+      ...(query.classId && { OR: [{ classId: null }, { classId: query.classId }] }),
+      ...(user.role === Role.TEACHER && { teacherId: user.id }),
+    };
   }
 
-  private async requireCourseAccess(courseId: string, user: AuthUser) {
-    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
-    if (!course || course.tenantId !== currentTenant().tenantId) throw new NotFoundException("Course not found");
-    const managed = this.canManageCourse(user, course);
-    if (!managed && course.status !== CourseStatus.PUBLISHED) throw new NotFoundException("Course not found");
-    return { course, managed };
-  }
-
-  async listForCourse(courseId: string, user: AuthUser) {
-    await this.requireCourseAccess(courseId, user);
-    return this.prisma.quiz.findMany({ where: { courseId }, include: { _count: { select: { questions: true } } }, orderBy: { createdAt: "desc" } });
+  async list(user: AuthUser, query: QueryQuizzesDto) {
+    if (user.role === Role.STUDENT || user.role === Role.PARENT) {
+      const studentId = await resolveViewableStudentId(this.prisma, user);
+      const { schoolId, classId } = await studentClass(this.prisma, studentId);
+      return this.prisma.quiz.findMany({
+        where: {
+          tenantId: currentTenant().tenantId, schoolId, status: ContentStatus.PUBLISHED,
+          ...(query.subjectId && { subjectId: query.subjectId }),
+          OR: [{ classId: null }, ...(classId ? [{ classId }] : [])],
+        },
+        include: { _count: { select: { questions: true } } },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+    return this.prisma.quiz.findMany({
+      where: this.contentWhere(user, query),
+      include: { _count: { select: { questions: true } } },
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   async create(dto: CreateQuizDto, user: AuthUser) {
-    const { course, managed } = await this.requireCourseAccess(dto.courseId, user);
-    if (!managed) throw new ForbiddenException("Only the course's teacher or school management can add quizzes");
-    return this.prisma.quiz.create({ data: { tenantId: course.tenantId, courseId: dto.courseId, title: dto.title, description: dto.description } });
+    const { tenantId, schoolId } = await teacherSchool(this.prisma, user.id);
+    if (dto.schoolId !== schoolId) throw new NotFoundException("School not found in your organization");
+    return this.prisma.quiz.create({
+      data: {
+        tenantId, schoolId, subjectId: dto.subjectId, classId: dto.classId, teacherId: user.id,
+        title: dto.title, description: dto.description, status: dto.status ?? ContentStatus.DRAFT,
+      },
+    });
   }
 
   private async findQuiz(id: string) {
     const quiz = await this.prisma.quiz.findUnique({
       where: { id },
-      include: { course: true, questions: { orderBy: { order: "asc" } } },
+      include: { questions: { orderBy: { order: "asc" } } },
     });
-    if (!quiz || quiz.course.tenantId !== currentTenant().tenantId) throw new NotFoundException("Quiz not found");
+    if (!quiz || quiz.tenantId !== currentTenant().tenantId) throw new NotFoundException("Quiz not found");
     return quiz;
   }
 
@@ -48,7 +67,7 @@ export class QuizzesService {
    * questions without answers, plus their own attempt if they've taken it. */
   async get(id: string, user: AuthUser, studentId?: string) {
     const quiz = await this.findQuiz(id);
-    if (this.canManageCourse(user, quiz.course)) {
+    if (canManageContent(user, quiz)) {
       const attempts = await this.prisma.quizAttempt.findMany({
         where: { quizId: id },
         include: { student: { select: { firstName: true, lastName: true, admissionNo: true } } },
@@ -56,7 +75,7 @@ export class QuizzesService {
       });
       return { ...quiz, attempts };
     }
-    if (quiz.course.status !== CourseStatus.PUBLISHED) throw new NotFoundException("Quiz not found");
+    if (quiz.status !== ContentStatus.PUBLISHED) throw new NotFoundException("Quiz not found");
     const resolvedStudentId = await resolveViewableStudentId(this.prisma, user, studentId);
     const myAttempt = await this.prisma.quizAttempt.findUnique({ where: { quizId_studentId: { quizId: id, studentId: resolvedStudentId } } });
     return {
@@ -66,22 +85,25 @@ export class QuizzesService {
     };
   }
 
-  async update(id: string, dto: UpdateQuizDto, user: AuthUser) {
+  private async requireManage(id: string, user: AuthUser) {
     const quiz = await this.findQuiz(id);
-    if (!this.canManageCourse(user, quiz.course)) throw new NotFoundException("Quiz not found");
+    if (!canManageContent(user, quiz)) throw new NotFoundException("Quiz not found");
+    return quiz;
+  }
+
+  async update(id: string, dto: UpdateQuizDto, user: AuthUser) {
+    await this.requireManage(id, user);
     return this.prisma.quiz.update({ where: { id }, data: dto });
   }
 
   async remove(id: string, user: AuthUser) {
-    const quiz = await this.findQuiz(id);
-    if (!this.canManageCourse(user, quiz.course)) throw new NotFoundException("Quiz not found");
+    await this.requireManage(id, user);
     await this.prisma.quiz.delete({ where: { id } });
     return { deleted: true };
   }
 
   async addQuestion(quizId: string, dto: CreateQuestionDto, user: AuthUser) {
-    const quiz = await this.findQuiz(quizId);
-    if (!this.canManageCourse(user, quiz.course)) throw new NotFoundException("Quiz not found");
+    const quiz = await this.requireManage(quizId, user);
     return this.prisma.quizQuestion.create({
       data: {
         tenantId: quiz.tenantId, quizId, questionText: dto.questionText, type: dto.type ?? QuestionType.MCQ,
@@ -91,8 +113,8 @@ export class QuizzesService {
   }
 
   private async requireManageQuestion(questionId: string, user: AuthUser) {
-    const question = await this.prisma.quizQuestion.findUnique({ where: { id: questionId }, include: { quiz: { include: { course: true } } } });
-    if (!question || !this.canManageCourse(user, question.quiz.course)) throw new NotFoundException("Question not found");
+    const question = await this.prisma.quizQuestion.findUnique({ where: { id: questionId }, include: { quiz: true } });
+    if (!question || !canManageContent(user, question.quiz)) throw new NotFoundException("Question not found");
     return question;
   }
 
@@ -112,7 +134,7 @@ export class QuizzesService {
   async submitAttempt(quizId: string, dto: SubmitAttemptDto, user: AuthUser) {
     if (user.role !== Role.STUDENT) throw new ForbiddenException("Only students can take quizzes");
     const quiz = await this.findQuiz(quizId);
-    if (quiz.course.status !== CourseStatus.PUBLISHED) throw new NotFoundException("Quiz not found");
+    if (quiz.status !== ContentStatus.PUBLISHED) throw new NotFoundException("Quiz not found");
     const studentId = await resolveViewableStudentId(this.prisma, user);
 
     const score = quiz.questions.reduce((total, q) => {

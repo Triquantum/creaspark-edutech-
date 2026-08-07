@@ -71,7 +71,10 @@ model School {
   visitors      Visitor[]
   academicYears AcademicYear[]
   portionReports PortionReport[]
-  courses       Course[]
+  lessons       Lesson[]
+  assignments   Assignment[]
+  quizzes       Quiz[]
+  subjectViews  SubjectView[]
   subjects      Subject[]
   media         MediaItem[]
   inventoryItems InventoryItem[]
@@ -123,7 +126,9 @@ model User {
   announcementReads AnnouncementRead[]
   portionReportsSubmitted PortionReport[] @relation("PortionReportsByTeacher")
   portionReportsReviewed  PortionReport[] @relation("PortionReportsReviewed")
-  coursesTaught           Course[] @relation("CoursesTaught")
+  lessonsAuthored         Lesson[] @relation("LessonsAuthored")
+  assignmentsAuthored     Assignment[] @relation("AssignmentsAuthored")
+  quizzesAuthored         Quiz[] @relation("QuizzesAuthored")
   teacherAssignments      TeacherAssignment[] @relation("TeacherAssignments")
 
   @@index([tenantId, role])
@@ -177,7 +182,10 @@ model Class {
   name     String                           // "Grade 6"
   sections Section[]
   portionReports PortionReport[]
-  courses  Course[]
+  lessons     Lesson[]
+  assignments Assignment[]
+  quizzes     Quiz[]
+  subjectViews SubjectView[]
 
   @@unique([schoolId, name])
   @@index([tenantId])
@@ -234,7 +242,10 @@ model Subject {
   schools  School[]                        // schools/colleges/institutes this subject is assigned to (cross-tenant)
   exams    ExamSubject[]
   portionReports PortionReport[]
-  courses  Course[]
+  lessons     Lesson[]
+  assignments Assignment[]
+  quizzes     Quiz[]
+  subjectViews SubjectView[]
   teacherAssignments TeacherAssignment[]
 
   @@index([tenantId])
@@ -296,7 +307,7 @@ model Student {
   lessonCompletions      LessonCompletion[]
   assignmentSubmissions  Submission[]
   quizAttempts           QuizAttempt[]
-  courseViews            CourseView[]
+  subjectViews           SubjectView[]
 
   @@unique([schoolId, admissionNo])
   @@index([tenantId, schoolId, sectionId])
@@ -723,38 +734,16 @@ enum PortionCompletionStatus {
 }
 
 // ────────────────────────── LMS ──────────────────────────
-// A Course is scoped to a school and, optionally, one class (null = whole
-// school) — mirrors how PortionReport/Announcement already target either a
-// specific class or the broader school. Publishing gates student visibility;
-// teachers see and edit their own DRAFT courses freely.
+// Lesson/Assignment/Quiz content lives directly on a Subject, scoped to a
+// school and, optionally, one class (null = whole school), and to the
+// teacher who authored it — mirrors how PortionReport/Announcement already
+// target either a specific class or the broader school. Each item publishes
+// independently (no shared course-level gate); teachers see and edit their
+// own DRAFT items freely. subjectId stays nullable at the DB level only to
+// protect pre-existing rows migrated from the old subject-less Course rows;
+// create DTOs require it going forward.
 
-model Course {
-  id          String   @id @default(cuid())
-  tenantId    String
-  schoolId    String
-  school      School   @relation(fields: [schoolId], references: [id])
-  teacherId   String
-  teacher     User     @relation("CoursesTaught", fields: [teacherId], references: [id])
-  subjectId   String?
-  subject     Subject? @relation(fields: [subjectId], references: [id])
-  classId     String?
-  class       Class?   @relation(fields: [classId], references: [id])
-  title       String
-  description String?
-  status      CourseStatus @default(DRAFT)
-  createdAt   DateTime @default(now())
-
-  lessons     Lesson[]
-  assignments Assignment[]
-  quizzes     Quiz[]
-  views       CourseView[]
-
-  @@index([tenantId, schoolId, status])
-  @@index([tenantId, classId])
-  @@index([tenantId, teacherId])
-}
-
-enum CourseStatus {
+enum ContentStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
@@ -763,17 +752,25 @@ enum CourseStatus {
 model Lesson {
   id        String   @id @default(cuid())
   tenantId  String
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id])
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id])
+  classId   String?
+  class     Class?   @relation(fields: [classId], references: [id])
+  teacherId String
+  teacher   User     @relation("LessonsAuthored", fields: [teacherId], references: [id])
   title     String
   content   String?
   videoUrl  String?
   order     Int      @default(0)
+  status    ContentStatus @default(DRAFT)
   createdAt DateTime @default(now())
 
   completions LessonCompletion[]
 
-  @@index([tenantId, courseId, order])
+  @@index([tenantId, subjectId, schoolId, classId, order])
+  @@index([tenantId, teacherId])
 }
 
 // Per-student "read" marker for a lesson — same shape as AnnouncementRead.
@@ -793,17 +790,25 @@ model LessonCompletion {
 model Assignment {
   id          String   @id @default(cuid())
   tenantId    String
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id])
+  classId     String?
+  class       Class?   @relation(fields: [classId], references: [id])
+  teacherId   String
+  teacher     User     @relation("AssignmentsAuthored", fields: [teacherId], references: [id])
   title       String
   description String?
   dueDate     DateTime?
   maxMarks    Int?
+  status      ContentStatus @default(DRAFT)
   createdAt   DateTime @default(now())
 
   submissions Submission[]
 
-  @@index([tenantId, courseId])
+  @@index([tenantId, subjectId, schoolId, classId])
+  @@index([tenantId, teacherId])
 }
 
 model Submission {
@@ -835,16 +840,24 @@ enum SubmissionStatus {
 model Quiz {
   id          String   @id @default(cuid())
   tenantId    String
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id])
+  classId     String?
+  class       Class?   @relation(fields: [classId], references: [id])
+  teacherId   String
+  teacher     User     @relation("QuizzesAuthored", fields: [teacherId], references: [id])
   title       String
   description String?
+  status      ContentStatus @default(DRAFT)
   createdAt   DateTime @default(now())
 
   questions QuizQuestion[]
   attempts  QuizAttempt[]
 
-  @@index([tenantId, courseId])
+  @@index([tenantId, subjectId, schoolId, classId])
+  @@index([tenantId, teacherId])
 }
 
 // `options` holds the MCQ choices as a JSON string[]; `correctAnswer` matches
@@ -887,17 +900,23 @@ model QuizAttempt {
   @@index([tenantId, studentId])
 }
 
-// One row per student per course — records that a student has opened the
-// course at least once, so teachers can see who never looked at it.
-model CourseView {
+// One row per student per subject+school+class combo — records that a
+// student has opened that subject's content at least once, so teachers can
+// see who never looked at it. classId is nullable (whole-school content),
+// so uniqueness is enforced in the service layer (find-then-create) rather
+// than a DB constraint, which would treat distinct NULLs as non-duplicate.
+model SubjectView {
   id        String   @id @default(cuid())
   tenantId  String
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id])
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id])
+  classId   String?
+  class     Class?   @relation(fields: [classId], references: [id])
   studentId String
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   viewedAt  DateTime @default(now())
 
-  @@unique([courseId, studentId])
-  @@index([tenantId, studentId])
+  @@index([tenantId, subjectId, schoolId, classId, studentId])
 }

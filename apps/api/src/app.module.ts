@@ -21,7 +21,7 @@ import { ExamsModule } from "./modules/exams/exams.module";
 import { PlatformModule } from "./modules/platform/platform.module";
 import { VisitorsModule } from "./modules/visitors/visitors.module";
 import { PortionModule } from "./modules/portion/portion.module";
-import { CoursesModule } from "./modules/courses/courses.module";
+import { LessonsModule } from "./modules/lessons/lessons.module";
 import { AssignmentsModule } from "./modules/assignments/assignments.module";
 import { QuizzesModule } from "./modules/quizzes/quizzes.module";
 import { MediaModule } from "./modules/media/media.module";
@@ -52,7 +52,7 @@ import { HealthController } from "./modules/health.controller";
     PlatformModule,
     VisitorsModule,
     PortionModule,
-    CoursesModule,
+    LessonsModule,
     AssignmentsModule,
     QuizzesModule,
     MediaModule,

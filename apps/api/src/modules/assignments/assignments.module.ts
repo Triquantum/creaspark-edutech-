@@ -6,8 +6,8 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AssignmentsService } from "./assignments.service";
-import { ADMIN_ROLES } from "../courses/courses.service";
-import { CreateAssignmentDto, UpdateAssignmentDto, SubmitAssignmentDto, GradeSubmissionDto } from "./assignments.dto";
+import { ADMIN_ROLES } from "../../common/access/content-access";
+import { CreateAssignmentDto, UpdateAssignmentDto, QueryAssignmentsDto, SubmitAssignmentDto, GradeSubmissionDto } from "./assignments.dto";
 
 const MANAGE_ROLES = [Role.TEACHER, ...ADMIN_ROLES] as const;
 
@@ -19,12 +19,12 @@ export class AssignmentsController {
   constructor(private svc: AssignmentsService) {}
 
   @Get()
-  listForCourse(@Query("courseId") courseId: string, @CurrentUser() user: AuthUser) {
-    return this.svc.listForCourse(courseId, user);
+  list(@Query() query: QueryAssignmentsDto, @CurrentUser() user: AuthUser) {
+    return this.svc.list(user, query);
   }
 
   @Post()
-  @Roles(...MANAGE_ROLES)
+  @Roles(Role.TEACHER)
   create(@Body() dto: CreateAssignmentDto, @CurrentUser() user: AuthUser) {
     return this.svc.create(dto, user);
   }

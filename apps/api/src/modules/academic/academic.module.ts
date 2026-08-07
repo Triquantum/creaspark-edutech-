@@ -273,7 +273,7 @@ export class AcademicService {
       where: { id },
       include: {
         schools: true,
-        _count: { select: { exams: true, teacherAssignments: true, portionReports: true, courses: true } },
+        _count: { select: { exams: true, teacherAssignments: true, portionReports: true, lessons: true, assignments: true, quizzes: true } },
       },
     });
     if (!existing) throw new NotFoundException("Subject not found");

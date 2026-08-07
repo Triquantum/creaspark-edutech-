@@ -9,9 +9,10 @@ import { Modal, Field, inputCls } from "@/components/ui/modal";
 export interface LessonRow {
   id: string; title: string; content: string | null; videoUrl: string | null; order: number; completed?: boolean;
 }
+export interface ContentContext { subjectId: string; schoolId?: string; classId?: string }
 
-function LessonFormModal({ courseId, initial, onClose, onSaved }: {
-  courseId: string; initial?: LessonRow; onClose: () => void; onSaved: () => void;
+function LessonFormModal({ context, initial, onClose, onSaved }: {
+  context: ContentContext; initial?: LessonRow; onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
     title: initial?.title ?? "", content: initial?.content ?? "", videoUrl: initial?.videoUrl ?? "", order: initial?.order ?? 0,
@@ -28,7 +29,7 @@ function LessonFormModal({ courseId, initial, onClose, onSaved }: {
       if (initial) {
         await api(`/lessons/${initial.id}`, { method: "PATCH", body: JSON.stringify(body) });
       } else {
-        await api(`/courses/${courseId}/lessons`, { method: "POST", body: JSON.stringify(body) });
+        await api("/lessons", { method: "POST", body: JSON.stringify({ ...context, ...body }) });
       }
       onSaved();
     } catch (err) {
@@ -63,8 +64,8 @@ function LessonFormModal({ courseId, initial, onClose, onSaved }: {
   );
 }
 
-export function LessonsTab({ courseId, lessons, isManager, onChanged }: {
-  courseId: string; lessons: LessonRow[]; isManager: boolean; onChanged: () => void;
+export function LessonsTab({ context, lessons, isManager, onChanged }: {
+  context: ContentContext; lessons: LessonRow[]; isManager: boolean; onChanged: () => void;
 }) {
   const [editing, setEditing] = useState<LessonRow | "new" | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -126,7 +127,7 @@ export function LessonsTab({ courseId, lessons, isManager, onChanged }: {
       )}
       {editing && (
         <LessonFormModal
-          courseId={courseId} initial={editing === "new" ? undefined : editing}
+          context={context} initial={editing === "new" ? undefined : editing}
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); onChanged(); }}
         />
       )}

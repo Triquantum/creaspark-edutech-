@@ -199,7 +199,7 @@ export class TeachersService {
   }
 
   /** Removes login + staff profile. Any real activity (messages, portion
-   * reports, courses taught, announcement reads) must be preserved instead —
+   * reports, LMS content authored, announcement reads) must be preserved instead —
    * same rule StudentsService/PlatformService apply — so those are checked
    * before attempting the delete, not left to fail as a raw FK violation.
    * The check also runs before the Supabase Auth account is deleted, so a
@@ -219,7 +219,8 @@ export class TeachersService {
           select: {
             messagesSent: true, messagesReceived: true, auditLogs: true,
             announcementReads: true, portionReportsSubmitted: true,
-            portionReportsReviewed: true, coursesTaught: true, teacherAssignments: true,
+            portionReportsReviewed: true, teacherAssignments: true,
+            lessonsAuthored: true, assignmentsAuthored: true, quizzesAuthored: true,
           },
         },
       },

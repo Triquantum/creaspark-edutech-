@@ -202,7 +202,8 @@ export class PlatformService {
           select: {
             students: true, staff: true, classes: true, feePlans: true,
             announcements: true, events: true, visitors: true,
-            academicYears: true, portionReports: true, courses: true,
+            academicYears: true, portionReports: true,
+            lessons: true, assignments: true, quizzes: true,
           },
         },
       },

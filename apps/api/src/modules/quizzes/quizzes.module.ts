@@ -6,8 +6,8 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
 import { QuizzesService } from "./quizzes.service";
-import { ADMIN_ROLES } from "../courses/courses.service";
-import { CreateQuizDto, UpdateQuizDto, CreateQuestionDto, UpdateQuestionDto, SubmitAttemptDto } from "./quizzes.dto";
+import { ADMIN_ROLES } from "../../common/access/content-access";
+import { CreateQuizDto, UpdateQuizDto, QueryQuizzesDto, CreateQuestionDto, UpdateQuestionDto, SubmitAttemptDto } from "./quizzes.dto";
 
 const MANAGE_ROLES = [Role.TEACHER, ...ADMIN_ROLES] as const;
 
@@ -19,12 +19,12 @@ export class QuizzesController {
   constructor(private svc: QuizzesService) {}
 
   @Get()
-  listForCourse(@Query("courseId") courseId: string, @CurrentUser() user: AuthUser) {
-    return this.svc.listForCourse(courseId, user);
+  list(@Query() query: QueryQuizzesDto, @CurrentUser() user: AuthUser) {
+    return this.svc.list(user, query);
   }
 
   @Post()
-  @Roles(...MANAGE_ROLES)
+  @Roles(Role.TEACHER)
   create(@Body() dto: CreateQuizDto, @CurrentUser() user: AuthUser) {
     return this.svc.create(dto, user);
   }

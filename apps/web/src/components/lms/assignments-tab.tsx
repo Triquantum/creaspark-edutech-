@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
+import type { ContentContext } from "./lessons-tab";
 
 export interface AssignmentRow {
   id: string; title: string; description: string | null; dueDate: string | null; maxMarks: number | null;
@@ -14,7 +15,7 @@ interface SubmissionRow {
 }
 interface MySubmission { content: string | null; attachmentUrl: string | null; status: string; marksAwarded: number | null; feedback: string | null }
 
-function CreateAssignmentModal({ courseId, onClose, onSaved }: { courseId: string; onClose: () => void; onSaved: () => void }) {
+function CreateAssignmentModal({ context, onClose, onSaved }: { context: ContentContext; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ title: "", description: "", dueDate: "", maxMarks: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,7 @@ function CreateAssignmentModal({ courseId, onClose, onSaved }: { courseId: strin
       await api("/assignments", {
         method: "POST",
         body: JSON.stringify({
-          courseId, title: form.title.trim(), description: form.description.trim() || undefined,
+          ...context, title: form.title.trim(), description: form.description.trim() || undefined,
           dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
           maxMarks: form.maxMarks ? Number(form.maxMarks) : undefined,
         }),
@@ -226,8 +227,8 @@ function AssignmentDetail({ assignment, isManager, onClose, onChanged }: {
   );
 }
 
-export function AssignmentsTab({ courseId, assignments, isManager, onChanged }: {
-  courseId: string; assignments: AssignmentRow[]; isManager: boolean; onChanged: () => void;
+export function AssignmentsTab({ context, assignments, isManager, onChanged }: {
+  context: ContentContext; assignments: AssignmentRow[]; isManager: boolean; onChanged: () => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [viewing, setViewing] = useState<AssignmentRow | null>(null);
@@ -252,7 +253,7 @@ export function AssignmentsTab({ courseId, assignments, isManager, onChanged }: 
         ))
       )}
       {creating && (
-        <CreateAssignmentModal courseId={courseId} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); onChanged(); }} />
+        <CreateAssignmentModal context={context} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); onChanged(); }} />
       )}
       {viewing && (
         <AssignmentDetail assignment={viewing} isManager={isManager} onClose={() => setViewing(null)} onChanged={onChanged} />
