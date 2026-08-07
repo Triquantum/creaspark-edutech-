@@ -78,6 +78,7 @@ model School {
   subjects      Subject[]
   media         MediaItem[]
   inventoryItems InventoryItem[]
+  tasks         TaskItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -130,6 +131,9 @@ model User {
   assignmentsAuthored     Assignment[] @relation("AssignmentsAuthored")
   quizzesAuthored         Quiz[] @relation("QuizzesAuthored")
   teacherAssignments      TeacherAssignment[] @relation("TeacherAssignments")
+  tasksAssigned           TaskItem[] @relation("TasksAssigned")
+  tasksCreated            TaskItem[] @relation("TasksCreated")
+  tasksUpdated            TaskItem[] @relation("TasksUpdatedBy")
 
   @@index([tenantId, role])
 }
@@ -214,6 +218,8 @@ model Department {
   tenantId String
   schoolId String
   name     String
+
+  tasks    TaskItem[]
 
   @@unique([schoolId, name])
   @@index([tenantId])
@@ -919,4 +925,43 @@ model SubjectView {
   viewedAt  DateTime @default(now())
 
   @@index([tenantId, subjectId, schoolId, classId, studentId])
+}
+
+// ────────────────────────── Task Manager ──────────────────────────
+// Standalone work-assignment tracker between users -- unrelated to
+// PortionReport (that's a teacher's own syllabus-coverage log; this is one
+// person assigning a task to another and tracking it to completion).
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model TaskItem {
+  id           String     @id @default(cuid())
+  tenantId     String
+  schoolId     String
+  school       School     @relation(fields: [schoolId], references: [id])
+  serialNo     String     @unique @default(dbgenerated("('TASK-' || lpad(nextval('task_serial_seq')::text, 6, '0'))"))
+  subject      String
+  description  String?
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  targetDate   DateTime?  @db.Date
+  assignedToId String
+  assignedTo   User       @relation("TasksAssigned", fields: [assignedToId], references: [id])
+  assignedById String
+  assignedBy   User       @relation("TasksCreated", fields: [assignedById], references: [id])
+  updatedById  String?
+  updatedBy    User?      @relation("TasksUpdatedBy", fields: [updatedById], references: [id])
+  remarks      String?
+  status       TaskStatus @default(OPEN)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([tenantId, schoolId, status])
+  @@index([tenantId, assignedToId])
+  @@index([tenantId, assignedById])
 }
