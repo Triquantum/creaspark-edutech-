@@ -42,6 +42,21 @@ export class CoursesService {
   }
 
   async list(user: AuthUser, query: QueryCoursesDto) {
+    // SUPER_ADMIN/ORG_ADMIN have no real tenant of their own (same
+    // placeholder-tenantId situation as everywhere else this pattern
+    // appears) -- give them the same cross-tenant admin view rather than
+    // falling through to the STUDENT/PARENT branch below, which assumes
+    // the caller has a linked student and would error out for them.
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN) {
+      return this.prisma.course.findMany({
+        include: {
+          teacher: { select: { fullName: true } }, subject: { select: { name: true } },
+          class: { select: { name: true } }, _count: { select: { lessons: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
     const { tenantId } = currentTenant();
 
     if (user.role === Role.TEACHER) {

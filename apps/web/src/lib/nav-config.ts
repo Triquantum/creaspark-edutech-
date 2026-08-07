@@ -34,7 +34,7 @@ export const NAV: NavGroup[] = [
     { label: "Teacher Assignment", href: "/academic/teacher-assignment" },
     ...kids("academic", ["Syllabus", "Assignment", "Routine"]),
   ] },
-  { label: "Courses", icon: "monitor", href: "/lms/courses", hiddenFrom: ["SUPER_ADMIN", "GUEST"] },
+  { label: "Courses", icon: "monitor", href: "/lms/courses", hiddenFrom: ["GUEST"] },
   { label: "School", icon: "graduation-cap", roles: ["SUPER_ADMIN", "ORG_ADMIN"],
     children: [
       { label: "Register School", href: "/admin/register-school", roles: SUPER_ADMIN_ONLY },
