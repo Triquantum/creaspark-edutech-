@@ -20,6 +20,7 @@ interface EmployeeRow {
   staffProfile?: {
     employeeNo: string; designation: string; department?: string | null; joinDate?: string;
     employmentType?: string; salaryPaidBy?: string; salary?: number | string | null;
+    lastWorkingDate?: string | null;
     schoolId?: string; school?: { name: string } | null;
   } | null;
   userAccess?: {
@@ -91,6 +92,8 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
     employmentType: initial?.staffProfile?.employmentType ?? "PERMANENT",
     salaryPaidBy: initial?.staffProfile?.salaryPaidBy ?? "SCHOOL",
     salary: initial?.staffProfile?.salary != null ? String(initial.staffProfile.salary) : "",
+    joinDate: initial?.staffProfile?.joinDate ? initial.staffProfile.joinDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    lastWorkingDate: initial?.staffProfile?.lastWorkingDate ? initial.staffProfile.lastWorkingDate.slice(0, 10) : "",
     schoolId: "",
     isActive: initial ? String(initial.isActive) : "true",
   });
@@ -166,6 +169,7 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
         employmentType: form.employmentType,
         salaryPaidBy: form.salaryPaidBy,
         ...(form.salary.trim() && { salary: Number(form.salary) }),
+        ...(form.joinDate && { joinDate: form.joinDate }),
         ...(grants && { grants }),
       };
       if (mode === "add") {
@@ -177,7 +181,10 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
       } else {
         await api(`/employees/${initial!.id}`, {
           method: "PATCH",
-          body: JSON.stringify({ ...common, schoolId: form.schoolId, isActive: form.isActive === "true" }),
+          body: JSON.stringify({
+            ...common, schoolId: form.schoolId, isActive: form.isActive === "true",
+            lastWorkingDate: form.isActive === "false" ? (form.lastWorkingDate || null) : null,
+          }),
         });
         onSaved();
       }
@@ -213,6 +220,9 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
             <input id="fe-emp" required value={form.employeeNo} onChange={set("employeeNo")} placeholder="EMP-014" className={inputCls} />
           </Field>
         </div>
+        <Field id="fe-joindate" label="Date of join">
+          <input id="fe-joindate" type="date" required value={form.joinDate} onChange={set("joinDate")} className={inputCls} />
+        </Field>
         <Field id="fe-school" label={assignAllSchools ? "Home school" : "School"}>
           <select id="fe-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
             {schools.length === 0 && <option value="" disabled>{schoolsError ? "Unavailable" : "Loading schools…"}</option>}
@@ -231,12 +241,19 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
           )}
         </Field>
         {mode === "edit" && (
-          <Field id="fe-active" label="Status">
-            <select id="fe-active" value={form.isActive} onChange={set("isActive")} className={inputCls}>
-              <option value="true">Active</option>
-              <option value="false">Inactive (blocks sign-in)</option>
-            </select>
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="fe-active" label="Status">
+              <select id="fe-active" value={form.isActive} onChange={set("isActive")} className={inputCls}>
+                <option value="true">Active</option>
+                <option value="false">Inactive (blocks sign-in)</option>
+              </select>
+            </Field>
+            {form.isActive === "false" && (
+              <Field id="fe-lastworking" label="Last working date" optional>
+                <input id="fe-lastworking" type="date" value={form.lastWorkingDate} onChange={set("lastWorkingDate")} className={inputCls} />
+              </Field>
+            )}
+          </div>
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field id="fe-desig" label="Designation">
@@ -625,6 +642,9 @@ export default function EmployeePage() {
               ["Email", viewing.email],
               ["Phone", viewing.phone ?? "—"],
               ["Joined", viewing.staffProfile?.joinDate ? new Date(viewing.staffProfile.joinDate).toLocaleDateString("en-IN") : "—"],
+              ...(!viewing.isActive
+                ? [["Last working date", viewing.staffProfile?.lastWorkingDate ? new Date(viewing.staffProfile.lastWorkingDate).toLocaleDateString("en-IN") : "—"]]
+                : []),
             ].map(([k, v]) => (
               <div key={k as string}>
                 <dt className="text-xs uppercase tracking-wide text-slate-400">{k}</dt>

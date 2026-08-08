@@ -26,6 +26,8 @@ export class CreateEmployeeDto {
   @IsOptional() @IsEnum(EmploymentType) employmentType?: EmploymentType;
   @IsOptional() @IsEnum(SalaryPaidBy) salaryPaidBy?: SalaryPaidBy;
   @IsOptional() @IsNumber() @Min(0) salary?: number;
+  /** Omitted -> StaffProfile.joinDate defaults to now(), same as before this field existed. */
+  @IsOptional() @IsDateString() joinDate?: string;
   /** Optional — if omitted, a temporary password is generated and returned once. */
   @IsOptional() @IsString() @MinLength(8) password?: string;
   /** Additional (school, role) grants beyond the primary one above -- the
@@ -46,6 +48,10 @@ export class UpdateEmployeeDto {
   @IsOptional() @IsEnum(EmploymentType) employmentType?: EmploymentType;
   @IsOptional() @IsEnum(SalaryPaidBy) salaryPaidBy?: SalaryPaidBy;
   @IsOptional() @IsNumber() @Min(0) salary?: number;
+  @IsOptional() @IsDateString() joinDate?: string;
+  /** Set when isActive is turning false; sent as null to clear it when
+   * isActive turns back to true. */
+  @IsOptional() @IsDateString() lastWorkingDate?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   /** When present, replaces this employee's entire grant list (must include
    * exactly one isPrimary: true); when absent, the top-level fields above

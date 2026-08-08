@@ -16,7 +16,6 @@ const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
 // not user-uploaded files, so no fetch-arbitrary-URL risk like School.logoUrl.
 const WATERMARK_LOGO_PATH = join(__dirname, "assets", "creaspark-logo.jpeg");
 const SEAL_PATH = join(__dirname, "assets", "seal-main.png");
-const DESIGNATED_PARTNER_SEAL_PATH = join(__dirname, "assets", "designated-partner-seal.png");
 
 /** Generalized version of TeachersService covering every staff role (not
  * just TEACHER, which keeps its own dedicated page) -- an HR-facing
@@ -55,10 +54,8 @@ export class EmployeesService {
     doc.opacity(0.1).image(logo, x, y, { width: size, height: size }).opacity(1);
   }
 
-  /** Round company seal plus the smaller "For Creaspark LLP / Designated
-   * Partner" stamp, placed over the signature block the same way a physical
-   * certificate is stamped -- the seal overlapping the signature area, the
-   * designation stamp just below it. Positions are relative to where the
+  /** Round company seal placed over the signature block the same way a
+   * physical certificate is stamped. Position is relative to where the
    * signature block started (sigTopY), not the current doc.y, so this can
    * run after the signature text without fighting its own layout. */
   private drawSignatureSeals(doc: PDFKit.PDFDocument, sigLeftX: number, sigTopY: number) {
@@ -67,9 +64,6 @@ export class EmployeesService {
     const sealX = sigLeftX + 150;
     const sealY = sigTopY - 8;
     if (seal) doc.image(seal, sealX, sealY, { width: sealSize, height: sealSize });
-
-    const dpSeal = this.loadAsset(DESIGNATED_PARTNER_SEAL_PATH);
-    if (dpSeal) doc.image(dpSeal, sealX + 4, sealY + sealSize - 12, { width: sealSize - 10 });
   }
 
   /** SUPER_ADMIN has no real school of their own; tenantId is resolved from
@@ -114,7 +108,7 @@ export class EmployeesService {
         id: true, fullName: true, email: true, phone: true, role: true, isActive: true,
         staffProfile: {
           select: {
-            employeeNo: true, designation: true, department: true, joinDate: true,
+            employeeNo: true, designation: true, department: true, joinDate: true, lastWorkingDate: true,
             employmentType: true, salaryPaidBy: true, salary: true,
             schoolId: true, school: { select: { name: true } },
           },
@@ -177,6 +171,7 @@ export class EmployeesService {
           ...(dto.employmentType && { employmentType: dto.employmentType }),
           ...(dto.salaryPaidBy && { salaryPaidBy: dto.salaryPaidBy }),
           ...(dto.salary !== undefined && { salary: dto.salary }),
+          ...(dto.joinDate && { joinDate: new Date(dto.joinDate) }),
         },
       });
       // Mirrors the StaffProfile above as this person's primary grant --
@@ -288,12 +283,16 @@ export class EmployeesService {
       if (dto.grants) {
         primaryRoleChangedTo = await this.syncGrants(
           tx, id, tenantId, user.role === Role.SUPER_ADMIN, dto.grants, dto.isActive ?? target.isActive, target.role,
-          { employmentType: dto.employmentType, salaryPaidBy: dto.salaryPaidBy, salary: dto.salary },
+          {
+            employmentType: dto.employmentType, salaryPaidBy: dto.salaryPaidBy, salary: dto.salary, joinDate: dto.joinDate,
+            lastWorkingDate: dto.lastWorkingDate,
+          },
         );
       } else {
         if (target.staffProfile) {
           if (dto.employeeNo || dto.designation || dto.department !== undefined || dto.schoolId
-              || dto.employmentType || dto.salaryPaidBy || dto.salary !== undefined) {
+              || dto.employmentType || dto.salaryPaidBy || dto.salary !== undefined || dto.joinDate
+              || dto.lastWorkingDate !== undefined) {
             await tx.staffProfile.update({
               where: { userId: id },
               data: {
@@ -304,6 +303,8 @@ export class EmployeesService {
                 ...(dto.employmentType && { employmentType: dto.employmentType }),
                 ...(dto.salaryPaidBy && { salaryPaidBy: dto.salaryPaidBy }),
                 ...(dto.salary !== undefined && { salary: dto.salary }),
+                ...(dto.joinDate && { joinDate: new Date(dto.joinDate) }),
+                ...(dto.lastWorkingDate !== undefined && { lastWorkingDate: dto.lastWorkingDate ? new Date(dto.lastWorkingDate) : null }),
               },
             });
           }
@@ -315,6 +316,8 @@ export class EmployeesService {
               ...(dto.employmentType && { employmentType: dto.employmentType }),
               ...(dto.salaryPaidBy && { salaryPaidBy: dto.salaryPaidBy }),
               ...(dto.salary !== undefined && { salary: dto.salary }),
+              ...(dto.joinDate && { joinDate: new Date(dto.joinDate) }),
+              ...(dto.lastWorkingDate && { lastWorkingDate: new Date(dto.lastWorkingDate) }),
             },
           });
         }
@@ -449,7 +452,10 @@ export class EmployeesService {
   private async syncGrants(
     tx: Prisma.TransactionClient, userId: string, tenantId: string, isSuperAdmin: boolean,
     rawGrants: GrantDto[], isActive: boolean, currentRole: Role,
-    staffFields: { employmentType?: EmploymentType; salaryPaidBy?: SalaryPaidBy; salary?: number },
+    staffFields: {
+      employmentType?: EmploymentType; salaryPaidBy?: SalaryPaidBy; salary?: number;
+      joinDate?: string; lastWorkingDate?: string | null;
+    },
   ): Promise<Role | null> {
     const grants = await this.expandAllSentinel(tx, isSuperAdmin, tenantId, rawGrants);
     if (!grants.length) throw new BadRequestException("At least one role/school grant is required");
@@ -512,6 +518,8 @@ export class EmployeesService {
         ...(staffFields.employmentType && { employmentType: staffFields.employmentType }),
         ...(staffFields.salaryPaidBy && { salaryPaidBy: staffFields.salaryPaidBy }),
         ...(staffFields.salary !== undefined && { salary: staffFields.salary }),
+        ...(staffFields.joinDate && { joinDate: new Date(staffFields.joinDate) }),
+        ...(staffFields.lastWorkingDate && { lastWorkingDate: new Date(staffFields.lastWorkingDate) }),
       },
       update: {
         tenantId: primaryTenantId, schoolId: primaryGrant.schoolId,
@@ -519,6 +527,8 @@ export class EmployeesService {
         ...(staffFields.employmentType && { employmentType: staffFields.employmentType }),
         ...(staffFields.salaryPaidBy && { salaryPaidBy: staffFields.salaryPaidBy }),
         ...(staffFields.salary !== undefined && { salary: staffFields.salary }),
+        ...(staffFields.joinDate && { joinDate: new Date(staffFields.joinDate) }),
+        ...(staffFields.lastWorkingDate !== undefined && { lastWorkingDate: staffFields.lastWorkingDate ? new Date(staffFields.lastWorkingDate) : null }),
       },
     });
 
@@ -690,6 +700,7 @@ export class EmployeesService {
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
+      this.drawWatermark(doc);
       this.drawLetterhead(doc, profile.school);
 
       doc.fontSize(13).font("Helvetica-Bold").fillColor("#000").text(`SALARY SLIP — ${dto.period}`, { align: "center" });

@@ -19,6 +19,10 @@ interface TeacherAssignmentRow {
   section: { id: string; name: string; class: { id: string; name: string; schoolId: string } };
 }
 interface Announcement { id: string; title: string; body: string; pinned: boolean; createdAt: string }
+interface TaskSummary {
+  id: string; serialNo: string; subject: string; status: "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  assignees: { user: { fullName: string } }[]; createdAt: string;
+}
 interface BirthdayStudent {
   id: string; firstName: string; lastName: string; photoUrl: string | null; age: number;
   section: { id: string; name: string; class: { name: string } } | null;
@@ -77,6 +81,20 @@ const STAFF_ROLES = new Set([
 // Matches the @Roles list on GET /students/birthdays/today — anyone outside
 // this set would just get a 403, so don't bother fetching for them.
 const BIRTHDAY_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "TEACHER"]);
+
+// GET /tasks has no @Roles guard (scoped server-side to assignee/assigner/
+// admin), but the Task Manager nav entry itself is hidden from these roles
+// (nav-config.ts), so skip fetching for them here too.
+const TASK_HIDDEN_ROLES = new Set(["PARENT", "STUDENT", "GUEST"]);
+const TASK_STATUS_LABEL: Record<TaskSummary["status"], string> = {
+  OPEN: "Open", IN_PROGRESS: "In Progress", COMPLETED: "Completed", CANCELLED: "Cancelled",
+};
+const TASK_STATUS_CLS: Record<TaskSummary["status"], string> = {
+  OPEN: "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
+  IN_PROGRESS: "bg-accent/10 text-accent",
+  COMPLETED: "bg-success/10 text-success",
+  CANCELLED: "bg-danger/10 text-danger",
+};
 
 function greeting() {
   const h = new Date().getHours();
@@ -217,6 +235,33 @@ function NoticesCard({ announcements }: { announcements: Announcement[] }) {
   );
 }
 
+function TasksCard({ tasks }: { tasks: TaskSummary[] }) {
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <h2 className="font-display font-semibold text-night dark:text-white">Latest Tasks</h2>
+        <Link href="/tasks" className="text-xs font-medium text-accent hover:underline">View all</Link>
+      </div>
+      {tasks.length === 0 && <p className="mt-4 text-sm text-slate-500">No tasks assigned yet.</p>}
+      <ul className="mt-4 space-y-4">
+        {tasks.slice(0, 5).map((t) => (
+          <li key={t.id} className="flex items-start justify-between gap-3 border-l-2 border-accent pl-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-night dark:text-white">{t.subject}</p>
+              <p className="truncate text-xs text-slate-400">
+                {t.serialNo}{t.assignees.length ? ` · ${t.assignees.map((a) => a.user.fullName).join(", ")}` : ""}
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${TASK_STATUS_CLS[t.status]}`}>
+              {TASK_STATUS_LABEL[t.status]}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const [me, setMe] = useState<Me | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -238,6 +283,9 @@ export default function Dashboard() {
 
   // Today's birthdays (Super Admin / Org Admin / School Admin / Teacher)
   const [birthdays, setBirthdays] = useState<BirthdayStudent[]>([]);
+
+  // Latest tasks assigned to/by the current user
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
 
   // Super admin platform-wide stats
   const [platform, setPlatform] = useState<PlatformSummary | null>(null);
@@ -277,6 +325,9 @@ export default function Dashboard() {
     }
     if (BIRTHDAY_ROLES.has(me.role)) {
       api<BirthdayStudent[]>("/students/birthdays/today").then(setBirthdays).catch(() => setBirthdays([]));
+    }
+    if (!TASK_HIDDEN_ROLES.has(me.role)) {
+      api<TaskSummary[]>("/tasks").then(setTasks).catch(() => setTasks([]));
     }
   }, [me]);
 
@@ -350,6 +401,7 @@ export default function Dashboard() {
         <QuickAccess tiles={quickTiles} />
         <NoticesCard announcements={announcements} />
         {me && BIRTHDAY_ROLES.has(me.role) && <BirthdaysCard students={birthdays} />}
+        {me && !TASK_HIDDEN_ROLES.has(me.role) && <TasksCard tasks={tasks} />}
       </div>
 
       <Calendar />

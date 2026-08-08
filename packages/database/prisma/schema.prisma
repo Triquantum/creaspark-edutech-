@@ -370,6 +370,7 @@ model StaffProfile {
   salaryPaidBy   SalaryPaidBy   @default(SCHOOL)
   salary     Decimal? @db.Decimal(10, 2)
   joinDate   DateTime @default(now())
+  lastWorkingDate DateTime?
 
   @@unique([schoolId, employeeNo])
   @@index([tenantId])
