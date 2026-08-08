@@ -23,6 +23,7 @@ interface TaskSummary {
   id: string; serialNo: string; subject: string; status: "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   assignees: { user: { fullName: string } }[]; createdAt: string;
 }
+interface HolidaySummary { id: string; subject: string; startDate: string; endDate: string }
 interface BirthdayStudent {
   id: string; firstName: string; lastName: string; photoUrl: string | null; age: number;
   section: { id: string; name: string; class: { name: string } } | null;
@@ -262,6 +263,38 @@ function TasksCard({ tasks }: { tasks: TaskSummary[] }) {
   );
 }
 
+function fmtHolidayDate(s: string) {
+  return new Date(s).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+/** Shown to every role -- a holiday closes the whole organization, so
+ * unlike Tasks/Birthdays this widget has no role gate at all. */
+function HolidaysCard({ holidays }: { holidays: HolidaySummary[] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = holidays.filter((h) => h.endDate.slice(0, 10) >= today).slice(0, 5);
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <h2 className="font-display font-semibold text-night dark:text-white">Holidays</h2>
+        <Link href="/announcement/holiday" className="text-xs font-medium text-accent hover:underline">View all</Link>
+      </div>
+      {upcoming.length === 0 && <p className="mt-4 text-sm text-slate-500">No upcoming holidays.</p>}
+      <ul className="mt-4 space-y-3">
+        {upcoming.map((h) => (
+          <li key={h.id} className="flex items-center justify-between gap-3 border-l-2 border-accent pl-3">
+            <p className="truncate text-sm font-medium text-night dark:text-white">{h.subject}</p>
+            <p className="shrink-0 text-xs text-slate-400">
+              {h.startDate.slice(0, 10) === h.endDate.slice(0, 10)
+                ? fmtHolidayDate(h.startDate)
+                : `${fmtHolidayDate(h.startDate)} – ${fmtHolidayDate(h.endDate)}`}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const [me, setMe] = useState<Me | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -287,12 +320,16 @@ export default function Dashboard() {
   // Latest tasks assigned to/by the current user
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
 
+  // Holidays -- shown to every role, so fetched unconditionally like Announcements
+  const [holidays, setHolidays] = useState<HolidaySummary[]>([]);
+
   // Super admin platform-wide stats
   const [platform, setPlatform] = useState<PlatformSummary | null>(null);
 
   useEffect(() => {
     api<Me>("/auth/me").then(setMe).catch(() => setMe(null));
     api<Announcement[]>("/announcements").then(setAnnouncements).catch(() => setAnnouncements([]));
+    api<HolidaySummary[]>("/holidays").then(setHolidays).catch(() => setHolidays([]));
   }, []);
 
   useEffect(() => {
@@ -400,6 +437,7 @@ export default function Dashboard() {
       <div className="grid gap-5 lg:grid-cols-3">
         <QuickAccess tiles={quickTiles} />
         <NoticesCard announcements={announcements} />
+        <HolidaysCard holidays={holidays} />
         {me && BIRTHDAY_ROLES.has(me.role) && <BirthdaysCard students={birthdays} />}
         {me && !TASK_HIDDEN_ROLES.has(me.role) && <TasksCard tasks={tasks} />}
         <Calendar />

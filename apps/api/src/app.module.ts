@@ -29,6 +29,7 @@ import { InventoryItemModule } from "./modules/inventory-item/inventory-item.mod
 import { TasksModule } from "./modules/tasks/tasks.module";
 import { EmployeesModule } from "./modules/employees/employees.module";
 import { TrainingsModule } from "./modules/trainings/trainings.module";
+import { HolidaysModule } from "./modules/holidays/holidays.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -63,6 +64,7 @@ import { HealthController } from "./modules/health.controller";
     TasksModule,
     EmployeesModule,
     TrainingsModule,
+    HolidaysModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

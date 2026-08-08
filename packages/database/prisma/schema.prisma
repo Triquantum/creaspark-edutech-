@@ -145,6 +145,7 @@ model User {
   salarySlipsGenerated    SalarySlipLog[] @relation("SalarySlipsGeneratedBy")
   salaryCertificatesReceived  SalaryCertificateLog[] @relation("SalaryCertificatesFor")
   salaryCertificatesGenerated SalaryCertificateLog[] @relation("SalaryCertificatesGeneratedBy")
+  holidaysCreated             Holiday[] @relation("HolidaysCreated")
 
   @@index([tenantId, role])
 }
@@ -683,6 +684,26 @@ enum EventCategory {
   CONFERENCE
   EXHIBITION
   GENERAL
+}
+
+// Tenant-wide (not per-school) -- a holiday closes the whole organization,
+// unlike Event which is one school's activity. images is a flat list of
+// Supabase Storage public URLs (browser uploads directly, same convention
+// as School.logoUrl), since a holiday can carry several photos/notices.
+model Holiday {
+  id          String   @id @default(cuid())
+  tenantId    String
+  subject     String
+  description String?
+  remarks     String?
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  images      String[]
+  createdById String
+  createdBy   User     @relation("HolidaysCreated", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, startDate])
 }
 
 // Photo/video gallery — uploaded by staff (Super/Org/School Admin, Teacher),
