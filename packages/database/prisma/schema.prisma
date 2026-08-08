@@ -78,7 +78,6 @@ model School {
   subjects      Subject[]
   media         MediaItem[]
   inventoryItems InventoryItem[]
-  tasks         TaskItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -942,8 +941,6 @@ enum TaskStatus {
 model TaskItem {
   id           String     @id @default(cuid())
   tenantId     String
-  schoolId     String
-  school       School     @relation(fields: [schoolId], references: [id])
   serialNo     String     @unique @default(dbgenerated("('TASK-' || lpad(nextval('task_serial_seq')::text, 6, '0'))"))
   subject      String
   description  String?
@@ -961,7 +958,7 @@ model TaskItem {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  @@index([tenantId, schoolId, status])
+  @@index([tenantId, status])
   @@index([tenantId, assignedToId])
   @@index([tenantId, assignedById])
 }

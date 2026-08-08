@@ -6,15 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/ui/modal";
 
 interface Me { id: string; role: string }
-interface SchoolOpt { id: string; name: string }
 interface DepartmentOpt { id: string; name: string }
 interface StaffOpt { id: string; fullName: string; role: string }
 type TaskStatus = "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 interface TaskRow {
-  id: string; serialNo: string; schoolId: string; departmentId: string; assignedToId: string;
+  id: string; serialNo: string; departmentId: string; assignedToId: string;
   subject: string; description: string | null; targetDate: string | null; remarks: string | null;
   status: TaskStatus; createdAt: string;
-  school: { name: string }; department: { name: string };
+  department: { name: string };
   assignedTo: { id: string; fullName: string; role: string };
   assignedBy: { fullName: string };
   updatedBy: { fullName: string } | null;
@@ -34,10 +33,7 @@ function fmtDate(s: string | null) {
   return s ? new Date(s).toLocaleDateString("en-IN") : "—";
 }
 
-function CreateTaskModal({ schools, onClose, onSaved }: {
-  schools: SchoolOpt[]; onClose: () => void; onSaved: () => void;
-}) {
-  const [schoolId, setSchoolId] = useState(schools[0]?.id ?? "");
+function CreateTaskModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [departments, setDepartments] = useState<DepartmentOpt[]>([]);
   const [staff, setStaff] = useState<StaffOpt[]>([]);
   const [form, setForm] = useState({ subject: "", description: "", departmentId: "", targetDate: "", assignedToId: "", remarks: "" });
@@ -45,11 +41,9 @@ function CreateTaskModal({ schools, onClose, onSaved }: {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!schoolId) return;
-    api<DepartmentOpt[]>(`/academic/departments?schoolId=${schoolId}`).then(setDepartments).catch(() => setDepartments([]));
-    api<StaffOpt[]>(`/tasks/staff?schoolId=${schoolId}`).then(setStaff).catch(() => setStaff([]));
-    setForm((f) => ({ ...f, departmentId: "", assignedToId: "" }));
-  }, [schoolId]);
+    api<DepartmentOpt[]>("/academic/departments").then(setDepartments).catch(() => setDepartments([]));
+    api<StaffOpt[]>("/tasks/staff").then(setStaff).catch(() => setStaff([]));
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,7 +53,7 @@ function CreateTaskModal({ schools, onClose, onSaved }: {
       await api("/tasks", {
         method: "POST",
         body: JSON.stringify({
-          schoolId, subject: form.subject.trim(), description: form.description.trim() || undefined,
+          subject: form.subject.trim(), description: form.description.trim() || undefined,
           departmentId: form.departmentId, targetDate: form.targetDate || undefined,
           assignedToId: form.assignedToId, remarks: form.remarks.trim() || undefined,
         }),
@@ -75,19 +69,12 @@ function CreateTaskModal({ schools, onClose, onSaved }: {
   return (
     <Modal title="New task" onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Field id="t-school" label="School">
-            <select id="t-school" value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className={inputCls}>
-              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </Field>
-          <Field id="t-dept" label="Assigned Department">
-            <select id="t-dept" required value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} className={inputCls}>
-              <option value="">Select…</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </Field>
-        </div>
+        <Field id="t-dept" label="Assigned Department">
+          <select id="t-dept" required value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} className={inputCls}>
+            <option value="">Select…</option>
+            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </Field>
         <Field id="t-subject" label="Subject">
           <input id="t-subject" required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className={inputCls} />
         </Field>
@@ -135,9 +122,9 @@ function TaskDetailModal({ task, isManager, isAssignee, onClose, onSaved, onDele
 
   useEffect(() => {
     if (!isManager) return;
-    api<DepartmentOpt[]>(`/academic/departments?schoolId=${task.schoolId}`).then(setDepartments).catch(() => setDepartments([]));
-    api<StaffOpt[]>(`/tasks/staff?schoolId=${task.schoolId}`).then(setStaff).catch(() => setStaff([]));
-  }, [isManager, task.schoolId]);
+    api<DepartmentOpt[]>("/academic/departments").then(setDepartments).catch(() => setDepartments([]));
+    api<StaffOpt[]>("/tasks/staff").then(setStaff).catch(() => setStaff([]));
+  }, [isManager]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -179,7 +166,6 @@ function TaskDetailModal({ task, isManager, isAssignee, onClose, onSaved, onDele
     <Modal title={`${task.serialNo} · ${task.subject}`} onClose={onClose} wide>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4 text-sm">
-          <div><p className="text-xs text-slate-400">School</p><p className="font-medium text-night dark:text-white">{task.school.name}</p></div>
           <div><p className="text-xs text-slate-400">Date</p><p className="font-medium text-night dark:text-white">{fmtDate(task.createdAt)}</p></div>
           <div><p className="text-xs text-slate-400">Assigned by</p><p className="font-medium text-night dark:text-white">{task.assignedBy.fullName}</p></div>
           <div><p className="text-xs text-slate-400">Updated by</p><p className="font-medium text-night dark:text-white">{task.updatedBy?.fullName ?? "—"}</p></div>
@@ -265,7 +251,6 @@ function TaskDetailModal({ task, isManager, isAssignee, onClose, onSaved, onDele
 
 export default function TasksPage() {
   const [me, setMe] = useState<Me | null>(null);
-  const [schools, setSchools] = useState<SchoolOpt[]>([]);
   const [rows, setRows] = useState<TaskRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [q, setQ] = useState("");
@@ -286,10 +271,7 @@ export default function TasksPage() {
     api<TaskRow[]>(`/tasks?${params.toString()}`).then((r) => { setRows(r); setState("ready"); }).catch(() => setState("error"));
   }, [q, status]);
 
-  useEffect(() => {
-    api<Me>("/auth/me").then(setMe).catch(() => setMe(null));
-    api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([]));
-  }, []);
+  useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
   useEffect(load, [load]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
@@ -384,7 +366,7 @@ export default function TasksPage() {
       </Card>
 
       {creating && (
-        <CreateTaskModal schools={schools} onClose={() => setCreating(false)}
+        <CreateTaskModal onClose={() => setCreating(false)}
           onSaved={() => { setCreating(false); setToast("Task created"); load(); }} />
       )}
       {viewing && me && (
