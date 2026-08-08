@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsNumber, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsNumber, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { EmploymentType, Role, SalaryPaidBy } from "@educore/database";
 
@@ -67,6 +67,7 @@ export class SalarySlipLineDto {
 
 export class SalarySlipDto {
   @IsString() period: string;
+  @IsIn(["BANK_TRANSFER", "CASH"]) paymentMode: "BANK_TRANSFER" | "CASH";
   @IsArray() @ValidateNested({ each: true }) @Type(() => SalarySlipLineDto) earnings: SalarySlipLineDto[];
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SalarySlipLineDto) deductions?: SalarySlipLineDto[];
 }

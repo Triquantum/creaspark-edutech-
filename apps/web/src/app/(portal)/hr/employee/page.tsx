@@ -393,6 +393,7 @@ function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose
     { label: "Basic Salary", amount: employee.staffProfile?.salary != null ? String(employee.staffProfile.salary) : "" },
   ]);
   const [deductions, setDeductions] = useState<SlipLine[]>([]);
+  const [paymentMode, setPaymentMode] = useState<"BANK_TRANSFER" | "CASH">("BANK_TRANSFER");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -407,6 +408,7 @@ function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose
         method: "POST",
         body: JSON.stringify({
           period: period.trim(),
+          paymentMode,
           earnings: validEarnings.map((l) => ({ label: l.label.trim(), amount: Number(l.amount) })),
           deductions: deductions.filter((l) => l.label.trim() && l.amount.trim())
             .map((l) => ({ label: l.label.trim(), amount: Number(l.amount) })),
@@ -424,9 +426,17 @@ function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose
   return (
     <Modal title={`Salary slip — ${employee.fullName}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field id="ss-period" label="Pay period">
-          <input id="ss-period" required value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="August 2026" className={inputCls} />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field id="ss-period" label="Pay period">
+            <input id="ss-period" required value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="August 2026" className={inputCls} />
+          </Field>
+          <Field id="ss-paymode" label="Payment mode">
+            <select id="ss-paymode" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "BANK_TRANSFER" | "CASH")} className={inputCls}>
+              <option value="BANK_TRANSFER">Bank transfer</option>
+              <option value="CASH">Hand cash</option>
+            </select>
+          </Field>
+        </div>
 
         <div>
           <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Earnings</p>

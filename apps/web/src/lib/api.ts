@@ -39,6 +39,7 @@ export async function apiBlob(path: string, init?: RequestInit): Promise<Blob> {
   const res = await fetch(`${BASE}/api/v1${path}`, {
     ...init,
     headers: {
+      "Content-Type": "application/json",
       ...(session && { Authorization: `Bearer ${session.access_token}` }),
       ...init?.headers,
     },

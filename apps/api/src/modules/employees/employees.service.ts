@@ -596,10 +596,12 @@ export class EmployeesService {
       const infoY = doc.y;
       doc.text(`Employee Name: ${employee.fullName}`, infoLeftX, infoY);
       doc.text(`Employee No.: ${profile.employeeNo}`, infoRightX, infoY);
-      doc.text(`Designation: ${profile.designation}`, infoLeftX, doc.y);
+      doc.text(`Designation: ${profile.designation}`, infoLeftX, infoY + 15);
       doc.text(`Department: ${profile.department ?? "—"}`, infoRightX, infoY + 15);
-      doc.moveDown(1);
-      doc.text(`School: ${profile.school.name}`);
+      const schoolRowY = infoY + 30;
+      doc.text(`School: ${profile.school.name}`, infoLeftX, schoolRowY);
+      doc.text(`Payment Mode: ${dto.paymentMode === "CASH" ? "Cash" : "Bank Transfer"}`, infoRightX, schoolRowY);
+      doc.y = schoolRowY + 15;
       doc.moveDown(1.5);
 
       const earnings = dto.earnings ?? [];
