@@ -19,6 +19,7 @@ interface EmployeeRow {
   id: string; fullName: string; email: string; phone?: string | null; role: string; isActive: boolean;
   staffProfile?: {
     employeeNo: string; designation: string; department?: string | null; joinDate?: string;
+    employmentType?: string; salaryPaidBy?: string;
     schoolId?: string; school?: { name: string } | null;
   } | null;
   userAccess?: {
@@ -87,6 +88,8 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
     employeeNo: initial?.staffProfile?.employeeNo ?? "",
     designation: initial?.staffProfile?.designation ?? "",
     department: initial?.staffProfile?.department ?? "",
+    employmentType: initial?.staffProfile?.employmentType ?? "PERMANENT",
+    salaryPaidBy: initial?.staffProfile?.salaryPaidBy ?? "SCHOOL",
     schoolId: "",
     isActive: initial ? String(initial.isActive) : "true",
   });
@@ -148,6 +151,8 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
         employeeNo: form.employeeNo.trim(),
         designation: form.designation.trim(),
         ...(form.department && { department: form.department.trim() }),
+        employmentType: form.employmentType,
+        salaryPaidBy: form.salaryPaidBy,
         ...(grants && { grants }),
       };
       if (mode === "add") {
@@ -229,6 +234,20 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
             </select>
           </Field>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field id="fe-emptype" label="Employee type">
+            <select id="fe-emptype" value={form.employmentType} onChange={set("employmentType")} className={inputCls}>
+              <option value="PERMANENT">Permanent</option>
+              <option value="TEMPORARY">Temporary</option>
+            </select>
+          </Field>
+          <Field id="fe-salary" label="Salary paid by">
+            <select id="fe-salary" value={form.salaryPaidBy} onChange={set("salaryPaidBy")} className={inputCls}>
+              <option value="SCHOOL">School</option>
+              <option value="COMPANY">Company</option>
+            </select>
+          </Field>
+        </div>
 
         <label className="flex items-center gap-2 text-sm text-night dark:text-white">
           <input
@@ -280,6 +299,7 @@ export default function EmployeePage() {
   const [toast, setToast] = useState<string | null>(null);
   const [schoolsError, setSchoolsError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const canManage = role !== null && ["SUPER_ADMIN", "SCHOOL_ADMIN", "HR"].includes(role);
   const canDelete = role !== null && ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(role);
 
@@ -287,7 +307,7 @@ export default function EmployeePage() {
     setState("loading");
     api<EmployeeRow[]>(`/employees${q ? `?q=${encodeURIComponent(q)}` : ""}`)
       .then((r) => { setRows(r); setState("ready"); })
-      .catch(() => setState("error"));
+      .catch((err) => { setLoadError(err instanceof Error ? err.message : "Could not load employees"); setState("error"); });
   }, [q]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
@@ -342,9 +362,7 @@ export default function EmployeePage() {
         </div>
 
         {state === "error" && (
-          <p className="p-6 text-sm text-slate-500">
-            Couldn&apos;t reach the API. Start it with <code>docker compose up</code>, then reload.
-          </p>
+          <p className="p-6 text-sm text-danger">{loadError ?? "Could not load employees."}</p>
         )}
         {state === "ready" && rows.length === 0 && (
           <p className="p-6 text-sm text-slate-500">No employees match this search.</p>
@@ -426,6 +444,8 @@ export default function EmployeePage() {
               ["Status", viewing.isActive ? "Active" : "Inactive"],
               ["Designation", viewing.staffProfile?.designation ?? "—"],
               ["Department", viewing.staffProfile?.department ?? "—"],
+              ["Employee type", viewing.staffProfile?.employmentType ? roleLabel(viewing.staffProfile.employmentType) : "—"],
+              ["Salary paid by", viewing.staffProfile?.salaryPaidBy ? roleLabel(viewing.staffProfile.salaryPaidBy) : "—"],
               ["Email", viewing.email],
               ["Phone", viewing.phone ?? "—"],
               ["Joined", viewing.staffProfile?.joinDate ? new Date(viewing.staffProfile.joinDate).toLocaleDateString("en-IN") : "—"],

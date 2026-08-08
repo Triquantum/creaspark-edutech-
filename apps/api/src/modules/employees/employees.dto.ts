@@ -1,6 +1,6 @@
 import { IsArray, IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
-import { Role } from "@educore/database";
+import { EmploymentType, Role, SalaryPaidBy } from "@educore/database";
 
 /** One (school, role) grant -- see UserAccess in schema.prisma. `id` present
  * means "update this existing grant"; omitted means "create a new one". */
@@ -23,6 +23,8 @@ export class CreateEmployeeDto {
   @IsString() employeeNo: string;
   @IsString() designation: string;
   @IsOptional() @IsString() department?: string;
+  @IsOptional() @IsEnum(EmploymentType) employmentType?: EmploymentType;
+  @IsOptional() @IsEnum(SalaryPaidBy) salaryPaidBy?: SalaryPaidBy;
   /** Optional — if omitted, a temporary password is generated and returned once. */
   @IsOptional() @IsString() @MinLength(8) password?: string;
   /** Additional (school, role) grants beyond the primary one above -- the
@@ -40,6 +42,8 @@ export class UpdateEmployeeDto {
   @IsOptional() @IsString() employeeNo?: string;
   @IsOptional() @IsString() designation?: string;
   @IsOptional() @IsString() department?: string;
+  @IsOptional() @IsEnum(EmploymentType) employmentType?: EmploymentType;
+  @IsOptional() @IsEnum(SalaryPaidBy) salaryPaidBy?: SalaryPaidBy;
   @IsOptional() @IsBoolean() isActive?: boolean;
   /** When present, replaces this employee's entire grant list (must include
    * exactly one isPrimary: true); when absent, the top-level fields above

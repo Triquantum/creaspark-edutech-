@@ -24,6 +24,7 @@ interface UserRow {
 }
 interface Me { id: string; role: string }
 interface SchoolOpt { id: string; name: string; tenantName?: string }
+interface DeptOpt { id: string; name: string }
 
 const SCHOOL_ASSIGN_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN"]);
 
@@ -45,8 +46,18 @@ function RegisterDialog({ mode, initial, schools, meRole, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetPw, setResetPw] = useState<string | null>(null);
+  const [department, setDepartment] = useState("");
+  const [departments, setDepartments] = useState<DeptOpt[]>([]);
+  const [extraSchoolIds, setExtraSchoolIds] = useState<Set<string>>(new Set());
+  const [allSchools, setAllSchools] = useState(false);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Department list is scoped per school, same pattern as hr/employee's dialog.
+  useEffect(() => {
+    if (!form.schoolId) { setDepartments([]); return; }
+    api<DeptOpt[]>(`/academic/departments?schoolId=${form.schoolId}`).then(setDepartments).catch(() => setDepartments([]));
+  }, [form.schoolId]);
 
   // schools is still fetching when this dialog can mount, so a schoolId
   // seeded at useState-init time can lock at "" forever — the <select>
@@ -64,6 +75,14 @@ function RegisterDialog({ mode, initial, schools, meRole, onClose, onSaved }: {
     setError(null);
     setSaving(true);
     try {
+      // "All schools" or a picked subset of extra schools -- omitted when
+      // neither is set, so accounts not using this stay on today's single-
+      // schoolId behavior untouched.
+      const schoolIds = allSchools
+        ? ["ALL"]
+        : extraSchoolIds.size > 0
+          ? [...(form.schoolId ? [form.schoolId] : []), ...extraSchoolIds]
+          : undefined;
       if (mode === "add") {
         const res = await api<{ tempPassword?: string }>("/users", {
           method: "POST",
@@ -74,6 +93,8 @@ function RegisterDialog({ mode, initial, schools, meRole, onClose, onSaved }: {
             role: form.role,
             ...(form.schoolId && { schoolId: form.schoolId }),
             ...(form.password && { password: form.password }),
+            ...(department && { department }),
+            ...(schoolIds && { schoolIds }),
           }),
         });
         onSaved(res.tempPassword);
@@ -86,6 +107,8 @@ function RegisterDialog({ mode, initial, schools, meRole, onClose, onSaved }: {
             role: form.role,
             isActive: form.isActive === "true",
             ...(canAssignSchool && form.schoolId && { schoolId: form.schoolId }),
+            ...(canAssignSchool && department && { department }),
+            ...(canAssignSchool && schoolIds && { schoolIds }),
           }),
         });
         onSaved();
@@ -141,6 +164,43 @@ function RegisterDialog({ mode, initial, schools, meRole, onClose, onSaved }: {
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` — ${s.tenantName}` : ""}</option>)}
             </select>
             <p className="mt-1 text-xs text-slate-400">Moves this account to a different registered school/organization.</p>
+          </Field>
+        )}
+        {form.schoolId && (
+          <Field id="u-dept" label="Department" optional>
+            <select id="u-dept" value={department} onChange={(e) => setDepartment(e.target.value)} className={inputCls}>
+              <option value="">No department</option>
+              {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+            </select>
+          </Field>
+        )}
+        {canAssignSchool && (
+          <Field id="u-extra-schools" label="Also assign to" optional>
+            <label className="mb-2 flex items-center gap-2 text-sm text-night dark:text-white">
+              <input
+                type="checkbox" checked={allSchools} className="accent-primary"
+                onChange={(e) => { setAllSchools(e.target.checked); if (e.target.checked) setExtraSchoolIds(new Set()); }}
+              />
+              All schools / institutes / colleges / centers
+            </label>
+            {!allSchools && (
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2 dark:border-white/10">
+                {schools.filter((s) => s.id !== form.schoolId).map((s) => (
+                  <label key={s.id} className="flex items-center gap-2 text-sm text-night dark:text-white">
+                    <input
+                      type="checkbox" checked={extraSchoolIds.has(s.id)} className="accent-primary"
+                      onChange={() => setExtraSchoolIds((prev) => {
+                        const next = new Set(prev);
+                        next.has(s.id) ? next.delete(s.id) : next.add(s.id);
+                        return next;
+                      })}
+                    />
+                    {s.name}{s.tenantName ? ` — ${s.tenantName}` : ""}
+                  </label>
+                ))}
+              </div>
+            )}
+            <p className="mt-1 text-xs text-slate-400">Gives this login access at additional schools beyond the primary one above.</p>
           </Field>
         )}
         <div className="grid grid-cols-2 gap-3">
@@ -201,6 +261,7 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
   useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
@@ -211,7 +272,7 @@ export default function UsersPage() {
     setState("loading");
     api<UserRow[]>(`/users${q ? `?q=${encodeURIComponent(q)}` : ""}`)
       .then((r) => { setRows(r); setState("ready"); })
-      .catch(() => setState("error"));
+      .catch((err) => { setLoadError(err instanceof Error ? err.message : "Could not load users"); setState("error"); });
   }, [q, me]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
@@ -268,9 +329,7 @@ export default function UsersPage() {
         </div>
 
         {state === "error" && (
-          <p className="p-6 text-sm text-slate-500">
-            Couldn&apos;t reach the API. Start it with <code>docker compose up</code>, then reload.
-          </p>
+          <p className="p-6 text-sm text-danger">{loadError ?? "Could not load users."}</p>
         )}
         {state === "ready" && rows.length === 0 && (
           <p className="p-6 text-sm text-slate-500">No users match this search.</p>

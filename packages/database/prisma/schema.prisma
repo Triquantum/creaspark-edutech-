@@ -364,10 +364,22 @@ model StaffProfile {
   employeeNo String
   designation String
   department String?
+  employmentType EmploymentType @default(PERMANENT)
+  salaryPaidBy   SalaryPaidBy   @default(SCHOOL)
   joinDate   DateTime @default(now())
 
   @@unique([schoolId, employeeNo])
   @@index([tenantId])
+}
+
+enum EmploymentType {
+  PERMANENT
+  TEMPORARY
+}
+
+enum SalaryPaidBy {
+  COMPANY
+  SCHOOL
 }
 
 // One row per (school, role) a staff member can act as -- lets a person hold

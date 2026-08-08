@@ -60,6 +60,7 @@ export class EmployeesService {
         staffProfile: {
           select: {
             employeeNo: true, designation: true, department: true, joinDate: true,
+            employmentType: true, salaryPaidBy: true,
             schoolId: true, school: { select: { name: true } },
           },
         },
@@ -100,6 +101,8 @@ export class EmployeesService {
         data: {
           tenantId, schoolId: dto.schoolId, userId: u.id,
           employeeNo: dto.employeeNo, designation: dto.designation, department: dto.department,
+          ...(dto.employmentType && { employmentType: dto.employmentType }),
+          ...(dto.salaryPaidBy && { salaryPaidBy: dto.salaryPaidBy }),
         },
       });
       // Mirrors the StaffProfile above as this person's primary grant --
@@ -203,7 +206,8 @@ export class EmployeesService {
         primaryRoleChangedTo = await this.syncGrants(tx, id, tenantId, dto.grants, dto.isActive ?? target.isActive, target.role);
       } else {
         if (target.staffProfile) {
-          if (dto.employeeNo || dto.designation || dto.department !== undefined || dto.schoolId) {
+          if (dto.employeeNo || dto.designation || dto.department !== undefined || dto.schoolId
+              || dto.employmentType || dto.salaryPaidBy) {
             await tx.staffProfile.update({
               where: { userId: id },
               data: {
@@ -211,6 +215,8 @@ export class EmployeesService {
                 ...(dto.designation && { designation: dto.designation }),
                 ...(dto.department !== undefined && { department: dto.department }),
                 ...(dto.schoolId && { schoolId: dto.schoolId }),
+                ...(dto.employmentType && { employmentType: dto.employmentType }),
+                ...(dto.salaryPaidBy && { salaryPaidBy: dto.salaryPaidBy }),
               },
             });
           }
@@ -219,6 +225,8 @@ export class EmployeesService {
             data: {
               tenantId, schoolId: dto.schoolId, userId: id,
               employeeNo: dto.employeeNo!.trim(), designation: dto.designation!.trim(), department: dto.department,
+              ...(dto.employmentType && { employmentType: dto.employmentType }),
+              ...(dto.salaryPaidBy && { salaryPaidBy: dto.salaryPaidBy }),
             },
           });
         }
