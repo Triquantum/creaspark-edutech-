@@ -412,12 +412,21 @@ function ReviewTable({ role }: { role: string }) {
     api<Option[]>("/academic/subjects").then(setSubjects).catch(() => {});
     api<Option[]>("/academic/classes").then(setClasses).catch(() => {});
     api<Option[]>("/academic/schools").then(setSchools).catch(() => {});
-    api<{ id: string; fullName: string }[]>("/teachers?activeOnly=true")
-      .then((rows) => setTeachers(rows.map((t) => ({ id: t.id, name: t.fullName }))))
-      .catch(() => {});
     if (isSuperAdmin) api<(Option & { classId: string })[]>("/academic/sections").then(setSections).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Refetches whenever the School filter changes -- the Teacher dropdown
+  // must only ever list teachers at the currently selected school, not
+  // every teacher platform-wide. Also drops any previously selected
+  // teacherId, since it may not exist in the newly filtered school.
+  useEffect(() => {
+    api<{ id: string; fullName: string }[]>(`/teachers?activeOnly=true${schoolId ? `&schoolId=${schoolId}` : ""}`)
+      .then((rows) => setTeachers(rows.map((t) => ({ id: t.id, name: t.fullName }))))
+      .catch(() => {});
+    setTeacherId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schoolId]);
 
   useEffect(() => { const t = setTimeout(() => setQ(searchInput.trim()), 250); return () => clearTimeout(t); }, [searchInput]);
 
