@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiBlob } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/ui/modal";
@@ -19,7 +19,7 @@ interface EmployeeRow {
   id: string; fullName: string; email: string; phone?: string | null; role: string; isActive: boolean;
   staffProfile?: {
     employeeNo: string; designation: string; department?: string | null; joinDate?: string;
-    employmentType?: string; salaryPaidBy?: string;
+    employmentType?: string; salaryPaidBy?: string; salary?: number | string | null;
     schoolId?: string; school?: { name: string } | null;
   } | null;
   userAccess?: {
@@ -90,6 +90,7 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
     department: initial?.staffProfile?.department ?? "",
     employmentType: initial?.staffProfile?.employmentType ?? "PERMANENT",
     salaryPaidBy: initial?.staffProfile?.salaryPaidBy ?? "SCHOOL",
+    salary: initial?.staffProfile?.salary != null ? String(initial.staffProfile.salary) : "",
     schoolId: "",
     isActive: initial ? String(initial.isActive) : "true",
   });
@@ -158,6 +159,7 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
         ...(form.department && { department: form.department.trim() }),
         employmentType: form.employmentType,
         salaryPaidBy: form.salaryPaidBy,
+        ...(form.salary.trim() && { salary: Number(form.salary) }),
         ...(grants && { grants }),
       };
       if (mode === "add") {
@@ -253,6 +255,10 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
             </select>
           </Field>
         </div>
+        <Field id="fe-salary-amt" label="Monthly gross salary (₹)" optional>
+          <input id="fe-salary-amt" type="number" min="0" step="0.01" value={form.salary} onChange={set("salary")}
+            placeholder="45000" className={inputCls} />
+        </Field>
 
         <label className="flex items-center gap-2 text-sm text-night dark:text-white">
           <input
@@ -304,6 +310,166 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
   );
 }
 
+function SalaryCertificateModal({ employee, onClose }: { employee: EmployeeRow; onClose: () => void }) {
+  const [refNo, setRefNo] = useState("");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [signatoryName, setSignatoryName] = useState("");
+  const [signatoryDesignation, setSignatoryDesignation] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const blob = await apiBlob(`/employees/${employee.id}/salary-certificate`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...(refNo.trim() && { refNo: refNo.trim() }),
+          ...(date && { date }),
+          signatoryName: signatoryName.trim(),
+          signatoryDesignation: signatoryDesignation.trim(),
+        }),
+      });
+      window.open(URL.createObjectURL(blob), "_blank");
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate the certificate");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Salary certificate — ${employee.fullName}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <Field id="sc-ref" label="Reference no." optional>
+            <input id="sc-ref" value={refNo} onChange={(e) => setRefNo(e.target.value)} placeholder="HR/SC/0001" className={inputCls} />
+          </Field>
+          <Field id="sc-date" label="Date">
+            <input id="sc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </Field>
+        </div>
+        <Field id="sc-signame" label="Signatory name">
+          <input id="sc-signame" required value={signatoryName} onChange={(e) => setSignatoryName(e.target.value)} className={inputCls} />
+        </Field>
+        <Field id="sc-sigdesig" label="Signatory designation">
+          <input id="sc-sigdesig" required value={signatoryDesignation} onChange={(e) => setSignatoryDesignation(e.target.value)}
+            placeholder="HR Manager" className={inputCls} />
+        </Field>
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-3 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? "Generating…" : "Generate PDF"}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+interface SlipLine { label: string; amount: string }
+
+/** One earnings/deductions row -- shared by both lists in SalarySlipModal. */
+function SlipLineRow({ line, onChange, onRemove }: { line: SlipLine; onChange: (l: SlipLine) => void; onRemove: () => void }) {
+  return (
+    <div className="flex items-end gap-2">
+      <input value={line.label} onChange={(e) => onChange({ ...line, label: e.target.value })}
+        placeholder="Basic Salary" className={`${inputCls} h-9 flex-1`} />
+      <input type="number" min="0" step="0.01" value={line.amount} onChange={(e) => onChange({ ...line, amount: e.target.value })}
+        placeholder="0.00" className={`${inputCls} h-9 w-28`} />
+      <button type="button" aria-label="Remove line" onClick={onRemove}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-black/5 hover:text-danger dark:hover:bg-white/10">
+        ×
+      </button>
+    </div>
+  );
+}
+
+function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose: () => void }) {
+  const [period, setPeriod] = useState(() => new Date().toLocaleString("en-IN", { month: "long", year: "numeric" }));
+  const [earnings, setEarnings] = useState<SlipLine[]>(() => [
+    { label: "Basic Salary", amount: employee.staffProfile?.salary != null ? String(employee.staffProfile.salary) : "" },
+  ]);
+  const [deductions, setDeductions] = useState<SlipLine[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const validEarnings = earnings.filter((l) => l.label.trim() && l.amount.trim());
+    if (!validEarnings.length) { setError("Add at least one earnings line"); return; }
+    setError(null);
+    setBusy(true);
+    try {
+      const blob = await apiBlob(`/employees/${employee.id}/salary-slip`, {
+        method: "POST",
+        body: JSON.stringify({
+          period: period.trim(),
+          earnings: validEarnings.map((l) => ({ label: l.label.trim(), amount: Number(l.amount) })),
+          deductions: deductions.filter((l) => l.label.trim() && l.amount.trim())
+            .map((l) => ({ label: l.label.trim(), amount: Number(l.amount) })),
+        }),
+      });
+      window.open(URL.createObjectURL(blob), "_blank");
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate the salary slip");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Salary slip — ${employee.fullName}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field id="ss-period" label="Pay period">
+          <input id="ss-period" required value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="August 2026" className={inputCls} />
+        </Field>
+
+        <div>
+          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Earnings</p>
+          <div className="space-y-2">
+            {earnings.map((l, i) => (
+              <SlipLineRow key={i} line={l}
+                onChange={(next) => setEarnings((rows) => rows.map((r, idx) => (idx === i ? next : r)))}
+                onRemove={() => setEarnings((rows) => rows.filter((_, idx) => idx !== i))}
+              />
+            ))}
+            <button type="button" onClick={() => setEarnings((rows) => [...rows, { label: "", amount: "" }])}
+              className="text-xs font-medium text-primary hover:underline">
+              + Add earning
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Deductions</p>
+          <div className="space-y-2">
+            {deductions.map((l, i) => (
+              <SlipLineRow key={i} line={l}
+                onChange={(next) => setDeductions((rows) => rows.map((r, idx) => (idx === i ? next : r)))}
+                onRemove={() => setDeductions((rows) => rows.filter((_, idx) => idx !== i))}
+              />
+            ))}
+            <button type="button" onClick={() => setDeductions((rows) => [...rows, { label: "", amount: "" }])}
+              className="text-xs font-medium text-primary hover:underline">
+              + Add deduction
+            </button>
+          </div>
+        </div>
+
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-3 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? "Generating…" : "Generate PDF"}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function EmployeePage() {
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [schools, setSchools] = useState<SchoolOpt[]>([]);
@@ -312,6 +478,8 @@ export default function EmployeePage() {
   const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; row: EmployeeRow } | null>(null);
   const [viewing, setViewing] = useState<EmployeeRow | null>(null);
   const [deleting, setDeleting] = useState<EmployeeRow | null>(null);
+  const [certFor, setCertFor] = useState<EmployeeRow | null>(null);
+  const [slipFor, setSlipFor] = useState<EmployeeRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -420,11 +588,25 @@ export default function EmployeePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <RowActions
-                        onView={() => setViewing(t)}
-                        onEdit={canManage ? () => setDialog({ mode: "edit", row: t }) : undefined}
-                        onDelete={canDelete ? () => setDeleting(t) : undefined}
-                      />
+                      <div className="flex items-center justify-end gap-1">
+                        {canManage && t.staffProfile && (
+                          <>
+                            <button onClick={() => setCertFor(t)} title="Salary certificate" aria-label="Salary certificate"
+                              className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-black/5 hover:text-night dark:hover:bg-white/10 dark:hover:text-white transition-colors">
+                              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/></svg>
+                            </button>
+                            <button onClick={() => setSlipFor(t)} title="Salary slip" aria-label="Salary slip"
+                              className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-black/5 hover:text-night dark:hover:bg-white/10 dark:hover:text-white transition-colors">
+                              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/></svg>
+                            </button>
+                          </>
+                        )}
+                        <RowActions
+                          onView={() => setViewing(t)}
+                          onEdit={canManage ? () => setDialog({ mode: "edit", row: t }) : undefined}
+                          onDelete={canDelete ? () => setDeleting(t) : undefined}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -464,6 +646,7 @@ export default function EmployeePage() {
               ["Department", viewing.staffProfile?.department ?? "—"],
               ["Employee type", viewing.staffProfile?.employmentType ? roleLabel(viewing.staffProfile.employmentType) : "—"],
               ["Salary paid by", viewing.staffProfile?.salaryPaidBy ? roleLabel(viewing.staffProfile.salaryPaidBy) : "—"],
+              ["Monthly salary", viewing.staffProfile?.salary != null ? `₹${Number(viewing.staffProfile.salary).toLocaleString("en-IN")}` : "—"],
               ["Email", viewing.email],
               ["Phone", viewing.phone ?? "—"],
               ["Joined", viewing.staffProfile?.joinDate ? new Date(viewing.staffProfile.joinDate).toLocaleDateString("en-IN") : "—"],
@@ -491,6 +674,9 @@ export default function EmployeePage() {
           )}
         </Modal>
       )}
+
+      {certFor && <SalaryCertificateModal employee={certFor} onClose={() => setCertFor(null)} />}
+      {slipFor && <SalarySlipModal employee={slipFor} onClose={() => setSlipFor(null)} />}
 
       {deleting && (
         <ConfirmDialog

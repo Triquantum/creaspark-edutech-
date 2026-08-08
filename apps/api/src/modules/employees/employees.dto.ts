@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsNumber, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { EmploymentType, Role, SalaryPaidBy } from "@educore/database";
 
@@ -25,6 +25,7 @@ export class CreateEmployeeDto {
   @IsOptional() @IsString() department?: string;
   @IsOptional() @IsEnum(EmploymentType) employmentType?: EmploymentType;
   @IsOptional() @IsEnum(SalaryPaidBy) salaryPaidBy?: SalaryPaidBy;
+  @IsOptional() @IsNumber() @Min(0) salary?: number;
   /** Optional — if omitted, a temporary password is generated and returned once. */
   @IsOptional() @IsString() @MinLength(8) password?: string;
   /** Additional (school, role) grants beyond the primary one above -- the
@@ -44,9 +45,28 @@ export class UpdateEmployeeDto {
   @IsOptional() @IsString() department?: string;
   @IsOptional() @IsEnum(EmploymentType) employmentType?: EmploymentType;
   @IsOptional() @IsEnum(SalaryPaidBy) salaryPaidBy?: SalaryPaidBy;
+  @IsOptional() @IsNumber() @Min(0) salary?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
   /** When present, replaces this employee's entire grant list (must include
    * exactly one isPrimary: true); when absent, the top-level fields above
    * edit the primary grant only -- today's exact single-grant behavior. */
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => GrantDto) grants?: GrantDto[];
+}
+
+export class SalaryCertificateDto {
+  @IsOptional() @IsString() refNo?: string;
+  @IsOptional() @IsDateString() date?: string;
+  @IsString() signatoryName: string;
+  @IsString() signatoryDesignation: string;
+}
+
+export class SalarySlipLineDto {
+  @IsString() label: string;
+  @IsNumber() amount: number;
+}
+
+export class SalarySlipDto {
+  @IsString() period: string;
+  @IsArray() @ValidateNested({ each: true }) @Type(() => SalarySlipLineDto) earnings: SalarySlipLineDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SalarySlipLineDto) deductions?: SalarySlipLineDto[];
 }

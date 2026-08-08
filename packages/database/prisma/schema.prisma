@@ -366,6 +366,7 @@ model StaffProfile {
   department String?
   employmentType EmploymentType @default(PERMANENT)
   salaryPaidBy   SalaryPaidBy   @default(SCHOOL)
+  salary     Decimal? @db.Decimal(10, 2)
   joinDate   DateTime @default(now())
 
   @@unique([schoolId, employeeNo])
