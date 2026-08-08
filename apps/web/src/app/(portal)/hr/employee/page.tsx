@@ -109,7 +109,13 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
 
   useEffect(() => {
     if (form.schoolId) return;
-    const fallback = mode === "edit" ? initial?.staffProfile?.schoolId : schools[0]?.id;
+    // Edit mode prefers the employee's existing school; when there isn't one
+    // yet (e.g. an account created without a StaffProfile), fall back to the
+    // first available school same as add mode -- otherwise this required
+    // field stays permanently blank and blocks saving, even with "Assign to
+    // all schools" checked (that only covers the additional grants, not the
+    // one home school every account must have).
+    const fallback = (mode === "edit" ? initial?.staffProfile?.schoolId : undefined) ?? schools[0]?.id;
     if (fallback) setForm((f) => ({ ...f, schoolId: fallback }));
   }, [schools, form.schoolId, initial, mode]);
 
@@ -207,12 +213,17 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
             <input id="fe-emp" required value={form.employeeNo} onChange={set("employeeNo")} placeholder="EMP-014" className={inputCls} />
           </Field>
         </div>
-        <Field id="fe-school" label="School">
+        <Field id="fe-school" label={assignAllSchools ? "Home school" : "School"}>
           <select id="fe-school" required value={form.schoolId} onChange={set("schoolId")} className={inputCls}>
             {schools.length === 0 && <option value="" disabled>{schoolsError ? "Unavailable" : "Loading schools…"}</option>}
             {schools.length > 0 && !form.schoolId && <option value="" disabled>Select a school</option>}
             {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
+          {assignAllSchools && (
+            <p className="mt-1 text-xs text-slate-500">
+              Their account is always based at one school — "Assign to all schools" below adds access to every other one on top of this.
+            </p>
+          )}
           {schools.length === 0 && (
             <p className="mt-1 text-xs text-danger">
               {schoolsError ?? "Still loading — if this doesn't fill in, reload the page."}
