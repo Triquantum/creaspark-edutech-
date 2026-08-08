@@ -580,6 +580,14 @@ export class EmployeesService {
     });
   }
 
+  /** School.institutionType is a generic label for the org an employee's
+   * pay documents are issued from -- SCHOOL isn't always accurate now that
+   * Company/Institute/College/Centre exist too, so the slip's info row
+   * shows whichever one actually applies. */
+  private institutionTypeLabel(type: string): string {
+    return { SCHOOL: "School", COLLEGE: "College", INSTITUTE: "Institute", CENTRE: "Center", COMPANY: "Company" }[type] ?? "School";
+  }
+
   async salarySlipPdf(id: string, dto: SalarySlipDto, user: AuthUser): Promise<Buffer> {
     const employee = await this.docEmployee(id, user);
     const profile = employee.staffProfile;
@@ -605,7 +613,7 @@ export class EmployeesService {
       doc.text(`Designation: ${profile.designation}`, infoLeftX, infoY + 15);
       doc.text(`Department: ${profile.department ?? "—"}`, infoRightX, infoY + 15);
       const schoolRowY = infoY + 30;
-      doc.text(`School: ${profile.school.name}`, infoLeftX, schoolRowY);
+      doc.text(`${this.institutionTypeLabel(profile.school.institutionType)}: ${profile.school.name}`, infoLeftX, schoolRowY);
       doc.text(`Payment Mode: ${dto.paymentMode === "CASH" ? "Cash" : "Bank Transfer"}`, infoRightX, schoolRowY);
       doc.y = schoolRowY + 15;
       doc.moveDown(1.5);
