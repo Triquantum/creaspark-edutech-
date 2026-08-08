@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, Role } from "@educore/database";
+import { EmploymentType, Prisma, Role, SalaryPaidBy } from "@educore/database";
 import { randomBytes } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
 import PDFDocument from "pdfkit";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
@@ -10,6 +12,12 @@ import { CreateEmployeeDto, GrantDto, SalaryCertificateDto, SalarySlipDto, Updat
 
 const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
 
+// Bundled build-time assets (see nest-cli.json's compilerOptions.assets) --
+// not user-uploaded files, so no fetch-arbitrary-URL risk like School.logoUrl.
+const WATERMARK_LOGO_PATH = join(__dirname, "assets", "creaspark-logo.jpeg");
+const SEAL_PATH = join(__dirname, "assets", "seal-main.png");
+const DESIGNATED_PARTNER_SEAL_PATH = join(__dirname, "assets", "designated-partner-seal.png");
+
 /** Generalized version of TeachersService covering every staff role (not
  * just TEACHER, which keeps its own dedicated page) -- an HR-facing
  * directory of who's employed, their designation/department/employee no.,
@@ -17,6 +25,52 @@ const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
 @Injectable()
 export class EmployeesService {
   constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
+
+  private assetCache = new Map<string, Buffer | null>();
+
+  /** Lazily read once per warm instance, not once per request -- bundled
+   * assets never change between requests. Cached failure (null) so a
+   * missing file doesn't retry a disk read on every certificate. */
+  private loadAsset(path: string): Buffer | null {
+    if (!this.assetCache.has(path)) {
+      try {
+        this.assetCache.set(path, readFileSync(path));
+      } catch {
+        this.assetCache.set(path, null);
+      }
+    }
+    return this.assetCache.get(path) ?? null;
+  }
+
+  /** Faint, centered background mark -- drawn before any other content so
+   * text and rules sit on top of it, matching a standard letterhead
+   * watermark. Silently skipped if the bundled asset is missing rather than
+   * failing certificate generation over a cosmetic detail. */
+  private drawWatermark(doc: PDFKit.PDFDocument) {
+    const logo = this.loadAsset(WATERMARK_LOGO_PATH);
+    if (!logo) return;
+    const size = 340;
+    const x = (doc.page.width - size) / 2;
+    const y = (doc.page.height - size) / 2;
+    doc.opacity(0.1).image(logo, x, y, { width: size, height: size }).opacity(1);
+  }
+
+  /** Round company seal plus the smaller "For Creaspark LLP / Designated
+   * Partner" stamp, placed over the signature block the same way a physical
+   * certificate is stamped -- the seal overlapping the signature area, the
+   * designation stamp just below it. Positions are relative to where the
+   * signature block started (sigTopY), not the current doc.y, so this can
+   * run after the signature text without fighting its own layout. */
+  private drawSignatureSeals(doc: PDFKit.PDFDocument, sigLeftX: number, sigTopY: number) {
+    const seal = this.loadAsset(SEAL_PATH);
+    const sealSize = 92;
+    const sealX = sigLeftX + 150;
+    const sealY = sigTopY - 8;
+    if (seal) doc.image(seal, sealX, sealY, { width: sealSize, height: sealSize });
+
+    const dpSeal = this.loadAsset(DESIGNATED_PARTNER_SEAL_PATH);
+    if (dpSeal) doc.image(dpSeal, sealX + 4, sealY + sealSize - 12, { width: sealSize - 10 });
+  }
 
   /** SUPER_ADMIN has no real school of their own; tenantId is resolved from
    * an explicit schoolId instead of currentTenant(). Writes always require
@@ -73,6 +127,24 @@ export class EmployeesService {
       },
       orderBy: { fullName: "asc" },
       take: 200,
+    });
+  }
+
+  /** Read-only audit trail of every salary slip actually generated -- who
+   * printed whose slip, and when. Same cross-tenant visibility rule as
+   * list(): SUPER_ADMIN/ORG_ADMIN see every tenant, everyone else only
+   * their own. */
+  async salarySlipLogs(user: AuthUser) {
+    const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
+    return this.prisma.salarySlipLog.findMany({
+      where: { ...(!crossTenant && { tenantId: currentTenant().tenantId }) },
+      select: {
+        id: true, period: true, createdAt: true,
+        employee: { select: { id: true, fullName: true, staffProfile: { select: { employeeNo: true } } } },
+        generatedBy: { select: { id: true, fullName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 300,
     });
   }
 
@@ -216,6 +288,7 @@ export class EmployeesService {
       if (dto.grants) {
         primaryRoleChangedTo = await this.syncGrants(
           tx, id, tenantId, user.role === Role.SUPER_ADMIN, dto.grants, dto.isActive ?? target.isActive, target.role,
+          { employmentType: dto.employmentType, salaryPaidBy: dto.salaryPaidBy, salary: dto.salary },
         );
       } else {
         if (target.staffProfile) {
@@ -376,6 +449,7 @@ export class EmployeesService {
   private async syncGrants(
     tx: Prisma.TransactionClient, userId: string, tenantId: string, isSuperAdmin: boolean,
     rawGrants: GrantDto[], isActive: boolean, currentRole: Role,
+    staffFields: { employmentType?: EmploymentType; salaryPaidBy?: SalaryPaidBy; salary?: number },
   ): Promise<Role | null> {
     const grants = await this.expandAllSentinel(tx, isSuperAdmin, tenantId, rawGrants);
     if (!grants.length) throw new BadRequestException("At least one role/school grant is required");
@@ -435,10 +509,16 @@ export class EmployeesService {
       create: {
         tenantId: primaryTenantId, userId, schoolId: primaryGrant.schoolId,
         employeeNo: primaryGrant.employeeNo.trim(), designation: primaryGrant.designation.trim(), department: primaryGrant.department,
+        ...(staffFields.employmentType && { employmentType: staffFields.employmentType }),
+        ...(staffFields.salaryPaidBy && { salaryPaidBy: staffFields.salaryPaidBy }),
+        ...(staffFields.salary !== undefined && { salary: staffFields.salary }),
       },
       update: {
         tenantId: primaryTenantId, schoolId: primaryGrant.schoolId,
         employeeNo: primaryGrant.employeeNo.trim(), designation: primaryGrant.designation.trim(), department: primaryGrant.department,
+        ...(staffFields.employmentType && { employmentType: staffFields.employmentType }),
+        ...(staffFields.salaryPaidBy && { salaryPaidBy: staffFields.salaryPaidBy }),
+        ...(staffFields.salary !== undefined && { salary: staffFields.salary }),
       },
     });
 
@@ -463,7 +543,7 @@ export class EmployeesService {
             announcementReads: true, portionReportsSubmitted: true,
             portionReportsReviewed: true, teacherAssignments: true,
             lessonsAuthored: true, assignmentsAuthored: true, quizzesAuthored: true,
-            tasksAssigned: true, tasksCreated: true, tasksUpdated: true,
+            taskAssignments: true, tasksCreated: true, tasksUpdated: true,
           },
         },
       },
@@ -544,6 +624,7 @@ export class EmployeesService {
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
+      this.drawWatermark(doc);
       this.drawLetterhead(doc, profile.school);
 
       doc.fontSize(14).fillColor("#000").font("Helvetica-Bold").text("SALARY CERTIFICATE", { align: "center" });
@@ -571,10 +652,13 @@ export class EmployeesService {
       doc.text("This certificate is issued upon the employee's request for whatever purpose it may serve.", { align: "justify", lineGap: 4 });
 
       doc.moveDown(4);
-      doc.text(`For ${profile.school.name}`);
+      const sigLeftX = doc.page.margins.left;
+      const sigTopY = doc.y;
+      doc.text(`For ${profile.school.name},`, sigLeftX, sigTopY);
       doc.moveDown(3);
-      doc.text(dto.signatoryName);
-      doc.text(dto.signatoryDesignation);
+      doc.text(dto.signatoryName, sigLeftX, doc.y);
+      doc.text(dto.signatoryDesignation, sigLeftX, doc.y);
+      this.drawSignatureSeals(doc, sigLeftX, sigTopY);
 
       doc.end();
     });
@@ -591,6 +675,13 @@ export class EmployeesService {
   async salarySlipPdf(id: string, dto: SalarySlipDto, user: AuthUser): Promise<Buffer> {
     const employee = await this.docEmployee(id, user);
     const profile = employee.staffProfile;
+    if (profile.salary == null) {
+      throw new BadRequestException("This employee's salary isn't set yet -- add it on the Employee form before generating a slip");
+    }
+
+    await this.prisma.salarySlipLog.create({
+      data: { tenantId: employee.tenantId, employeeId: employee.id, generatedById: user.id, period: dto.period },
+    });
 
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 54, size: "A4" });
@@ -618,11 +709,11 @@ export class EmployeesService {
       doc.y = schoolRowY + 15;
       doc.moveDown(1.5);
 
-      const earnings = dto.earnings ?? [];
-      const deductions = dto.deductions ?? [];
-      const grossEarnings = earnings.reduce((sum, l) => sum + l.amount, 0);
-      const totalDeductions = deductions.reduce((sum, l) => sum + l.amount, 0);
-      const netPay = grossEarnings - totalDeductions;
+      // Always the employee's own stored salary -- never a caller-supplied
+      // figure. No deductions line: this slip isn't a payroll computation
+      // tool, just a printable record of the fixed monthly salary on file.
+      const grossEarnings = Number(profile.salary);
+      const netPay = grossEarnings;
       const inr = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
       const colWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right) / 2;
@@ -633,26 +724,13 @@ export class EmployeesService {
       doc.font("Helvetica-Bold").fontSize(10);
       doc.text("Earnings", leftX, tableY);
       doc.text("Amount (Rs.)", leftX, tableY, { width: colWidth - 10, align: "right" });
-      doc.text("Deductions", rightX, tableY);
-      doc.text("Amount (Rs.)", rightX, tableY, { width: colWidth - 10, align: "right" });
       tableY += 18;
       doc.moveTo(leftX, tableY - 4).lineTo(doc.page.width - doc.page.margins.right, tableY - 4).strokeColor("#ccc").stroke();
       doc.font("Helvetica").fontSize(10);
 
-      const rowCount = Math.max(earnings.length, deductions.length);
-      for (let i = 0; i < rowCount; i++) {
-        const e = earnings[i];
-        const d = deductions[i];
-        if (e) {
-          doc.text(e.label, leftX, tableY, { width: colWidth - 90 });
-          doc.text(inr(e.amount), leftX, tableY, { width: colWidth - 10, align: "right" });
-        }
-        if (d) {
-          doc.text(d.label, rightX, tableY, { width: colWidth - 90 });
-          doc.text(inr(d.amount), rightX, tableY, { width: colWidth - 10, align: "right" });
-        }
-        tableY += 16;
-      }
+      doc.text("Basic Salary", leftX, tableY, { width: colWidth - 90 });
+      doc.text(inr(grossEarnings), leftX, tableY, { width: colWidth - 10, align: "right" });
+      tableY += 16;
 
       tableY += 6;
       doc.moveTo(leftX, tableY).lineTo(doc.page.width - doc.page.margins.right, tableY).strokeColor("#ccc").stroke();
@@ -660,9 +738,8 @@ export class EmployeesService {
       doc.font("Helvetica-Bold");
       doc.text("Gross Earnings", leftX, tableY, { width: colWidth - 90 });
       doc.text(inr(grossEarnings), leftX, tableY, { width: colWidth - 10, align: "right" });
-      doc.text("Total Deductions", rightX, tableY, { width: colWidth - 90 });
-      doc.text(inr(totalDeductions), rightX, tableY, { width: colWidth - 10, align: "right" });
 
+      doc.y = tableY + 20;
       doc.moveDown(3);
       doc.fontSize(12).text(`Net Pay: Rs. ${inr(netPay)}/-`, { align: "left" });
 

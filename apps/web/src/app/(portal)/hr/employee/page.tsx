@@ -380,50 +380,21 @@ function SalaryCertificateModal({ employee, onClose }: { employee: EmployeeRow; 
   );
 }
 
-interface SlipLine { label: string; amount: string }
-
-/** One earnings/deductions row -- shared by both lists in SalarySlipModal. */
-function SlipLineRow({ line, onChange, onRemove }: { line: SlipLine; onChange: (l: SlipLine) => void; onRemove: () => void }) {
-  return (
-    <div className="flex items-end gap-2">
-      <input value={line.label} onChange={(e) => onChange({ ...line, label: e.target.value })}
-        placeholder="Basic Salary" className={`${inputCls} h-9 flex-1`} />
-      <input type="number" min="0" step="0.01" value={line.amount} onChange={(e) => onChange({ ...line, amount: e.target.value })}
-        placeholder="0.00" className={`${inputCls} h-9 w-28`} />
-      <button type="button" aria-label="Remove line" onClick={onRemove}
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-black/5 hover:text-danger dark:hover:bg-white/10">
-        ×
-      </button>
-    </div>
-  );
-}
-
 function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose: () => void }) {
   const [period, setPeriod] = useState(() => new Date().toLocaleString("en-IN", { month: "long", year: "numeric" }));
-  const [earnings, setEarnings] = useState<SlipLine[]>(() => [
-    { label: "Basic Salary", amount: employee.staffProfile?.salary != null ? String(employee.staffProfile.salary) : "" },
-  ]);
-  const [deductions, setDeductions] = useState<SlipLine[]>([]);
   const [paymentMode, setPaymentMode] = useState<"BANK_TRANSFER" | "CASH">("BANK_TRANSFER");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const hasSalary = employee.staffProfile?.salary != null;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const validEarnings = earnings.filter((l) => l.label.trim() && l.amount.trim());
-    if (!validEarnings.length) { setError("Add at least one earnings line"); return; }
     setError(null);
     setBusy(true);
     try {
       const blob = await apiBlob(`/employees/${employee.id}/salary-slip`, {
         method: "POST",
-        body: JSON.stringify({
-          period: period.trim(),
-          paymentMode,
-          earnings: validEarnings.map((l) => ({ label: l.label.trim(), amount: Number(l.amount) })),
-          deductions: deductions.filter((l) => l.label.trim() && l.amount.trim())
-            .map((l) => ({ label: l.label.trim(), amount: Number(l.amount) })),
-        }),
+        body: JSON.stringify({ period: period.trim(), paymentMode }),
       });
       window.open(URL.createObjectURL(blob), "_blank");
       onClose();
@@ -436,57 +407,40 @@ function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose
 
   return (
     <Modal title={`Salary slip — ${employee.fullName}`} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Field id="ss-period" label="Pay period">
-            <input id="ss-period" required value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="August 2026" className={inputCls} />
-          </Field>
-          <Field id="ss-paymode" label="Payment mode">
-            <select id="ss-paymode" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "BANK_TRANSFER" | "CASH")} className={inputCls}>
-              <option value="BANK_TRANSFER">Bank transfer</option>
-              <option value="CASH">Hand cash</option>
-            </select>
-          </Field>
-        </div>
-
-        <div>
-          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Earnings</p>
-          <div className="space-y-2">
-            {earnings.map((l, i) => (
-              <SlipLineRow key={i} line={l}
-                onChange={(next) => setEarnings((rows) => rows.map((r, idx) => (idx === i ? next : r)))}
-                onRemove={() => setEarnings((rows) => rows.filter((_, idx) => idx !== i))}
-              />
-            ))}
-            <button type="button" onClick={() => setEarnings((rows) => [...rows, { label: "", amount: "" }])}
-              className="text-xs font-medium text-primary hover:underline">
-              + Add earning
-            </button>
+      {!hasSalary ? (
+        <p className="text-sm text-slate-500">
+          {employee.fullName}&apos;s salary isn&apos;t set yet — add it on the Employee form before generating a slip.
+        </p>
+      ) : (
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="ss-period" label="Pay period">
+              <input id="ss-period" required value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="August 2026" className={inputCls} />
+            </Field>
+            <Field id="ss-paymode" label="Payment mode">
+              <select id="ss-paymode" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "BANK_TRANSFER" | "CASH")} className={inputCls}>
+                <option value="BANK_TRANSFER">Bank transfer</option>
+                <option value="CASH">Hand cash</option>
+              </select>
+            </Field>
           </div>
-        </div>
 
-        <div>
-          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Deductions</p>
-          <div className="space-y-2">
-            {deductions.map((l, i) => (
-              <SlipLineRow key={i} line={l}
-                onChange={(next) => setDeductions((rows) => rows.map((r, idx) => (idx === i ? next : r)))}
-                onRemove={() => setDeductions((rows) => rows.filter((_, idx) => idx !== i))}
-              />
-            ))}
-            <button type="button" onClick={() => setDeductions((rows) => [...rows, { label: "", amount: "" }])}
-              className="text-xs font-medium text-primary hover:underline">
-              + Add deduction
-            </button>
+          <div className="rounded-xl border border-slate-200 p-3 text-sm dark:border-white/10">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Basic Salary (from Employee record)</span>
+              <span className="font-medium text-night dark:text-white">
+                ₹{Number(employee.staffProfile!.salary).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
           </div>
-        </div>
 
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <div className="flex justify-end gap-3 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Generating…" : "Generate PDF"}</Button>
-        </div>
-      </form>
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <div className="flex justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Generating…" : "Generate PDF"}</Button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

@@ -27,6 +27,12 @@ export class EmployeesController {
     return this.employees.list(user, q, schoolId, activeOnly);
   }
 
+  @Get("salary-slip-log")
+  @Roles(...HR_ROLES)
+  salarySlipLog(@CurrentUser() user: AuthUser) {
+    return this.employees.salarySlipLogs(user);
+  }
+
   @Post()
   @Roles(...HR_ROLES)
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: AuthUser) {

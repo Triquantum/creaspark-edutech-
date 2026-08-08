@@ -60,14 +60,10 @@ export class SalaryCertificateDto {
   @IsString() signatoryDesignation: string;
 }
 
-export class SalarySlipLineDto {
-  @IsString() label: string;
-  @IsNumber() amount: number;
-}
-
+/** Deliberately has no earnings/deductions/amount fields -- the slip always
+ * prints the employee's own StaffProfile.salary, never a caller-supplied
+ * figure (see salarySlipPdf()). */
 export class SalarySlipDto {
   @IsString() period: string;
   @IsIn(["BANK_TRANSFER", "CASH"]) paymentMode: "BANK_TRANSFER" | "CASH";
-  @IsArray() @ValidateNested({ each: true }) @Type(() => SalarySlipLineDto) earnings: SalarySlipLineDto[];
-  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SalarySlipLineDto) deductions?: SalarySlipLineDto[];
 }

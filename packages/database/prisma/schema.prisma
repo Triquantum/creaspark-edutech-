@@ -135,12 +135,14 @@ model User {
   assignmentsAuthored     Assignment[] @relation("AssignmentsAuthored")
   quizzesAuthored         Quiz[] @relation("QuizzesAuthored")
   teacherAssignments      TeacherAssignment[] @relation("TeacherAssignments")
-  tasksAssigned           TaskItem[] @relation("TasksAssigned")
+  taskAssignments         TaskAssignee[]
   tasksCreated            TaskItem[] @relation("TasksCreated")
   tasksUpdated            TaskItem[] @relation("TasksUpdatedBy")
   trainingsConducted      Training[] @relation("TrainingsConducted")
   trainingFeedback        TrainingFeedback[]
   userAccess              UserAccess[]
+  salarySlipsReceived     SalarySlipLog[] @relation("SalarySlipsFor")
+  salarySlipsGenerated    SalarySlipLog[] @relation("SalarySlipsGeneratedBy")
 
   @@index([tenantId, role])
 }
@@ -220,16 +222,14 @@ model Section {
   @@index([tenantId])
 }
 
+// Global shared catalog -- one flat list of department names used
+// identically across every school/institute/college/center, not duplicated
+// per school (same convention as Subject).
 model Department {
-  id       String @id @default(cuid())
-  tenantId String
-  schoolId String
-  name     String
+  id   String @id @default(cuid())
+  name String @unique
 
-  tasks    TaskItem[]
-
-  @@unique([schoolId, name])
-  @@index([tenantId])
+  taskLinks TaskDepartment[]
 }
 
 model AcademicYear {
@@ -383,6 +383,23 @@ enum EmploymentType {
 enum SalaryPaidBy {
   COMPANY
   SCHOOL
+}
+
+// One row per salary slip PDF actually generated -- an audit trail separate
+// from AuditLog so HR can see "who printed whose slip, and when" as its own
+// list without filtering the generic log by action string.
+model SalarySlipLog {
+  id            String   @id @default(cuid())
+  tenantId      String
+  employeeId    String
+  employee      User     @relation("SalarySlipsFor", fields: [employeeId], references: [id])
+  generatedById String
+  generatedBy   User     @relation("SalarySlipsGeneratedBy", fields: [generatedById], references: [id])
+  period        String
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([employeeId])
 }
 
 // One row per (school, role) a staff member can act as -- lets a person hold
@@ -994,11 +1011,9 @@ model TaskItem {
   serialNo     String     @unique @default(dbgenerated("('TASK-' || lpad(nextval('task_serial_seq')::text, 6, '0'))"))
   subject      String
   description  String?
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id])
+  departments  TaskDepartment[]
   targetDate   DateTime?  @db.Date
-  assignedToId String
-  assignedTo   User       @relation("TasksAssigned", fields: [assignedToId], references: [id])
+  assignees    TaskAssignee[]
   assignedById String
   assignedBy   User       @relation("TasksCreated", fields: [assignedById], references: [id])
   updatedById  String?
@@ -1009,8 +1024,34 @@ model TaskItem {
   updatedAt    DateTime   @updatedAt
 
   @@index([tenantId, status])
-  @@index([tenantId, assignedToId])
   @@index([tenantId, assignedById])
+}
+
+// Many-to-many: one task can span several departments (e.g. a task that's
+// simultaneously HR's and IT's business at the same school). Explicit join
+// model, matching this schema's convention (UserAccess, TeacherAssignment,
+// ExamSubject) rather than Prisma's implicit m2m.
+model TaskDepartment {
+  id           String     @id @default(cuid())
+  taskId       String
+  task         TaskItem   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([taskId, departmentId])
+  @@index([departmentId])
+}
+
+// Many-to-many: one task can be assigned to several people at once.
+model TaskAssignee {
+  id     String   @id @default(cuid())
+  taskId String
+  task   TaskItem @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User     @relation(fields: [userId], references: [id])
+
+  @@unique([taskId, userId])
+  @@index([userId])
 }
 
 // ────────────────────────── Training & Feedback ──────────────────────────

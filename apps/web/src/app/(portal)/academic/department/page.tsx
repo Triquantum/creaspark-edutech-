@@ -11,7 +11,6 @@ export default function DepartmentsPage() {
         { key: "staffCount", label: "Staff" },
       ]}
       fields={[
-        { name: "schoolId", label: "School", type: "select", optionsUrl: "/academic/schools", required: true, editable: false },
         { name: "name", label: "Department name", required: true, placeholder: "Science & Math" },
       ]}
       manageRoles={["SUPER_ADMIN", "SCHOOL_ADMIN", "HR"]}

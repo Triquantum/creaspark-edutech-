@@ -35,6 +35,9 @@ export default function SubjectsPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const canManage = myRole !== null && MANAGE_ROLES.includes(myRole);
+  // Teachers see only their own subject + code -- which schools a subject
+  // is assigned to platform-wide is admin-facing information, not theirs.
+  const showAssignedTo = myRole !== "TEACHER";
 
   const load = useCallback(() => {
     setState("loading");
@@ -128,7 +131,7 @@ export default function SubjectsPage() {
               <tr className="border-b border-slate-100 dark:border-white/5">
                 <th className="px-4 py-3 font-medium">Subject</th>
                 <th className="px-4 py-3 font-medium">Code</th>
-                <th className="px-4 py-3 font-medium">Assigned to</th>
+                {showAssignedTo && <th className="px-4 py-3 font-medium">Assigned to</th>}
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
@@ -137,19 +140,21 @@ export default function SubjectsPage() {
                 <tr key={row.id} className="border-b border-slate-50 dark:border-white/5 transition-colors hover:bg-surface dark:hover:bg-white/5">
                   <td className="px-4 py-3 font-medium text-night dark:text-white">{row.name}</td>
                   <td className="px-4 py-3 text-slate-500">{row.code ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {row.schools.length === 0 ? (
-                      <span className="text-slate-400">Not assigned</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {row.schools.map((sc) => (
-                          <span key={sc.id} className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
-                            {sc.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
+                  {showAssignedTo && (
+                    <td className="px-4 py-3">
+                      {row.schools.length === 0 ? (
+                        <span className="text-slate-400">Not assigned</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {row.schools.map((sc) => (
+                            <span key={sc.id} className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
+                              {sc.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <Link

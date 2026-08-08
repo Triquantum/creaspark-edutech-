@@ -1,10 +1,9 @@
 import {
-  Body, Controller, Delete, Get, Injectable, Module, NotFoundException,
-  Param, Patch, Post, Query, UseGuards,
+  Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Patch, Post, Query, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsOptional, IsString } from "class-validator";
 import { Prisma, Role, TaskStatus } from "@educore/database";
-import { IsDateString, IsEnum, IsOptional, IsString } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -15,9 +14,9 @@ import { AuthUser, CurrentUser } from "../../common/decorators/current-user.deco
 export class CreateTaskDto {
   @IsString() subject: string;
   @IsOptional() @IsString() description?: string;
-  @IsString() departmentId: string;
+  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) departmentIds: string[];
   @IsOptional() @IsDateString() targetDate?: string;
-  @IsString() assignedToId: string;
+  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) assignedToIds: string[];
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsEnum(TaskStatus) status?: TaskStatus;
 }
@@ -25,9 +24,9 @@ export class CreateTaskDto {
 export class UpdateTaskDto {
   @IsOptional() @IsString() subject?: string;
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsString() departmentId?: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @IsString({ each: true }) departmentIds?: string[];
   @IsOptional() @IsDateString() targetDate?: string;
-  @IsOptional() @IsString() assignedToId?: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @IsString({ each: true }) assignedToIds?: string[];
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsEnum(TaskStatus) status?: TaskStatus;
 }
@@ -46,9 +45,11 @@ const MANAGE_ROLES = [
   Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR,
 ] as const;
 
+const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
+
 const TASK_INCLUDE = {
-  department: { select: { name: true } },
-  assignedTo: { select: { id: true, fullName: true, role: true } },
+  departments: { select: { department: { select: { id: true, name: true } } } },
+  assignees: { select: { user: { select: { id: true, fullName: true, role: true } } } },
   assignedBy: { select: { fullName: true } },
   updatedBy: { select: { fullName: true } },
 };
@@ -68,6 +69,25 @@ export class TasksService {
     return currentTenant().tenantId;
   }
 
+  /** Every active staff member (excludes Student/Parent/Guest) -- for the
+   * Assigned To picker. Manage-roles only, matching who's allowed to
+   * create tasks. SUPER_ADMIN/ORG_ADMIN see every school platform-wide
+   * unless narrowed to one via schoolId; everyone else is confined to
+   * their own tenant regardless of schoolId. */
+  async staff(user: AuthUser, schoolId?: string) {
+    const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
+    return this.prisma.user.findMany({
+      where: {
+        ...(!crossTenant && { tenantId: this.tenantId() }),
+        role: { notIn: NON_STAFF_ROLES },
+        isActive: true,
+        ...(schoolId && { staffProfile: { schoolId } }),
+      },
+      select: { id: true, fullName: true, role: true },
+      orderBy: { fullName: "asc" },
+    });
+  }
+
   /** List visibility: SUPER_ADMIN/ORG_ADMIN cross-tenant (every task,
    * platform-wide), other manage roles see every task in their own tenant,
    * everyone else only sees tasks they created or were assigned -- per the
@@ -77,10 +97,12 @@ export class TasksService {
     const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
     const and: Prisma.TaskItemWhereInput[] = [];
     if (!crossTenant) and.push({ tenantId: this.tenantId() });
-    if (query.departmentId) and.push({ departmentId: query.departmentId });
+    if (query.departmentId) and.push({ departments: { some: { departmentId: query.departmentId } } });
     if (query.status) and.push({ status: query.status });
-    if (query.assignedToId) and.push({ assignedToId: query.assignedToId });
-    if (!this.isManager(user.role)) and.push({ OR: [{ assignedToId: user.id }, { assignedById: user.id }] });
+    if (query.assignedToId) and.push({ assignees: { some: { userId: query.assignedToId } } });
+    if (!this.isManager(user.role)) {
+      and.push({ OR: [{ assignees: { some: { userId: user.id } } }, { assignedById: user.id }] });
+    }
     if (query.q) {
       and.push({
         OR: [
@@ -98,54 +120,63 @@ export class TasksService {
     });
   }
 
-  /** Every active user -- for the Assigned To picker. Manage-roles only,
-   * matching who's allowed to create tasks. SUPER_ADMIN/ORG_ADMIN see every
-   * user platform-wide; everyone else sees their own tenant. */
-  async staff(user: AuthUser) {
-    const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
-    return this.prisma.user.findMany({
-      where: { ...(!crossTenant && { tenantId: this.tenantId() }), isActive: true },
-      select: { id: true, fullName: true, role: true },
-      orderBy: { fullName: "asc" },
-    });
-  }
-
-  /** Message-based notification to the assignee -- reuses the existing
+  /** Message-based notification to each assignee -- reuses the existing
    * Message/bell system (read-tracking, inbox, unread count) rather than a
    * separate notification type, same pattern as portion.module.ts's
    * notifyReviewers(). */
-  private async notifyAssignee(tenantId: string, assignerId: string, assigneeId: string, task: { serialNo: string; subject: string }) {
-    if (assigneeId === assignerId) return;
-    await this.prisma.message.create({
-      data: {
-        tenantId, senderId: assignerId, recipientId: assigneeId,
+  private async notifyAssignees(tenantId: string, assignerId: string, assigneeIds: string[], task: { serialNo: string; subject: string }) {
+    const recipients = assigneeIds.filter((id) => id !== assignerId);
+    if (!recipients.length) return;
+    await this.prisma.message.createMany({
+      data: recipients.map((recipientId) => ({
+        tenantId, senderId: assignerId, recipientId,
         subject: "New task assigned",
         body: `You've been assigned task ${task.serialNo}: "${task.subject}".`,
-      },
+      })),
     });
+  }
+
+  /** Department is a global catalog (no tenant ownership), so this is
+   * purely an existence check -- any staff-facing role can point a task at
+   * any department. */
+  private async validateDepartments(departmentIds: string[]) {
+    const unique = [...new Set(departmentIds)];
+    const rows = await this.prisma.department.findMany({ where: { id: { in: unique } } });
+    if (rows.length !== unique.length) throw new NotFoundException("One or more departments no longer exist");
+    return unique;
+  }
+
+  private async validateAssignees(tenantId: string, userIds: string[]) {
+    const unique = [...new Set(userIds)];
+    const rows = await this.prisma.user.findMany({ where: { id: { in: unique }, tenantId } });
+    if (rows.length !== unique.length) throw new NotFoundException("One or more assignees not found in this organization");
+    return unique;
   }
 
   async create(dto: CreateTaskDto, user: AuthUser) {
     const tenantId = this.tenantId();
-    const dept = await this.prisma.department.findUnique({ where: { id: dto.departmentId } });
-    if (!dept || dept.tenantId !== tenantId) throw new NotFoundException("Department not found in your organization");
-    const assignee = await this.prisma.user.findFirst({ where: { id: dto.assignedToId, tenantId } });
-    if (!assignee) throw new NotFoundException("Assignee not found in this organization");
-    const task = await this.prisma.taskItem.create({
-      data: {
-        tenantId, subject: dto.subject, description: dto.description,
-        departmentId: dto.departmentId, targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
-        assignedToId: dto.assignedToId, assignedById: user.id, updatedById: user.id,
-        remarks: dto.remarks, status: dto.status ?? TaskStatus.OPEN,
-      },
-      include: TASK_INCLUDE,
+    const departmentIds = await this.validateDepartments(dto.departmentIds);
+    const assigneeIds = await this.validateAssignees(tenantId, dto.assignedToIds);
+
+    const task = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.taskItem.create({
+        data: {
+          tenantId, subject: dto.subject, description: dto.description,
+          targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
+          assignedById: user.id, updatedById: user.id,
+          remarks: dto.remarks, status: dto.status ?? TaskStatus.OPEN,
+        },
+      });
+      await tx.taskDepartment.createMany({ data: departmentIds.map((departmentId) => ({ taskId: created.id, departmentId })) });
+      await tx.taskAssignee.createMany({ data: assigneeIds.map((userId) => ({ taskId: created.id, userId })) });
+      return tx.taskItem.findUniqueOrThrow({ where: { id: created.id }, include: TASK_INCLUDE });
     });
-    await this.notifyAssignee(tenantId, user.id, dto.assignedToId, task);
+    await this.notifyAssignees(tenantId, user.id, assigneeIds, task);
     return task;
   }
 
   private async findTask(id: string) {
-    const task = await this.prisma.taskItem.findUnique({ where: { id } });
+    const task = await this.prisma.taskItem.findUnique({ where: { id }, include: { assignees: { select: { userId: true } } } });
     if (!task) throw new NotFoundException("Task not found");
     return task;
   }
@@ -158,11 +189,11 @@ export class TasksService {
     const task = await this.findTask(id);
     const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
     const isManager = this.isManager(user.role) && (crossTenant || task.tenantId === this.tenantId());
-    const isAssignee = task.assignedToId === user.id;
+    const isAssignee = task.assignees.some((a) => a.userId === user.id);
     if (!isManager && !isAssignee) throw new NotFoundException("Task not found");
 
     if (!isManager) {
-      return this.prisma.taskItem.update({
+      const updated = await this.prisma.taskItem.update({
         where: { id },
         data: {
           ...(dto.status !== undefined && { status: dto.status }),
@@ -171,28 +202,37 @@ export class TasksService {
         },
         include: TASK_INCLUDE,
       });
+      return updated;
     }
 
-    if (dto.departmentId) {
-      const dept = await this.prisma.department.findUnique({ where: { id: dto.departmentId } });
-      if (!dept || dept.tenantId !== task.tenantId) throw new NotFoundException("Department not found in your organization");
-    }
-    const reassigned = dto.assignedToId !== undefined && dto.assignedToId !== task.assignedToId;
-    const updated = await this.prisma.taskItem.update({
-      where: { id },
-      data: {
-        ...(dto.subject !== undefined && { subject: dto.subject }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.departmentId !== undefined && { departmentId: dto.departmentId }),
-        ...(dto.targetDate !== undefined && { targetDate: dto.targetDate ? new Date(dto.targetDate) : null }),
-        ...(dto.assignedToId !== undefined && { assignedToId: dto.assignedToId }),
-        ...(dto.remarks !== undefined && { remarks: dto.remarks }),
-        ...(dto.status !== undefined && { status: dto.status }),
-        updatedById: user.id,
-      },
-      include: TASK_INCLUDE,
+    const departmentIds = dto.departmentIds ? await this.validateDepartments(dto.departmentIds) : undefined;
+    const assigneeIds = dto.assignedToIds ? await this.validateAssignees(task.tenantId, dto.assignedToIds) : undefined;
+    const priorAssigneeIds = new Set(task.assignees.map((a) => a.userId));
+    const newlyAdded = assigneeIds?.filter((uid) => !priorAssigneeIds.has(uid)) ?? [];
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.taskItem.update({
+        where: { id },
+        data: {
+          ...(dto.subject !== undefined && { subject: dto.subject }),
+          ...(dto.description !== undefined && { description: dto.description }),
+          ...(dto.targetDate !== undefined && { targetDate: dto.targetDate ? new Date(dto.targetDate) : null }),
+          ...(dto.remarks !== undefined && { remarks: dto.remarks }),
+          ...(dto.status !== undefined && { status: dto.status }),
+          updatedById: user.id,
+        },
+      });
+      if (departmentIds) {
+        await tx.taskDepartment.deleteMany({ where: { taskId: id } });
+        await tx.taskDepartment.createMany({ data: departmentIds.map((departmentId) => ({ taskId: id, departmentId })) });
+      }
+      if (assigneeIds) {
+        await tx.taskAssignee.deleteMany({ where: { taskId: id } });
+        await tx.taskAssignee.createMany({ data: assigneeIds.map((userId) => ({ taskId: id, userId })) });
+      }
+      return tx.taskItem.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
     });
-    if (reassigned) await this.notifyAssignee(task.tenantId, user.id, dto.assignedToId!, updated);
+    if (newlyAdded.length) await this.notifyAssignees(task.tenantId, user.id, newlyAdded, updated);
     return updated;
   }
 
@@ -219,8 +259,8 @@ export class TasksController {
 
   @Get("staff")
   @Roles(...MANAGE_ROLES)
-  staff(@CurrentUser() user: AuthUser) {
-    return this.svc.staff(user);
+  staff(@CurrentUser() user: AuthUser, @Query("schoolId") schoolId?: string) {
+    return this.svc.staff(user, schoolId);
   }
 
   @Post()

@@ -27,7 +27,7 @@ export class SubjectUpdateDto {
   @IsOptional() @IsString() code?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) schoolIds?: string[];
 }
-export class DepartmentDto { @IsString() schoolId: string; @IsString() name: string }
+export class DepartmentDto { @IsString() name: string }
 export class DepartmentUpdateDto { @IsOptional() @IsString() name?: string }
 export class AcademicYearDto {
   @IsString() schoolId: string; @IsString() label: string;
@@ -300,9 +300,11 @@ export class AcademicService {
   }
 
   // ── Departments ──
-  /** Teachers see only their own department (from their StaffProfile), not
-   * the school's full org chart — matches the classes/sections/subjects
-   * scoping above. A teacher with no department set sees none. */
+  /** Global shared catalog (like Subject) -- one flat list of department
+   * names, not duplicated per school; adding one applies to every school/
+   * institute/college/center at once. Teachers still only see their own
+   * department (from their StaffProfile), matching the classes/sections/
+   * subjects scoping above. A teacher with no department set sees none. */
   async departments(user: AuthUser, schoolId?: string) {
     const scope = await this.readScope(user, schoolId);
     let myDepartment: string | undefined;
@@ -311,11 +313,7 @@ export class AcademicService {
       myDepartment = profile?.department ?? "__none__";
     }
     const rows = await this.prisma.department.findMany({
-      where: {
-        ...(scope.tenantId && { tenantId: scope.tenantId }),
-        ...(scope.schoolId && { schoolId: scope.schoolId }),
-        ...(myDepartment && { name: myDepartment }),
-      },
+      where: { ...(myDepartment && { name: myDepartment }) },
       orderBy: { name: "asc" },
     });
     const counts = await this.prisma.staffProfile.groupBy({
@@ -325,18 +323,21 @@ export class AcademicService {
     return rows.map((d) => ({ ...d, staffCount: byName.get(d.name) ?? 0 }));
   }
   async createDepartment(dto: DepartmentDto, user: AuthUser, actor: string) {
-    const { tenantId } = await this.resolveTenant(user, dto.schoolId);
-    const exists = await this.prisma.department.findUnique({ where: { schoolId_name: { schoolId: dto.schoolId, name: dto.name } } });
+    const { tenantId } = currentTenant();
+    const exists = await this.prisma.department.findUnique({ where: { name: dto.name } });
     if (exists) throw new ConflictException(`Department "${dto.name}" already exists`);
-    const d = await this.prisma.department.create({ data: { tenantId, schoolId: dto.schoolId, name: dto.name } });
+    const d = await this.prisma.department.create({ data: { name: dto.name } });
     await this.audit(actor, "department.create", "Department", d.id, tenantId);
     return d;
   }
   async updateDepartment(id: string, dto: DepartmentUpdateDto, user: AuthUser, actor: string) {
     const existing = await this.prisma.department.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Department not found");
-    const { tenantId } = await this.resolveTenant(user, existing.schoolId);
-    if (existing.tenantId !== tenantId) throw new NotFoundException("Department not found");
+    if (dto.name) {
+      const clash = await this.prisma.department.findUnique({ where: { name: dto.name } });
+      if (clash && clash.id !== id) throw new ConflictException(`Department "${dto.name}" already exists`);
+    }
+    const { tenantId } = currentTenant();
     const d = await this.prisma.department.update({ where: { id }, data: dto });
     await this.audit(actor, "department.update", "Department", id, tenantId);
     return d;
@@ -344,8 +345,7 @@ export class AcademicService {
   async deleteDepartment(id: string, user: AuthUser, actor: string) {
     const existing = await this.prisma.department.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Department not found");
-    const { tenantId } = await this.resolveTenant(user, existing.schoolId);
-    if (existing.tenantId !== tenantId) throw new NotFoundException("Department not found");
+    const { tenantId } = currentTenant();
     await this.prisma.department.delete({ where: { id } });
     await this.audit(actor, "department.delete", "Department", id, tenantId);
     return { deleted: true };
