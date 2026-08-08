@@ -78,6 +78,7 @@ model School {
   subjects      Subject[]
   media         MediaItem[]
   inventoryItems InventoryItem[]
+  trainings     Training[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -133,6 +134,8 @@ model User {
   tasksAssigned           TaskItem[] @relation("TasksAssigned")
   tasksCreated            TaskItem[] @relation("TasksCreated")
   tasksUpdated            TaskItem[] @relation("TasksUpdatedBy")
+  trainingsConducted      Training[] @relation("TrainingsConducted")
+  trainingFeedback        TrainingFeedback[]
 
   @@index([tenantId, role])
 }
@@ -961,4 +964,47 @@ model TaskItem {
   @@index([tenantId, status])
   @@index([tenantId, assignedToId])
   @@index([tenantId, assignedById])
+}
+
+// ────────────────────────── Training & Feedback ──────────────────────────
+// Super Admin conducts a training targeted at a chosen audience (roles
+// and/or a single school; both empty/null = everyone platform-wide).
+// Creating one notifies the matched audience (same Message/bell reuse as
+// Task Manager's notifyAssignee), who each submit one structured feedback
+// response.
+
+model Training {
+  id             String   @id @default(cuid())
+  tenantId       String
+  title          String
+  description    String?
+  conductedAt    DateTime
+  conductedById  String
+  conductedBy    User     @relation("TrainingsConducted", fields: [conductedById], references: [id])
+  targetRoles    Role[]
+  targetSchoolId String?
+  targetSchool   School?  @relation(fields: [targetSchoolId], references: [id])
+  createdAt      DateTime @default(now())
+
+  feedback TrainingFeedback[]
+
+  @@index([targetSchoolId])
+}
+
+model TrainingFeedback {
+  id               String   @id @default(cuid())
+  tenantId         String
+  trainingId       String
+  training         Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  respondentId     String
+  respondent       User     @relation(fields: [respondentId], references: [id])
+  contentRating    Int
+  trainerRating    Int
+  usefulnessRating Int
+  overallRating    Int
+  comments         String?
+  submittedAt      DateTime @default(now())
+
+  @@unique([trainingId, respondentId])
+  @@index([tenantId, trainingId])
 }

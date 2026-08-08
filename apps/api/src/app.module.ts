@@ -28,6 +28,7 @@ import { MediaModule } from "./modules/media/media.module";
 import { InventoryItemModule } from "./modules/inventory-item/inventory-item.module";
 import { TasksModule } from "./modules/tasks/tasks.module";
 import { EmployeesModule } from "./modules/employees/employees.module";
+import { TrainingsModule } from "./modules/trainings/trainings.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -61,6 +62,7 @@ import { HealthController } from "./modules/health.controller";
     InventoryItemModule,
     TasksModule,
     EmployeesModule,
+    TrainingsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
