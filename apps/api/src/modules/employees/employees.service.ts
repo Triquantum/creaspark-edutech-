@@ -119,7 +119,11 @@ export class EmployeesService {
           orderBy: { isPrimary: "desc" },
         },
       },
-      orderBy: { fullName: "asc" },
+      // Employees without a StaffProfile (shown as "—" in the Employee No.
+      // column) have nothing to sort on here -- Prisma puts null relation
+      // sort keys last by default, so they fall to the bottom instead of
+      // interleaving with real employee numbers.
+      orderBy: [{ staffProfile: { employeeNo: "asc" } }, { fullName: "asc" }],
       take: 200,
     });
   }
