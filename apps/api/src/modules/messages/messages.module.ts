@@ -20,9 +20,10 @@ export class SendMessageDto {
   @IsOptional() @IsString() sectionId?: string;
 }
 
-/** Cross-tenant announcement from Super Admin to a chosen school's staff.
- * Super Admin has no tenant of their own, so schoolId resolves the target
- * tenant the same way resolveTenant() does elsewhere in the app. */
+/** Cross-tenant announcement from Super Admin to a chosen school's staff, or
+ * to every school platform-wide via the literal "ALL" sentinel. Super Admin
+ * has no tenant of their own, so schoolId resolves the target tenant the
+ * same way resolveTenant() does elsewhere in the app. */
 export class SuperAdminBroadcastDto {
   @IsString() schoolId: string;
   @IsOptional() @IsString() subject?: string;
@@ -210,6 +211,8 @@ export class MessagesService {
       throw new BadRequestException(`Unsupported audience role(s): ${invalidRoles.join(", ")}`);
     }
 
+    if (dto.schoolId === "ALL") return this.broadcastToAllSchools(dto, user);
+
     const school = await this.prisma.school.findUnique({
       where: { id: dto.schoolId }, select: { id: true, name: true, tenantId: true },
     });
@@ -228,6 +231,33 @@ export class MessagesService {
     });
 
     return { sentCount: recipients.length, school: school.name };
+  }
+
+  /** Every school (institute/college/center) across every active tenant --
+   * each recipient's Message is stamped with THEIR OWN school's tenantId,
+   * same reasoning as trainings.module.ts's notifyAudience, since a single
+   * platform-wide broadcast spans many tenants and a Message only surfaces
+   * in its recipient's own tenant-scoped inbox. */
+  private async broadcastToAllSchools(dto: SuperAdminBroadcastDto, user: AuthUser) {
+    const schools = await this.prisma.school.findMany({
+      where: { tenant: { status: { not: "SUSPENDED" } } },
+      select: { id: true, tenantId: true },
+    });
+    if (!schools.length) throw new BadRequestException("No schools are registered yet");
+
+    const recipients = await this.prisma.user.findMany({
+      where: { tenantId: { in: [...new Set(schools.map((s) => s.tenantId))] }, role: { in: dto.roles }, isActive: true },
+      select: { id: true, tenantId: true },
+    });
+    if (!recipients.length) throw new BadRequestException("No active users with the selected role(s) at any school");
+
+    await this.prisma.message.createMany({
+      data: recipients.map((r) => ({
+        tenantId: r.tenantId, senderId: user.id, recipientId: r.id, subject: dto.subject, body: dto.body,
+      })),
+    });
+
+    return { sentCount: recipients.length, school: "All schools" };
   }
 }
 

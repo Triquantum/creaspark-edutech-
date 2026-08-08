@@ -176,6 +176,7 @@ function ComposeDialog({ canBroadcast, canAnnounce, onClose, onSent }: {
             <Field id="announce-school" label="School">
               <select id="announce-school" className={inputCls} value={schoolId} onChange={(e) => setSchoolId(e.target.value)}>
                 <option value="" disabled>Select a school…</option>
+                <option value="ALL">All schools / institutes / colleges / centers</option>
                 {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </Field>

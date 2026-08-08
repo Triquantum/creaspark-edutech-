@@ -114,6 +114,12 @@ export default function ModuleScaffold({ params }: { params: Promise<{ module: s
   const [deleting, setDeleting] = useState<RecordRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  // Teachers can view their own attendance record but shouldn't be able to
+  // self-mark it -- that stays an admin/HR action, same module either way.
+  const canAdd = !(role === "TEACHER" && moduleKey === "attendance-teacher-attendance");
+
+  useEffect(() => { api<{ role: string }>("/auth/me").then((r) => setRole(r.role)).catch(() => {}); }, []);
 
   useEffect(() => {
     api<School[]>("/academic/schools").then((list) => {
@@ -158,7 +164,9 @@ export default function ModuleScaffold({ params }: { params: Promise<{ module: s
           {group && <p className="text-xs font-medium uppercase tracking-widest text-slate-400">{group}</p>}
           <h1 className="font-display text-2xl font-semibold text-night dark:text-white">{title}</h1>
         </div>
-        <Button onClick={() => setDialog({ mode: "add" })} disabled={!schoolId}>Add {title.toLowerCase()}</Button>
+        {canAdd && (
+          <Button onClick={() => setDialog({ mode: "add" })} disabled={!schoolId}>Add {title.toLowerCase()}</Button>
+        )}
       </div>
 
       <Card className="p-0 overflow-hidden">

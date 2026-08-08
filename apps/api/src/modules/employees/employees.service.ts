@@ -63,6 +63,11 @@ export class EmployeesService {
             schoolId: true, school: { select: { name: true } },
           },
         },
+        userAccess: {
+          where: { isActive: true },
+          select: { id: true, role: true, designation: true, department: true, isPrimary: true, schoolId: true, school: { select: { name: true } } },
+          orderBy: { isPrimary: "desc" },
+        },
       },
       orderBy: { fullName: "asc" },
       take: 200,
@@ -97,6 +102,16 @@ export class EmployeesService {
           employeeNo: dto.employeeNo, designation: dto.designation, department: dto.department,
         },
       });
+      // Mirrors the StaffProfile above as this person's primary grant --
+      // see UserAccess in schema.prisma. Additional (school, role) grants
+      // are a later phase; every employee gets exactly one primary row here.
+      await tx.userAccess.create({
+        data: {
+          userId: u.id, tenantId, schoolId: dto.schoolId, role: dto.role,
+          designation: dto.designation, department: dto.department, employeeNo: dto.employeeNo,
+          isPrimary: true, isActive: true,
+        },
+      });
       await tx.auditLog.create({
         data: { tenantId, userId: actorId, action: "employee.create", entity: "User", entityId: u.id },
       });
@@ -113,7 +128,10 @@ export class EmployeesService {
   private async findEmployee(id: string) {
     const user = await this.prisma.user.findFirst({
       where: { id, role: { notIn: NON_STAFF_ROLES } },
-      include: { staffProfile: true },
+      include: {
+        staffProfile: true,
+        userAccess: { where: { isActive: true }, include: { school: { select: { name: true } } }, orderBy: { isPrimary: "desc" } },
+      },
     });
     if (!user) throw new NotFoundException("Employee not found");
     return user;
@@ -187,6 +205,32 @@ export class EmployeesService {
           },
         });
       }
+
+      // Keeps the primary UserAccess grant in sync with whatever just
+      // changed on User/StaffProfile above -- same mirroring as create().
+      const primaryAccess = await tx.userAccess.findFirst({ where: { userId: id, isPrimary: true } });
+      if (primaryAccess) {
+        await tx.userAccess.update({
+          where: { id: primaryAccess.id },
+          data: {
+            ...(dto.role !== undefined && { role: dto.role }),
+            ...(dto.schoolId !== undefined && { schoolId: dto.schoolId }),
+            ...(dto.employeeNo !== undefined && { employeeNo: dto.employeeNo }),
+            ...(dto.designation !== undefined && { designation: dto.designation }),
+            ...(dto.department !== undefined && { department: dto.department }),
+            ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+          },
+        });
+      } else if (dto.schoolId) {
+        await tx.userAccess.create({
+          data: {
+            userId: id, tenantId, schoolId: dto.schoolId, role: dto.role ?? target.role,
+            designation: dto.designation!.trim(), department: dto.department, employeeNo: dto.employeeNo!.trim(),
+            isPrimary: true, isActive: target.isActive,
+          },
+        });
+      }
+
       await tx.auditLog.create({
         data: { tenantId, userId: actorId, action: "employee.update", entity: "User", entityId: id },
       });

@@ -29,6 +29,7 @@ model Tenant {
 
   schools     School[]
   users       User[]
+  userAccess  UserAccess[]
 }
 
 enum Plan {
@@ -79,6 +80,7 @@ model School {
   media         MediaItem[]
   inventoryItems InventoryItem[]
   trainings     Training[]
+  userAccess    UserAccess[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -136,6 +138,7 @@ model User {
   tasksUpdated            TaskItem[] @relation("TasksUpdatedBy")
   trainingsConducted      Training[] @relation("TrainingsConducted")
   trainingFeedback        TrainingFeedback[]
+  userAccess              UserAccess[]
 
   @@index([tenantId, role])
 }
@@ -365,6 +368,35 @@ model StaffProfile {
 
   @@unique([schoolId, employeeNo])
   @@index([tenantId])
+}
+
+// One row per (school, role) a staff member can act as -- lets a person hold
+// several roles across several schools/institutes/colleges/centers at once.
+// StaffProfile remains the mirror of whichever grant here is isPrimary, so
+// the ~30 existing modules reading StaffProfile/User.role need no changes;
+// this table is additive. Partial unique indexes (one primary grant per
+// user; employeeNo unique per school when set) are hand-written in the
+// migration SQL -- Prisma can't express a WHERE clause on @@unique.
+model UserAccess {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  schoolId    String?                        // null = tenant-wide grant (e.g. ORG_ADMIN)
+  school      School?  @relation(fields: [schoolId], references: [id])
+  role        Role
+  designation String?
+  department  String?
+  employeeNo  String?
+  isPrimary   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, tenantId, schoolId, role])
+  @@index([userId])
+  @@index([tenantId, schoolId, role])
 }
 
 // ────────────────────────── Attendance ──────────────────────────

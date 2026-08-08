@@ -21,8 +21,13 @@ interface EmployeeRow {
     employeeNo: string; designation: string; department?: string | null; joinDate?: string;
     schoolId?: string; school?: { name: string } | null;
   } | null;
+  userAccess?: {
+    id: string; role: string; designation?: string | null; department?: string | null;
+    isPrimary: boolean; schoolId?: string | null; school?: { name: string } | null;
+  }[];
 }
 interface SchoolOpt { id: string; name: string }
+interface DeptOpt { id: string; name: string }
 
 function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved }: {
   mode: "add" | "edit"; initial?: EmployeeRow; schools: SchoolOpt[]; schoolsError: string | null;
@@ -41,6 +46,7 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [departments, setDepartments] = useState<DeptOpt[]>([]);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -49,6 +55,15 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
     const fallback = mode === "edit" ? initial?.staffProfile?.schoolId : schools[0]?.id;
     if (fallback) setForm((f) => ({ ...f, schoolId: fallback }));
   }, [schools, form.schoolId, initial, mode]);
+
+  // Refetches whenever the selected school changes -- department names are
+  // scoped per school, so the option list must track the School field above it.
+  useEffect(() => {
+    if (!form.schoolId) { setDepartments([]); return; }
+    api<DeptOpt[]>(`/academic/departments?schoolId=${form.schoolId}`)
+      .then(setDepartments)
+      .catch(() => setDepartments([]));
+  }, [form.schoolId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -134,7 +149,13 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
             <input id="fe-desig" required value={form.designation} onChange={set("designation")} placeholder="Accounts Officer" className={inputCls} />
           </Field>
           <Field id="fe-dept" label="Department" optional>
-            <input id="fe-dept" value={form.department ?? ""} onChange={set("department")} className={inputCls} />
+            <select id="fe-dept" value={form.department ?? ""} onChange={set("department")} className={inputCls}>
+              <option value="">No department</option>
+              {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+              {form.department && !departments.some((d) => d.name === form.department) && (
+                <option value={form.department}>{form.department}</option>
+              )}
+            </select>
           </Field>
         </div>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -316,6 +337,21 @@ export default function EmployeePage() {
               </div>
             ))}
           </dl>
+          {viewing.userAccess && viewing.userAccess.length > 1 && (
+            <div className="mt-5 border-t border-slate-100 pt-4 dark:border-white/5">
+              <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Roles &amp; schools</p>
+              <div className="space-y-1.5 text-sm">
+                {viewing.userAccess.map((a) => (
+                  <div key={a.id} className="flex items-center gap-2">
+                    <span className="font-medium text-night dark:text-white">{roleLabel(a.role)}</span>
+                    <span className="text-slate-400">at {a.school?.name ?? "—"}</span>
+                    {a.designation && <span className="text-slate-400">· {a.designation}</span>}
+                    {a.isPrimary && <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">Primary</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 
