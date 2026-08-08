@@ -363,12 +363,16 @@ export class EmployeesService {
   /** Replaces this employee's entire grant list with `grants`, validates
    * exactly one isPrimary, and syncs User.role/StaffProfile from whichever
    * grant ends up primary. The primary grant's school must stay within the
-   * employee's own tenant -- moving tenant is a separate "reassign"
-   * operation (see UsersService.update's schoolId handling), not something
-   * grants[] does silently. Non-primary grants may span other tenants when
-   * the actor is Super Admin. Returns the new primary role when it differs
-   * from `currentRole`, so the caller can push it to Supabase's
-   * app_metadata after the transaction commits. */
+   * employee's own tenant for real staff -- moving tenant is a separate
+   * "reassign" operation (see UsersService.update's schoolId handling), not
+   * something grants[] does silently. Exception: SUPER_ADMIN has no real
+   * home organization to protect (they already bypass tenant scoping
+   * everywhere), so a SUPER_ADMIN primary grant may point at any school --
+   * the check below only applies when the primary grant's own role isn't
+   * SUPER_ADMIN. Non-primary grants may span other tenants when the actor
+   * is Super Admin. Returns the new primary role when it differs from
+   * `currentRole`, so the caller can push it to Supabase's app_metadata
+   * after the transaction commits. */
   private async syncGrants(
     tx: Prisma.TransactionClient, userId: string, tenantId: string, isSuperAdmin: boolean,
     rawGrants: GrantDto[], isActive: boolean, currentRole: Role,
@@ -384,11 +388,13 @@ export class EmployeesService {
     if (!primaryGrant.employeeNo?.trim() || !primaryGrant.designation?.trim()) {
       throw new BadRequestException("The primary grant needs an employee no. and designation");
     }
-    const primarySchool = await tx.school.findFirst({ where: { id: primaryGrant.schoolId, tenantId } });
-    if (!primarySchool) throw new BadRequestException("The primary grant's school must be in this employee's own organization");
 
     const schoolIds = [...new Set(grants.map((g) => g.schoolId))];
     const schoolTenants = await this.resolveGrantSchoolTenants(tx, isSuperAdmin, tenantId, schoolIds);
+    const primaryTenantId = schoolTenants.get(primaryGrant.schoolId)!;
+    if (primaryGrant.role !== Role.SUPER_ADMIN && primaryTenantId !== tenantId) {
+      throw new BadRequestException("The primary grant's school must be in this employee's own organization");
+    }
 
     const seen = new Set<string>();
     for (const g of grants) {
@@ -427,11 +433,11 @@ export class EmployeesService {
     await tx.staffProfile.upsert({
       where: { userId },
       create: {
-        tenantId, userId, schoolId: primaryGrant.schoolId,
+        tenantId: primaryTenantId, userId, schoolId: primaryGrant.schoolId,
         employeeNo: primaryGrant.employeeNo.trim(), designation: primaryGrant.designation.trim(), department: primaryGrant.department,
       },
       update: {
-        schoolId: primaryGrant.schoolId,
+        tenantId: primaryTenantId, schoolId: primaryGrant.schoolId,
         employeeNo: primaryGrant.employeeNo.trim(), designation: primaryGrant.designation.trim(), department: primaryGrant.department,
       },
     });
