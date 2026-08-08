@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 export const BOARDS = ["CBSE", "ICSE", "IB", "IGCSE", "STATE", "OTHER"] as const;
 export const PLANS = ["STARTER", "GROWTH", "ENTERPRISE"] as const;
 export const STATUSES = ["ACTIVE", "SUSPENDED", "TRIAL"] as const;
-export const INSTITUTION_TYPES = ["SCHOOL", "COLLEGE", "INSTITUTE"] as const;
+export const INSTITUTION_TYPES = ["SCHOOL", "COLLEGE", "INSTITUTE", "CENTRE", "COMPANY"] as const;
 
 export interface SchoolFull {
   id: string; name: string; code: string; institutionType: string; board: string;

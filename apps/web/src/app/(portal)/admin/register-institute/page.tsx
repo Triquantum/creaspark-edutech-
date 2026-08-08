@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Field, inputCls } from "@/components/ui/modal";
 
 const ACCESS_ROLES = new Set(["SUPER_ADMIN"]);
-const TYPES = ["COLLEGE", "INSTITUTE"] as const;
+const TYPES = ["COLLEGE", "INSTITUTE", "CENTRE", "COMPANY"] as const;
 
 interface Me { role: string }
 

@@ -99,6 +99,8 @@ enum InstitutionType {
   SCHOOL
   COLLEGE
   INSTITUTE
+  CENTRE
+  COMPANY
 }
 
 // ────────────────────────── Identity & RBAC ──────────────────────────
