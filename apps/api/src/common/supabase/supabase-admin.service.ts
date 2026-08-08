@@ -62,4 +62,21 @@ export class SupabaseAdminService {
     if (error || !data.session) throw new UnauthorizedException("Invalid email/admission number or password");
     return { access_token: data.session.access_token, refresh_token: data.session.refresh_token };
   }
+
+  /** Uploads to a private bucket using the service-role client, which
+   * bypasses RLS -- the bucket itself carries no public/anon access, so
+   * this is the only way in or out (see getSignedUrl for reads). */
+  async uploadPrivateFile(bucket: string, path: string, data: Buffer, contentType: string) {
+    const { error } = await this.client.storage.from(bucket).upload(path, data, { contentType, upsert: true });
+    if (error) throw new BadRequestException(error.message);
+  }
+
+  /** Short-lived signed URL for a private-bucket object -- generated fresh
+   * per request rather than stored, so access can't outlive the caller's
+   * own permission check on the log row. */
+  async getSignedUrl(bucket: string, path: string, expiresInSeconds = 300) {
+    const { data, error } = await this.client.storage.from(bucket).createSignedUrl(path, expiresInSeconds);
+    if (error || !data) throw new BadRequestException(error?.message ?? "Could not create signed URL");
+    return data.signedUrl;
+  }
 }

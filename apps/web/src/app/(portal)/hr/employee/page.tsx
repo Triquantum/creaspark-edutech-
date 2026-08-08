@@ -400,6 +400,10 @@ function SalaryCertificateModal({ employee, onClose }: { employee: EmployeeRow; 
 function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose: () => void }) {
   const [period, setPeriod] = useState(() => new Date().toLocaleString("en-IN", { month: "long", year: "numeric" }));
   const [paymentMode, setPaymentMode] = useState<"BANK_TRANSFER" | "CASH">("BANK_TRANSFER");
+  const [pettyCash, setPettyCash] = useState("");
+  const [overtime, setOvertime] = useState("");
+  const [deduction, setDeduction] = useState("");
+  const [pendingAmount, setPendingAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const hasSalary = employee.staffProfile?.salary != null;
@@ -411,7 +415,13 @@ function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose
     try {
       const blob = await apiBlob(`/employees/${employee.id}/salary-slip`, {
         method: "POST",
-        body: JSON.stringify({ period: period.trim(), paymentMode }),
+        body: JSON.stringify({
+          period: period.trim(), paymentMode,
+          ...(pettyCash.trim() && { pettyCash: Number(pettyCash) }),
+          ...(overtime.trim() && { overtime: Number(overtime) }),
+          ...(deduction.trim() && { deduction: Number(deduction) }),
+          ...(pendingAmount.trim() && { pendingAmount: Number(pendingAmount) }),
+        }),
       });
       window.open(URL.createObjectURL(blob), "_blank");
       onClose();
@@ -449,6 +459,21 @@ function SalarySlipModal({ employee, onClose }: { employee: EmployeeRow; onClose
                 ₹{Number(employee.staffProfile!.salary).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="ss-petty" label="Petty cash" optional>
+              <input id="ss-petty" type="number" min="0" step="0.01" value={pettyCash} onChange={(e) => setPettyCash(e.target.value)} placeholder="0.00" className={inputCls} />
+            </Field>
+            <Field id="ss-overtime" label="Overtime" optional>
+              <input id="ss-overtime" type="number" min="0" step="0.01" value={overtime} onChange={(e) => setOvertime(e.target.value)} placeholder="0.00" className={inputCls} />
+            </Field>
+            <Field id="ss-deduction" label="Deduction amount" optional>
+              <input id="ss-deduction" type="number" min="0" step="0.01" value={deduction} onChange={(e) => setDeduction(e.target.value)} placeholder="0.00" className={inputCls} />
+            </Field>
+            <Field id="ss-pending" label="Pending amount" optional>
+              <input id="ss-pending" type="number" min="0" step="0.01" value={pendingAmount} onChange={(e) => setPendingAmount(e.target.value)} placeholder="0.00" className={inputCls} />
+            </Field>
           </div>
 
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}

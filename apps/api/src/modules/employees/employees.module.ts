@@ -33,6 +33,24 @@ export class EmployeesController {
     return this.employees.salarySlipLogs(user);
   }
 
+  @Get("salary-slip-log/:id/download")
+  @Roles(...HR_ROLES)
+  salarySlipDownload(@Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.employees.salarySlipDownloadUrl(id, user);
+  }
+
+  @Get("salary-certificate-log")
+  @Roles(...HR_ROLES)
+  salaryCertificateLog(@CurrentUser() user: AuthUser) {
+    return this.employees.salaryCertificateLogs(user);
+  }
+
+  @Get("salary-certificate-log/:id/download")
+  @Roles(...HR_ROLES)
+  salaryCertificateDownload(@Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.employees.salaryCertificateDownloadUrl(id, user);
+  }
+
   @Post()
   @Roles(...HR_ROLES)
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: AuthUser) {

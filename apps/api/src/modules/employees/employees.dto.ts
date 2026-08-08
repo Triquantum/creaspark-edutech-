@@ -66,10 +66,14 @@ export class SalaryCertificateDto {
   @IsString() signatoryDesignation: string;
 }
 
-/** Deliberately has no earnings/deductions/amount fields -- the slip always
- * prints the employee's own StaffProfile.salary, never a caller-supplied
- * figure (see salarySlipPdf()). */
+/** Basic Salary is deliberately not a field here -- it always comes from
+ * the employee's own StaffProfile.salary, never a caller-supplied figure
+ * (see salarySlipPdf()). These four are additive line items on top of it. */
 export class SalarySlipDto {
   @IsString() period: string;
   @IsIn(["BANK_TRANSFER", "CASH"]) paymentMode: "BANK_TRANSFER" | "CASH";
+  @IsOptional() @IsNumber() @Min(0) pettyCash?: number;
+  @IsOptional() @IsNumber() @Min(0) overtime?: number;
+  @IsOptional() @IsNumber() @Min(0) deduction?: number;
+  @IsOptional() @IsNumber() @Min(0) pendingAmount?: number;
 }

@@ -130,16 +130,33 @@ export class EmployeesService {
    * their own. */
   async salarySlipLogs(user: AuthUser) {
     const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
-    return this.prisma.salarySlipLog.findMany({
+    const rows = await this.prisma.salarySlipLog.findMany({
       where: { ...(!crossTenant && { tenantId: currentTenant().tenantId }) },
       select: {
-        id: true, period: true, createdAt: true,
+        id: true, period: true, createdAt: true, storagePath: true,
         employee: { select: { id: true, fullName: true, staffProfile: { select: { employeeNo: true } } } },
         generatedBy: { select: { id: true, fullName: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 300,
     });
+    return rows.map(({ storagePath, ...r }) => ({ ...r, hasDocument: storagePath != null }));
+  }
+
+  /** Same audit-trail purpose as salarySlipLogs(), for salary certificates. */
+  async salaryCertificateLogs(user: AuthUser) {
+    const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
+    const rows = await this.prisma.salaryCertificateLog.findMany({
+      where: { ...(!crossTenant && { tenantId: currentTenant().tenantId }) },
+      select: {
+        id: true, refNo: true, createdAt: true, storagePath: true,
+        employee: { select: { id: true, fullName: true, staffProfile: { select: { employeeNo: true } } } },
+        generatedBy: { select: { id: true, fullName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    });
+    return rows.map(({ storagePath, ...r }) => ({ ...r, hasDocument: storagePath != null }));
   }
 
   /** Creates the login and staff profile; returns a temp password once if none was supplied. */
@@ -627,7 +644,11 @@ export class EmployeesService {
       throw new BadRequestException("This employee's salary isn't set yet -- add it on the Employee form before generating a certificate");
     }
 
-    return new Promise((resolve, reject) => {
+    const log = await this.prisma.salaryCertificateLog.create({
+      data: { tenantId: employee.tenantId, employeeId: employee.id, generatedById: user.id, refNo: dto.refNo },
+    });
+
+    const pdf = await new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ margin: 54, size: "A4" });
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -672,6 +693,12 @@ export class EmployeesService {
 
       doc.end();
     });
+
+    const storagePath = `certificates/${employee.tenantId}/${employee.id}/${log.id}.pdf`;
+    await this.supabaseAdmin.uploadPrivateFile("salary-documents", storagePath, pdf, "application/pdf");
+    await this.prisma.salaryCertificateLog.update({ where: { id: log.id }, data: { storagePath } });
+
+    return pdf;
   }
 
   /** School.institutionType is a generic label for the org an employee's
@@ -689,11 +716,11 @@ export class EmployeesService {
       throw new BadRequestException("This employee's salary isn't set yet -- add it on the Employee form before generating a slip");
     }
 
-    await this.prisma.salarySlipLog.create({
+    const log = await this.prisma.salarySlipLog.create({
       data: { tenantId: employee.tenantId, employeeId: employee.id, generatedById: user.id, period: dto.period },
     });
 
-    return new Promise((resolve, reject) => {
+    const pdf = await new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ margin: 54, size: "A4" });
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -720,11 +747,20 @@ export class EmployeesService {
       doc.y = schoolRowY + 15;
       doc.moveDown(1.5);
 
-      // Always the employee's own stored salary -- never a caller-supplied
-      // figure. No deductions line: this slip isn't a payroll computation
-      // tool, just a printable record of the fixed monthly salary on file.
-      const grossEarnings = Number(profile.salary);
-      const netPay = grossEarnings;
+      // Basic Salary always comes from the employee's own stored figure --
+      // never a caller-supplied one. Overtime/Petty Cash/Pending Amount are
+      // additive earnings on top of it; Deduction is the sole deductions line.
+      const basicSalary = Number(profile.salary);
+      const earnings = [
+        { label: "Basic Salary", amount: basicSalary },
+        ...(dto.overtime ? [{ label: "Overtime", amount: dto.overtime }] : []),
+        ...(dto.pettyCash ? [{ label: "Petty Cash", amount: dto.pettyCash }] : []),
+        ...(dto.pendingAmount ? [{ label: "Pending Amount", amount: dto.pendingAmount }] : []),
+      ];
+      const deductions = dto.deduction ? [{ label: "Deductions", amount: dto.deduction }] : [];
+      const grossEarnings = earnings.reduce((sum, l) => sum + l.amount, 0);
+      const totalDeductions = deductions.reduce((sum, l) => sum + l.amount, 0);
+      const netPay = grossEarnings - totalDeductions;
       const inr = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
       const colWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right) / 2;
@@ -735,13 +771,26 @@ export class EmployeesService {
       doc.font("Helvetica-Bold").fontSize(10);
       doc.text("Earnings", leftX, tableY);
       doc.text("Amount (Rs.)", leftX, tableY, { width: colWidth - 10, align: "right" });
+      doc.text("Deductions", rightX, tableY);
+      doc.text("Amount (Rs.)", rightX, tableY, { width: colWidth - 10, align: "right" });
       tableY += 18;
       doc.moveTo(leftX, tableY - 4).lineTo(doc.page.width - doc.page.margins.right, tableY - 4).strokeColor("#ccc").stroke();
       doc.font("Helvetica").fontSize(10);
 
-      doc.text("Basic Salary", leftX, tableY, { width: colWidth - 90 });
-      doc.text(inr(grossEarnings), leftX, tableY, { width: colWidth - 10, align: "right" });
-      tableY += 16;
+      const rowCount = Math.max(earnings.length, deductions.length);
+      for (let i = 0; i < rowCount; i++) {
+        const e = earnings[i];
+        const d = deductions[i];
+        if (e) {
+          doc.text(e.label, leftX, tableY, { width: colWidth - 90 });
+          doc.text(inr(e.amount), leftX, tableY, { width: colWidth - 10, align: "right" });
+        }
+        if (d) {
+          doc.text(d.label, rightX, tableY, { width: colWidth - 90 });
+          doc.text(inr(d.amount), rightX, tableY, { width: colWidth - 10, align: "right" });
+        }
+        tableY += 16;
+      }
 
       tableY += 6;
       doc.moveTo(leftX, tableY).lineTo(doc.page.width - doc.page.margins.right, tableY).strokeColor("#ccc").stroke();
@@ -749,6 +798,8 @@ export class EmployeesService {
       doc.font("Helvetica-Bold");
       doc.text("Gross Earnings", leftX, tableY, { width: colWidth - 90 });
       doc.text(inr(grossEarnings), leftX, tableY, { width: colWidth - 10, align: "right" });
+      doc.text("Total Deductions", rightX, tableY, { width: colWidth - 90 });
+      doc.text(inr(totalDeductions), rightX, tableY, { width: colWidth - 10, align: "right" });
 
       doc.y = tableY + 20;
       doc.moveDown(3);
@@ -759,5 +810,35 @@ export class EmployeesService {
 
       doc.end();
     });
+
+    const storagePath = `slips/${employee.tenantId}/${employee.id}/${log.id}.pdf`;
+    await this.supabaseAdmin.uploadPrivateFile("salary-documents", storagePath, pdf, "application/pdf");
+    await this.prisma.salarySlipLog.update({ where: { id: log.id }, data: { storagePath } });
+
+    return pdf;
+  }
+
+  /** Confirms the caller may see this employee's document log (same
+   * cross-tenant rule as the list endpoints) before ever handing back a
+   * signed URL -- the URL itself carries no auth of its own once issued. */
+  private async assertLogVisible(user: AuthUser, tenantId: string) {
+    const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
+    if (!crossTenant && tenantId !== currentTenant().tenantId) throw new NotFoundException("Document not found");
+  }
+
+  async salarySlipDownloadUrl(logId: string, user: AuthUser) {
+    const log = await this.prisma.salarySlipLog.findUnique({ where: { id: logId } });
+    if (!log) throw new NotFoundException("Document not found");
+    await this.assertLogVisible(user, log.tenantId);
+    if (!log.storagePath) throw new NotFoundException("This slip's PDF is no longer available");
+    return { url: await this.supabaseAdmin.getSignedUrl("salary-documents", log.storagePath) };
+  }
+
+  async salaryCertificateDownloadUrl(logId: string, user: AuthUser) {
+    const log = await this.prisma.salaryCertificateLog.findUnique({ where: { id: logId } });
+    if (!log) throw new NotFoundException("Document not found");
+    await this.assertLogVisible(user, log.tenantId);
+    if (!log.storagePath) throw new NotFoundException("This certificate's PDF is no longer available");
+    return { url: await this.supabaseAdmin.getSignedUrl("salary-documents", log.storagePath) };
   }
 }

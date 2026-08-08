@@ -143,6 +143,8 @@ model User {
   userAccess              UserAccess[]
   salarySlipsReceived     SalarySlipLog[] @relation("SalarySlipsFor")
   salarySlipsGenerated    SalarySlipLog[] @relation("SalarySlipsGeneratedBy")
+  salaryCertificatesReceived  SalaryCertificateLog[] @relation("SalaryCertificatesFor")
+  salaryCertificatesGenerated SalaryCertificateLog[] @relation("SalaryCertificatesGeneratedBy")
 
   @@index([tenantId, role])
 }
@@ -388,7 +390,10 @@ enum SalaryPaidBy {
 
 // One row per salary slip PDF actually generated -- an audit trail separate
 // from AuditLog so HR can see "who printed whose slip, and when" as its own
-// list without filtering the generic log by action string.
+// list without filtering the generic log by action string. storagePath
+// points at the actual generated PDF in the private "salary-documents"
+// Supabase Storage bucket, so a past slip can be re-previewed/downloaded
+// (via a server-issued signed URL) instead of only showing metadata.
 model SalarySlipLog {
   id            String   @id @default(cuid())
   tenantId      String
@@ -397,6 +402,23 @@ model SalarySlipLog {
   generatedById String
   generatedBy   User     @relation("SalarySlipsGeneratedBy", fields: [generatedById], references: [id])
   period        String
+  storagePath   String?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([employeeId])
+}
+
+// Same audit-trail purpose as SalarySlipLog, for salary certificates.
+model SalaryCertificateLog {
+  id            String   @id @default(cuid())
+  tenantId      String
+  employeeId    String
+  employee      User     @relation("SalaryCertificatesFor", fields: [employeeId], references: [id])
+  generatedById String
+  generatedBy   User     @relation("SalaryCertificatesGeneratedBy", fields: [generatedById], references: [id])
+  refNo         String?
+  storagePath   String?
   createdAt     DateTime @default(now())
 
   @@index([tenantId, createdAt])

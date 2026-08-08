@@ -146,17 +146,23 @@ export class TasksService {
     return unique;
   }
 
-  private async validateAssignees(tenantId: string, userIds: string[]) {
+  /** SUPER_ADMIN/ORG_ADMIN's own staff() picker legitimately returns users
+   * across every tenant (same crossTenant logic as staff()/list() below),
+   * so validation must allow that too -- restricting it to a single
+   * tenantId regardless of caller role rejected exactly the cross-tenant
+   * picks those roles are meant to be able to make. */
+  private async validateAssignees(userIds: string[], crossTenant: boolean, tenantId: string) {
     const unique = [...new Set(userIds)];
-    const rows = await this.prisma.user.findMany({ where: { id: { in: unique }, tenantId } });
-    if (rows.length !== unique.length) throw new NotFoundException("One or more assignees not found in this organization");
+    const rows = await this.prisma.user.findMany({ where: { id: { in: unique }, ...(!crossTenant && { tenantId }) } });
+    if (rows.length !== unique.length) throw new NotFoundException("One or more assignees not found");
     return unique;
   }
 
   async create(dto: CreateTaskDto, user: AuthUser) {
     const tenantId = this.tenantId();
+    const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
     const departmentIds = await this.validateDepartments(dto.departmentIds);
-    const assigneeIds = await this.validateAssignees(tenantId, dto.assignedToIds);
+    const assigneeIds = await this.validateAssignees(dto.assignedToIds, crossTenant, tenantId);
 
     const task = await this.prisma.$transaction(async (tx) => {
       const created = await tx.taskItem.create({
@@ -206,7 +212,7 @@ export class TasksService {
     }
 
     const departmentIds = dto.departmentIds ? await this.validateDepartments(dto.departmentIds) : undefined;
-    const assigneeIds = dto.assignedToIds ? await this.validateAssignees(task.tenantId, dto.assignedToIds) : undefined;
+    const assigneeIds = dto.assignedToIds ? await this.validateAssignees(dto.assignedToIds, crossTenant, task.tenantId) : undefined;
     const priorAssigneeIds = new Set(task.assignees.map((a) => a.userId));
     const newlyAdded = assigneeIds?.filter((uid) => !priorAssigneeIds.has(uid)) ?? [];
 
