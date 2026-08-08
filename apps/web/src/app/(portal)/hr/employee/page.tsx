@@ -28,6 +28,52 @@ interface EmployeeRow {
 }
 interface SchoolOpt { id: string; name: string }
 interface DeptOpt { id: string; name: string }
+interface ExtraGrant { id?: string; schoolId: string; role: string; designation: string; department: string }
+
+/** One additional (school, role) grant row -- fetches its own department
+ * list since each row can point at a different school. */
+function GrantRow({ grant, schools, onChange, onRemove }: {
+  grant: ExtraGrant; schools: SchoolOpt[]; onChange: (g: ExtraGrant) => void; onRemove: () => void;
+}) {
+  const [departments, setDepartments] = useState<DeptOpt[]>([]);
+  useEffect(() => {
+    if (!grant.schoolId) { setDepartments([]); return; }
+    api<DeptOpt[]>(`/academic/departments?schoolId=${grant.schoolId}`).then(setDepartments).catch(() => setDepartments([]));
+  }, [grant.schoolId]);
+
+  return (
+    <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] items-end gap-2 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">School</label>
+        <select value={grant.schoolId} onChange={(e) => onChange({ ...grant, schoolId: e.target.value })} className={`${inputCls} h-9`}>
+          {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">Role</label>
+        <select value={grant.role} onChange={(e) => onChange({ ...grant, role: e.target.value })} className={`${inputCls} h-9`}>
+          {EMPLOYEE_ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">Designation</label>
+        <input value={grant.designation} onChange={(e) => onChange({ ...grant, designation: e.target.value })}
+          placeholder="Guest Faculty" className={`${inputCls} h-9`} />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">Department</label>
+        <select value={grant.department} onChange={(e) => onChange({ ...grant, department: e.target.value })} className={`${inputCls} h-9`}>
+          <option value="">None</option>
+          {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+        </select>
+      </div>
+      <button type="button" aria-label="Remove grant" onClick={onRemove}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-black/5 hover:text-danger dark:hover:bg-white/10">
+        ×
+      </button>
+    </div>
+  );
+}
 
 function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved }: {
   mode: "add" | "edit"; initial?: EmployeeRow; schools: SchoolOpt[]; schoolsError: string | null;
@@ -47,6 +93,12 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [departments, setDepartments] = useState<DeptOpt[]>([]);
+  const [multiAccess, setMultiAccess] = useState(() => (initial?.userAccess?.length ?? 0) > 1);
+  const [extraGrants, setExtraGrants] = useState<ExtraGrant[]>(() =>
+    (initial?.userAccess ?? []).filter((a) => !a.isPrimary).map((a) => ({
+      id: a.id, schoolId: a.schoolId ?? "", role: a.role, designation: a.designation ?? "", department: a.department ?? "",
+    })),
+  );
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -70,6 +122,24 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
     setError(null);
     setSaving(true);
     try {
+      // Only sent when the toggle is on and at least one extra row exists --
+      // omitted otherwise so accounts not using this feature are completely
+      // unaffected (see employees.dto.ts: grants absent = today's behavior).
+      const grants = multiAccess && extraGrants.length > 0
+        ? [
+            {
+              schoolId: form.schoolId, role: form.role, designation: form.designation.trim(),
+              ...(form.department && { department: form.department.trim() }),
+              employeeNo: form.employeeNo.trim(), isPrimary: true,
+            },
+            ...extraGrants.map((g) => ({
+              ...(g.id && { id: g.id }),
+              schoolId: g.schoolId, role: g.role,
+              ...(g.designation.trim() && { designation: g.designation.trim() }),
+              ...(g.department && { department: g.department }),
+            })),
+          ]
+        : undefined;
       const common = {
         fullName: form.fullName.trim(),
         email: form.email.trim().toLowerCase(),
@@ -78,6 +148,7 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
         employeeNo: form.employeeNo.trim(),
         designation: form.designation.trim(),
         ...(form.department && { department: form.department.trim() }),
+        ...(grants && { grants }),
       };
       if (mode === "add") {
         const res = await api<{ tempPassword?: string }>("/employees", {
@@ -158,6 +229,34 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
             </select>
           </Field>
         </div>
+
+        <label className="flex items-center gap-2 text-sm text-night dark:text-white">
+          <input
+            type="checkbox" checked={multiAccess} className="accent-primary"
+            onChange={(e) => { setMultiAccess(e.target.checked); if (!e.target.checked) setExtraGrants([]); }}
+          />
+          This person also works at other schools/roles
+        </label>
+
+        {multiAccess && (
+          <div className="space-y-2">
+            {extraGrants.map((g, i) => (
+              <GrantRow
+                key={g.id ?? i} grant={g} schools={schools}
+                onChange={(next) => setExtraGrants((rows) => rows.map((r, idx) => (idx === i ? next : r)))}
+                onRemove={() => setExtraGrants((rows) => rows.filter((_, idx) => idx !== i))}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={() => setExtraGrants((rows) => [...rows, { schoolId: schools[0]?.id ?? "", role: "TEACHER", designation: "", department: "" }])}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              + Add another school/role
+            </button>
+          </div>
+        )}
+
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

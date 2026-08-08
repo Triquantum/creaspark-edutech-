@@ -5,7 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
-import { CreateEmployeeDto, UpdateEmployeeDto } from "./employees.dto";
+import { CreateEmployeeDto, GrantDto, UpdateEmployeeDto } from "./employees.dto";
 
 const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
 
@@ -112,6 +112,12 @@ export class EmployeesService {
           isPrimary: true, isActive: true,
         },
       });
+      // Any extra grants beyond the primary above -- the primary always
+      // comes from the top-level fields (that's what the Supabase Auth
+      // account was just created with), so a grants[] entry matching the
+      // same (schoolId, role) is skipped rather than double-inserted.
+      const extra = (dto.grants ?? []).filter((g) => !(g.schoolId === dto.schoolId && g.role === dto.role));
+      if (extra.length) await this.createExtraGrants(tx, u.id, tenantId, extra);
       await tx.auditLog.create({
         data: { tenantId, userId: actorId, action: "employee.create", entity: "User", entityId: u.id },
       });
@@ -145,11 +151,11 @@ export class EmployeesService {
     const tenantId = target.tenantId;
 
     if (dto.role && NON_STAFF_ROLES.includes(dto.role)) throw new BadRequestException("Choose a staff role for an employee");
-    if (dto.schoolId) {
+    if (!dto.grants && dto.schoolId) {
       const school = await this.prisma.school.findFirst({ where: { id: dto.schoolId, tenantId } });
       if (!school) throw new NotFoundException("School not found in this employee's organization");
     }
-    if (!target.staffProfile && dto.schoolId && (!dto.employeeNo?.trim() || !dto.designation?.trim())) {
+    if (!dto.grants && !target.staffProfile && dto.schoolId && (!dto.employeeNo?.trim() || !dto.designation?.trim())) {
       throw new BadRequestException("Employee no. and designation are required to assign a school");
     }
 
@@ -159,20 +165,27 @@ export class EmployeesService {
       await this.supabaseAdmin.updateEmail(id, dto.email);
     }
 
-    const effSchoolId = dto.schoolId ?? target.staffProfile?.schoolId;
-    const effEmployeeNo = dto.employeeNo ?? target.staffProfile?.employeeNo;
-    const identityChanged = !!effSchoolId && !!effEmployeeNo
-      && (effSchoolId !== target.staffProfile?.schoolId || effEmployeeNo !== target.staffProfile?.employeeNo);
-    if (identityChanged) {
-      const clash = await this.prisma.staffProfile.findUnique({
-        where: { schoolId_employeeNo: { schoolId: effSchoolId!, employeeNo: effEmployeeNo! } },
-      });
-      if (clash && clash.userId !== id) throw new ConflictException(`Employee no. ${effEmployeeNo} already exists in this school`);
+    // The grants[] path below fully owns role/school/designation/department/
+    // employeeNo -- the single-field identity-clash check only applies when
+    // editing the old way (top-level fields, no grants[] supplied).
+    if (!dto.grants) {
+      const effSchoolId = dto.schoolId ?? target.staffProfile?.schoolId;
+      const effEmployeeNo = dto.employeeNo ?? target.staffProfile?.employeeNo;
+      const identityChanged = !!effSchoolId && !!effEmployeeNo
+        && (effSchoolId !== target.staffProfile?.schoolId || effEmployeeNo !== target.staffProfile?.employeeNo);
+      if (identityChanged) {
+        const clash = await this.prisma.staffProfile.findUnique({
+          where: { schoolId_employeeNo: { schoolId: effSchoolId!, employeeNo: effEmployeeNo! } },
+        });
+        if (clash && clash.userId !== id) throw new ConflictException(`Employee no. ${effEmployeeNo} already exists in this school`);
+      }
     }
 
     if (dto.isActive !== undefined) {
       await this.supabaseAdmin.setBanned(id, !dto.isActive);
     }
+
+    let primaryRoleChangedTo: Role | null = null;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -181,61 +194,169 @@ export class EmployeesService {
           ...(dto.fullName !== undefined && { fullName: dto.fullName }),
           ...(dto.email !== undefined && { email: dto.email }),
           ...(dto.phone !== undefined && { phone: dto.phone }),
-          ...(dto.role !== undefined && { role: dto.role }),
+          ...(!dto.grants && dto.role !== undefined && { role: dto.role }),
           ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         },
       });
-      if (target.staffProfile) {
-        if (dto.employeeNo || dto.designation || dto.department !== undefined || dto.schoolId) {
-          await tx.staffProfile.update({
-            where: { userId: id },
+
+      if (dto.grants) {
+        primaryRoleChangedTo = await this.syncGrants(tx, id, tenantId, dto.grants, dto.isActive ?? target.isActive, target.role);
+      } else {
+        if (target.staffProfile) {
+          if (dto.employeeNo || dto.designation || dto.department !== undefined || dto.schoolId) {
+            await tx.staffProfile.update({
+              where: { userId: id },
+              data: {
+                ...(dto.employeeNo && { employeeNo: dto.employeeNo }),
+                ...(dto.designation && { designation: dto.designation }),
+                ...(dto.department !== undefined && { department: dto.department }),
+                ...(dto.schoolId && { schoolId: dto.schoolId }),
+              },
+            });
+          }
+        } else if (dto.schoolId) {
+          await tx.staffProfile.create({
             data: {
-              ...(dto.employeeNo && { employeeNo: dto.employeeNo }),
-              ...(dto.designation && { designation: dto.designation }),
-              ...(dto.department !== undefined && { department: dto.department }),
-              ...(dto.schoolId && { schoolId: dto.schoolId }),
+              tenantId, schoolId: dto.schoolId, userId: id,
+              employeeNo: dto.employeeNo!.trim(), designation: dto.designation!.trim(), department: dto.department,
             },
           });
         }
-      } else if (dto.schoolId) {
-        await tx.staffProfile.create({
-          data: {
-            tenantId, schoolId: dto.schoolId, userId: id,
-            employeeNo: dto.employeeNo!.trim(), designation: dto.designation!.trim(), department: dto.department,
-          },
-        });
-      }
 
-      // Keeps the primary UserAccess grant in sync with whatever just
-      // changed on User/StaffProfile above -- same mirroring as create().
-      const primaryAccess = await tx.userAccess.findFirst({ where: { userId: id, isPrimary: true } });
-      if (primaryAccess) {
-        await tx.userAccess.update({
-          where: { id: primaryAccess.id },
-          data: {
-            ...(dto.role !== undefined && { role: dto.role }),
-            ...(dto.schoolId !== undefined && { schoolId: dto.schoolId }),
-            ...(dto.employeeNo !== undefined && { employeeNo: dto.employeeNo }),
-            ...(dto.designation !== undefined && { designation: dto.designation }),
-            ...(dto.department !== undefined && { department: dto.department }),
-            ...(dto.isActive !== undefined && { isActive: dto.isActive }),
-          },
-        });
-      } else if (dto.schoolId) {
-        await tx.userAccess.create({
-          data: {
-            userId: id, tenantId, schoolId: dto.schoolId, role: dto.role ?? target.role,
-            designation: dto.designation!.trim(), department: dto.department, employeeNo: dto.employeeNo!.trim(),
-            isPrimary: true, isActive: target.isActive,
-          },
-        });
+        // Keeps the primary UserAccess grant in sync with whatever just
+        // changed on User/StaffProfile above -- same mirroring as create().
+        const primaryAccess = await tx.userAccess.findFirst({ where: { userId: id, isPrimary: true } });
+        if (primaryAccess) {
+          await tx.userAccess.update({
+            where: { id: primaryAccess.id },
+            data: {
+              ...(dto.role !== undefined && { role: dto.role }),
+              ...(dto.schoolId !== undefined && { schoolId: dto.schoolId }),
+              ...(dto.employeeNo !== undefined && { employeeNo: dto.employeeNo }),
+              ...(dto.designation !== undefined && { designation: dto.designation }),
+              ...(dto.department !== undefined && { department: dto.department }),
+              ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+            },
+          });
+        } else if (dto.schoolId) {
+          await tx.userAccess.create({
+            data: {
+              userId: id, tenantId, schoolId: dto.schoolId, role: dto.role ?? target.role,
+              designation: dto.designation!.trim(), department: dto.department, employeeNo: dto.employeeNo!.trim(),
+              isPrimary: true, isActive: target.isActive,
+            },
+          });
+        }
       }
 
       await tx.auditLog.create({
         data: { tenantId, userId: actorId, action: "employee.update", entity: "User", entityId: id },
       });
     });
+
+    // Supabase's JWT app_metadata.role is the actual thing driving login
+    // permissions -- must be pushed whenever the primary grant's role
+    // changes, same as dto.role already implicitly required for the
+    // single-field path (see the pre-existing gap noted in employees.dto.ts
+    // history; grants[] editing must not ship with a silently-broken role
+    // change, so it's fixed here explicitly).
+    if (primaryRoleChangedTo) {
+      await this.supabaseAdmin.updateAppMetadata(id, { role: primaryRoleChangedTo });
+    } else if (!dto.grants && dto.role !== undefined && dto.role !== target.role) {
+      await this.supabaseAdmin.updateAppMetadata(id, { role: dto.role });
+    }
+
     return this.findEmployee(id);
+  }
+
+  /** Creates UserAccess rows beyond the primary one create() already made --
+   * used only when CreateEmployeeDto.grants includes extra entries. */
+  private async createExtraGrants(tx: Prisma.TransactionClient, userId: string, tenantId: string, grants: GrantDto[]) {
+    const schoolIds = [...new Set(grants.map((g) => g.schoolId))];
+    const schools = await tx.school.findMany({ where: { id: { in: schoolIds }, tenantId } });
+    if (schools.length !== schoolIds.length) throw new BadRequestException("One or more schools are outside this employee's organization");
+    for (const g of grants) {
+      await tx.userAccess.create({
+        data: {
+          userId, tenantId, schoolId: g.schoolId, role: g.role,
+          designation: g.designation, department: g.department, employeeNo: g.employeeNo,
+          isPrimary: false, isActive: true,
+        },
+      });
+    }
+  }
+
+  /** Replaces this employee's entire grant list with `grants`, validates
+   * exactly one isPrimary (all grants must belong to `tenantId` -- cross-
+   * tenant grants are a later phase), and syncs User.role/StaffProfile from
+   * whichever grant ends up primary. Returns the new primary role when it
+   * differs from `currentRole`, so the caller can push it to Supabase's
+   * app_metadata after the transaction commits. */
+  private async syncGrants(
+    tx: Prisma.TransactionClient, userId: string, tenantId: string, grants: GrantDto[], isActive: boolean, currentRole: Role,
+  ): Promise<Role | null> {
+    if (!grants.length) throw new BadRequestException("At least one role/school grant is required");
+    if (grants.some((g) => NON_STAFF_ROLES.includes(g.role))) throw new BadRequestException("Choose a staff role for every grant");
+
+    const primaryFlags = grants.filter((g) => g.isPrimary);
+    if (primaryFlags.length > 1) throw new BadRequestException("Only one grant can be marked primary");
+    const primaryIndex = primaryFlags.length === 1 ? grants.findIndex((g) => g.isPrimary) : 0;
+    const primaryGrant = grants[primaryIndex];
+    if (!primaryGrant.employeeNo?.trim() || !primaryGrant.designation?.trim()) {
+      throw new BadRequestException("The primary grant needs an employee no. and designation");
+    }
+
+    const schoolIds = [...new Set(grants.map((g) => g.schoolId))];
+    const schools = await tx.school.findMany({ where: { id: { in: schoolIds }, tenantId } });
+    if (schools.length !== schoolIds.length) throw new BadRequestException("One or more schools are outside this employee's organization");
+
+    const seen = new Set<string>();
+    for (const g of grants) {
+      const key = `${g.schoolId}::${g.role}`;
+      if (seen.has(key)) throw new BadRequestException("Each role/school combination can only appear once");
+      seen.add(key);
+    }
+
+    const empNoClash = await tx.staffProfile.findUnique({
+      where: { schoolId_employeeNo: { schoolId: primaryGrant.schoolId, employeeNo: primaryGrant.employeeNo.trim() } },
+    });
+    if (empNoClash && empNoClash.userId !== userId) {
+      throw new ConflictException(`Employee no. ${primaryGrant.employeeNo} already exists in this school`);
+    }
+
+    const existing = await tx.userAccess.findMany({ where: { userId } });
+    const keepIds = new Set(grants.filter((g) => g.id).map((g) => g.id!));
+    const toDeleteIds = existing.filter((e) => !keepIds.has(e.id)).map((e) => e.id);
+    if (toDeleteIds.length) await tx.userAccess.deleteMany({ where: { id: { in: toDeleteIds } } });
+
+    for (let i = 0; i < grants.length; i++) {
+      const g = grants[i];
+      const data = {
+        tenantId, schoolId: g.schoolId, role: g.role,
+        designation: g.designation, department: g.department, employeeNo: g.employeeNo,
+        isPrimary: i === primaryIndex, isActive,
+      };
+      if (g.id) {
+        await tx.userAccess.update({ where: { id: g.id }, data });
+      } else {
+        await tx.userAccess.create({ data: { userId, ...data } });
+      }
+    }
+
+    await tx.user.update({ where: { id: userId }, data: { role: primaryGrant.role } });
+    await tx.staffProfile.upsert({
+      where: { userId },
+      create: {
+        tenantId, userId, schoolId: primaryGrant.schoolId,
+        employeeNo: primaryGrant.employeeNo.trim(), designation: primaryGrant.designation.trim(), department: primaryGrant.department,
+      },
+      update: {
+        schoolId: primaryGrant.schoolId,
+        employeeNo: primaryGrant.employeeNo.trim(), designation: primaryGrant.designation.trim(), department: primaryGrant.department,
+      },
+    });
+
+    return primaryGrant.role !== currentRole ? primaryGrant.role : null;
   }
 
   /** Removes login + staff profile. Any real activity (messages, portion
