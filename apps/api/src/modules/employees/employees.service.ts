@@ -127,7 +127,7 @@ export class EmployeesService {
         data: { tenantId, userId: actorId, action: "employee.create", entity: "User", entityId: u.id },
       });
       return u;
-    });
+    }, { timeout: 20000 });
 
     return {
       id: createdUser.id, fullName: createdUser.fullName, email: createdUser.email,
@@ -275,7 +275,7 @@ export class EmployeesService {
       await tx.auditLog.create({
         data: { tenantId, userId: actorId, action: "employee.update", entity: "User", entityId: id },
       });
-    });
+    }, { timeout: 20000 });
 
     // Supabase's JWT app_metadata.role is the actual thing driving login
     // permissions -- must be pushed whenever the primary grant's role
