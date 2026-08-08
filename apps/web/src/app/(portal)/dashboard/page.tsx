@@ -402,9 +402,8 @@ export default function Dashboard() {
         <NoticesCard announcements={announcements} />
         {me && BIRTHDAY_ROLES.has(me.role) && <BirthdaysCard students={birthdays} />}
         {me && !TASK_HIDDEN_ROLES.has(me.role) && <TasksCard tasks={tasks} />}
+        <Calendar />
       </div>
-
-      <Calendar />
     </div>
   );
 }
