@@ -120,7 +120,7 @@ export class EmployeesService {
       // account was just created with), so a grants[] entry matching the
       // same (schoolId, role) is skipped rather than double-inserted.
       const extra = (dto.grants ?? []).filter((g) => !(g.schoolId === dto.schoolId && g.role === dto.role));
-      if (extra.length) await this.createExtraGrants(tx, u.id, tenantId, extra);
+      if (extra.length) await this.createExtraGrants(tx, u.id, tenantId, user.role === Role.SUPER_ADMIN, extra);
       await tx.auditLog.create({
         data: { tenantId, userId: actorId, action: "employee.create", entity: "User", entityId: u.id },
       });
@@ -203,7 +203,9 @@ export class EmployeesService {
       });
 
       if (dto.grants) {
-        primaryRoleChangedTo = await this.syncGrants(tx, id, tenantId, dto.grants, dto.isActive ?? target.isActive, target.role);
+        primaryRoleChangedTo = await this.syncGrants(
+          tx, id, tenantId, user.role === Role.SUPER_ADMIN, dto.grants, dto.isActive ?? target.isActive, target.role,
+        );
       } else {
         if (target.staffProfile) {
           if (dto.employeeNo || dto.designation || dto.department !== undefined || dto.schoolId
@@ -277,16 +279,67 @@ export class EmployeesService {
     return this.findEmployee(id);
   }
 
+  /** Expands any grant whose schoolId is the literal "ALL" into one grant
+   * per eligible school -- resolved server-side (not client-side) since
+   * only the server reliably knows which schools exist. For Super Admin
+   * that's every non-suspended school platform-wide -- in this app's data,
+   * every registered school is typically its own single-school tenant, so
+   * "ALL" restricted to one tenant would only ever match one school; for
+   * everyone else it stays scoped to their own tenant. Explicit grants win
+   * over an ALL-expanded duplicate of the same (school, role). */
+  private async expandAllSentinel(
+    tx: Prisma.TransactionClient, isSuperAdmin: boolean, tenantId: string, grants: GrantDto[],
+  ): Promise<GrantDto[]> {
+    const sentinels = grants.filter((g) => g.schoolId === "ALL");
+    if (!sentinels.length) return grants;
+    const explicit = grants.filter((g) => g.schoolId !== "ALL");
+    const eligibleSchools = await tx.school.findMany({
+      where: isSuperAdmin ? { tenant: { status: { not: "SUSPENDED" } } } : { tenantId },
+      select: { id: true },
+    });
+    const covered = new Set(explicit.map((g) => `${g.schoolId}::${g.role}`));
+    const expanded = [...explicit];
+    for (const sentinel of sentinels) {
+      for (const school of eligibleSchools) {
+        const key = `${school.id}::${sentinel.role}`;
+        if (covered.has(key)) continue;
+        covered.add(key);
+        expanded.push({ ...sentinel, id: undefined, schoolId: school.id, isPrimary: false });
+      }
+    }
+    return expanded;
+  }
+
+  /** Validates every listed school exists (any tenant for Super Admin, the
+   * given tenant otherwise) and returns each school's own tenantId -- each
+   * UserAccess row is stamped with ITS school's tenant, not necessarily the
+   * employee's own, since Super Admin can grant access at schools that are
+   * entirely separate organizations from the employee's home tenant. */
+  private async resolveGrantSchoolTenants(
+    tx: Prisma.TransactionClient, isSuperAdmin: boolean, tenantId: string, schoolIds: string[],
+  ): Promise<Map<string, string>> {
+    const schools = await tx.school.findMany({
+      where: { id: { in: schoolIds }, ...(!isSuperAdmin && { tenantId }) },
+      select: { id: true, tenantId: true },
+    });
+    if (schools.length !== schoolIds.length) {
+      throw new BadRequestException(isSuperAdmin ? "One or more schools no longer exist" : "One or more schools are outside this employee's organization");
+    }
+    return new Map(schools.map((s) => [s.id, s.tenantId]));
+  }
+
   /** Creates UserAccess rows beyond the primary one create() already made --
    * used only when CreateEmployeeDto.grants includes extra entries. */
-  private async createExtraGrants(tx: Prisma.TransactionClient, userId: string, tenantId: string, grants: GrantDto[]) {
+  private async createExtraGrants(
+    tx: Prisma.TransactionClient, userId: string, tenantId: string, isSuperAdmin: boolean, rawGrants: GrantDto[],
+  ) {
+    const grants = await this.expandAllSentinel(tx, isSuperAdmin, tenantId, rawGrants);
     const schoolIds = [...new Set(grants.map((g) => g.schoolId))];
-    const schools = await tx.school.findMany({ where: { id: { in: schoolIds }, tenantId } });
-    if (schools.length !== schoolIds.length) throw new BadRequestException("One or more schools are outside this employee's organization");
+    const schoolTenants = await this.resolveGrantSchoolTenants(tx, isSuperAdmin, tenantId, schoolIds);
     for (const g of grants) {
       await tx.userAccess.create({
         data: {
-          userId, tenantId, schoolId: g.schoolId, role: g.role,
+          userId, tenantId: schoolTenants.get(g.schoolId)!, schoolId: g.schoolId, role: g.role,
           designation: g.designation, department: g.department, employeeNo: g.employeeNo,
           isPrimary: false, isActive: true,
         },
@@ -295,14 +348,19 @@ export class EmployeesService {
   }
 
   /** Replaces this employee's entire grant list with `grants`, validates
-   * exactly one isPrimary (all grants must belong to `tenantId` -- cross-
-   * tenant grants are a later phase), and syncs User.role/StaffProfile from
-   * whichever grant ends up primary. Returns the new primary role when it
-   * differs from `currentRole`, so the caller can push it to Supabase's
+   * exactly one isPrimary, and syncs User.role/StaffProfile from whichever
+   * grant ends up primary. The primary grant's school must stay within the
+   * employee's own tenant -- moving tenant is a separate "reassign"
+   * operation (see UsersService.update's schoolId handling), not something
+   * grants[] does silently. Non-primary grants may span other tenants when
+   * the actor is Super Admin. Returns the new primary role when it differs
+   * from `currentRole`, so the caller can push it to Supabase's
    * app_metadata after the transaction commits. */
   private async syncGrants(
-    tx: Prisma.TransactionClient, userId: string, tenantId: string, grants: GrantDto[], isActive: boolean, currentRole: Role,
+    tx: Prisma.TransactionClient, userId: string, tenantId: string, isSuperAdmin: boolean,
+    rawGrants: GrantDto[], isActive: boolean, currentRole: Role,
   ): Promise<Role | null> {
+    const grants = await this.expandAllSentinel(tx, isSuperAdmin, tenantId, rawGrants);
     if (!grants.length) throw new BadRequestException("At least one role/school grant is required");
     if (grants.some((g) => NON_STAFF_ROLES.includes(g.role))) throw new BadRequestException("Choose a staff role for every grant");
 
@@ -313,10 +371,11 @@ export class EmployeesService {
     if (!primaryGrant.employeeNo?.trim() || !primaryGrant.designation?.trim()) {
       throw new BadRequestException("The primary grant needs an employee no. and designation");
     }
+    const primarySchool = await tx.school.findFirst({ where: { id: primaryGrant.schoolId, tenantId } });
+    if (!primarySchool) throw new BadRequestException("The primary grant's school must be in this employee's own organization");
 
     const schoolIds = [...new Set(grants.map((g) => g.schoolId))];
-    const schools = await tx.school.findMany({ where: { id: { in: schoolIds }, tenantId } });
-    if (schools.length !== schoolIds.length) throw new BadRequestException("One or more schools are outside this employee's organization");
+    const schoolTenants = await this.resolveGrantSchoolTenants(tx, isSuperAdmin, tenantId, schoolIds);
 
     const seen = new Set<string>();
     for (const g of grants) {
@@ -340,7 +399,7 @@ export class EmployeesService {
     for (let i = 0; i < grants.length; i++) {
       const g = grants[i];
       const data = {
-        tenantId, schoolId: g.schoolId, role: g.role,
+        tenantId: schoolTenants.get(g.schoolId)!, schoolId: g.schoolId, role: g.role,
         designation: g.designation, department: g.department, employeeNo: g.employeeNo,
         isPrimary: i === primaryIndex, isActive,
       };

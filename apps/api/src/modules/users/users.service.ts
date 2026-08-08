@@ -52,19 +52,31 @@ export class UsersService {
     if (targetTenantId !== currentTenant().tenantId) throw new NotFoundException("User not found");
   }
 
-  /** Resolves a raw schoolIds[] (possibly containing the literal "ALL") into
-   * real school ids within `tenantId` -- same organization-scoping decision
-   * as EmployeesService.syncGrants(), so a Super Admin picking "All schools"
-   * doesn't reach across into a different tenant's schools. */
-  private async resolveSchoolIds(tenantId: string, schoolIds: string[]): Promise<string[]> {
+  /** Resolves a raw schoolIds[] (possibly containing the literal "ALL")
+   * into a map of school id -> that school's own tenantId. For Super Admin
+   * this spans every non-suspended school platform-wide, not just one
+   * organization -- in this app's data, a registered school is typically
+   * its own single-school tenant, so restricting "ALL"/explicit picks to
+   * one tenant would defeat the point of a multi-school picker. Everyone
+   * else stays confined to their own tenant. Each returned UserAccess row
+   * is stamped with its OWN school's tenantId, not necessarily `tenantId`. */
+  private async resolveSchoolIds(isSuperAdmin: boolean, tenantId: string, schoolIds: string[]): Promise<Map<string, string>> {
     if (schoolIds.includes("ALL")) {
-      const all = await this.prisma.school.findMany({ where: { tenantId }, select: { id: true } });
-      return all.map((s) => s.id);
+      const all = await this.prisma.school.findMany({
+        where: isSuperAdmin ? { tenant: { status: { not: "SUSPENDED" } } } : { tenantId },
+        select: { id: true, tenantId: true },
+      });
+      return new Map(all.map((s) => [s.id, s.tenantId]));
     }
     const unique = [...new Set(schoolIds)];
-    const schools = await this.prisma.school.findMany({ where: { id: { in: unique }, tenantId }, select: { id: true } });
-    if (schools.length !== unique.length) throw new BadRequestException("One or more schools are outside this organization");
-    return schools.map((s) => s.id);
+    const schools = await this.prisma.school.findMany({
+      where: { id: { in: unique }, ...(!isSuperAdmin && { tenantId }) },
+      select: { id: true, tenantId: true },
+    });
+    if (schools.length !== unique.length) {
+      throw new BadRequestException(isSuperAdmin ? "One or more schools no longer exist" : "One or more schools are outside this organization");
+    }
+    return new Map(schools.map((s) => [s.id, s.tenantId]));
   }
 
   /** Replaces this user's UserAccess rows with one per already-resolved
@@ -75,14 +87,15 @@ export class UsersService {
    * index on UserAccess enforces at most one per user, so this must never
    * mark more than one true. */
   private async syncSchoolAccess(
-    tx: Prisma.TransactionClient, userId: string, tenantId: string,
-    resolvedSchoolIds: string[], primarySchoolId: string | undefined, department: string | undefined, role: Role,
+    tx: Prisma.TransactionClient, userId: string,
+    schoolTenants: Map<string, string>, primarySchoolId: string | undefined, department: string | undefined, role: Role,
   ) {
-    const primaryId = primarySchoolId && resolvedSchoolIds.includes(primarySchoolId) ? primarySchoolId : resolvedSchoolIds[0];
+    const resolvedSchoolIds = [...schoolTenants.keys()];
+    const primaryId = primarySchoolId && schoolTenants.has(primarySchoolId) ? primarySchoolId : resolvedSchoolIds[0];
     await tx.userAccess.deleteMany({ where: { userId } });
     await tx.userAccess.createMany({
       data: resolvedSchoolIds.map((schoolId) => ({
-        userId, tenantId, schoolId, role, department, isPrimary: schoolId === primaryId, isActive: true,
+        userId, tenantId: schoolTenants.get(schoolId)!, schoolId, role, department, isPrimary: schoolId === primaryId, isActive: true,
       })),
     });
   }
@@ -118,7 +131,9 @@ export class UsersService {
     // Resolved before the transaction (read-only, mirrors resolveTenant()'s
     // own pre-transaction school lookup above) so a bad schoolIds[] fails
     // fast instead of after the Supabase Auth account already exists.
-    const resolvedSchoolIds = dto.schoolIds?.length ? await this.resolveSchoolIds(tenantId, dto.schoolIds) : null;
+    const schoolTenants = dto.schoolIds?.length
+      ? await this.resolveSchoolIds(user.role === Role.SUPER_ADMIN, tenantId, dto.schoolIds)
+      : null;
 
     const tempPassword = dto.password ?? `Cs@${randomBytes(4).toString("hex")}`;
     const authUser = await this.supabaseAdmin.createUser(email, tempPassword, { role: dto.role, tenantId });
@@ -128,8 +143,8 @@ export class UsersService {
         data: { id: authUser.id, tenantId, email, fullName: dto.fullName.trim(), phone: dto.phone, role: dto.role },
         select: USER_LIST_SELECT,
       });
-      if (resolvedSchoolIds) {
-        await this.syncSchoolAccess(tx, u.id, tenantId, resolvedSchoolIds, dto.schoolId, dto.department, dto.role);
+      if (schoolTenants) {
+        await this.syncSchoolAccess(tx, u.id, schoolTenants, dto.schoolId, dto.department, dto.role);
       } else if (dto.department && dto.schoolId) {
         await tx.userAccess.create({
           data: { userId: u.id, tenantId, schoolId: dto.schoolId, role: dto.role, department: dto.department, isPrimary: true, isActive: true },
@@ -192,8 +207,8 @@ export class UsersService {
 
     // Resolved before the transaction (same reasoning as create()) -- an
     // array-form $transaction below can't run an async resolver mid-batch.
-    const resolvedSchoolIds = dto.schoolIds?.length
-      ? await this.resolveSchoolIds(newTenantId ?? target.tenantId, dto.schoolIds)
+    const schoolTenants = dto.schoolIds?.length
+      ? await this.resolveSchoolIds(user.role === Role.SUPER_ADMIN, newTenantId ?? target.tenantId, dto.schoolIds)
       : null;
 
     await this.prisma.$transaction([
@@ -220,18 +235,21 @@ export class UsersService {
       // Full-replace, same as create() -- Users doesn't expose per-grant
       // editing (that's Employees' job), so re-saving the whole list is
       // simplest and matches how this form always submits it.
-      ...(resolvedSchoolIds
-        ? [
-            this.prisma.userAccess.deleteMany({ where: { userId: id } }),
-            this.prisma.userAccess.createMany({
-              data: resolvedSchoolIds.map((schoolId) => ({
-                userId: id, tenantId: newTenantId ?? target.tenantId, schoolId,
-                role: dto.role ?? target.role, department: dto.department,
-                isPrimary: schoolId === (dto.schoolId && resolvedSchoolIds.includes(dto.schoolId) ? dto.schoolId : resolvedSchoolIds[0]),
-                isActive: true,
-              })),
-            }),
-          ]
+      ...(schoolTenants
+        ? (() => {
+            const ids = [...schoolTenants.keys()];
+            const primaryId = dto.schoolId && schoolTenants.has(dto.schoolId) ? dto.schoolId : ids[0];
+            return [
+              this.prisma.userAccess.deleteMany({ where: { userId: id } }),
+              this.prisma.userAccess.createMany({
+                data: ids.map((schoolId) => ({
+                  userId: id, tenantId: schoolTenants.get(schoolId)!, schoolId,
+                  role: dto.role ?? target.role, department: dto.department,
+                  isPrimary: schoolId === primaryId, isActive: true,
+                })),
+              }),
+            ];
+          })()
         : []),
       this.prisma.auditLog.create({
         data: { tenantId: newTenantId ?? target.tenantId, userId: actorId, action: "user.update", entity: "User", entityId: id },

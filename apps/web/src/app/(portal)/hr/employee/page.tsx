@@ -97,6 +97,7 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
   const [saving, setSaving] = useState(false);
   const [departments, setDepartments] = useState<DeptOpt[]>([]);
   const [multiAccess, setMultiAccess] = useState(() => (initial?.userAccess?.length ?? 0) > 1);
+  const [assignAllSchools, setAssignAllSchools] = useState(false);
   const [extraGrants, setExtraGrants] = useState<ExtraGrant[]>(() =>
     (initial?.userAccess ?? []).filter((a) => !a.isPrimary).map((a) => ({
       id: a.id, schoolId: a.schoolId ?? "", role: a.role, designation: a.designation ?? "", department: a.department ?? "",
@@ -125,24 +126,28 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
     setError(null);
     setSaving(true);
     try {
-      // Only sent when the toggle is on and at least one extra row exists --
-      // omitted otherwise so accounts not using this feature are completely
-      // unaffected (see employees.dto.ts: grants absent = today's behavior).
-      const grants = multiAccess && extraGrants.length > 0
-        ? [
-            {
-              schoolId: form.schoolId, role: form.role, designation: form.designation.trim(),
-              ...(form.department && { department: form.department.trim() }),
-              employeeNo: form.employeeNo.trim(), isPrimary: true,
-            },
-            ...extraGrants.map((g) => ({
-              ...(g.id && { id: g.id }),
-              schoolId: g.schoolId, role: g.role,
-              ...(g.designation.trim() && { designation: g.designation.trim() }),
-              ...(g.department && { department: g.department }),
-            })),
-          ]
-        : undefined;
+      // Single school (neither box checked) stays today's exact behavior --
+      // grants omitted entirely. "All schools" sends one sentinel grant the
+      // server expands to every school in this employee's tenant. Multiple
+      // schools sends the primary plus each manually added row.
+      const primaryGrant = {
+        schoolId: form.schoolId, role: form.role, designation: form.designation.trim(),
+        ...(form.department && { department: form.department.trim() }),
+        employeeNo: form.employeeNo.trim(), isPrimary: true,
+      };
+      const grants = assignAllSchools
+        ? [primaryGrant, { schoolId: "ALL", role: form.role, ...(form.department && { department: form.department.trim() }) }]
+        : multiAccess && extraGrants.length > 0
+          ? [
+              primaryGrant,
+              ...extraGrants.map((g) => ({
+                ...(g.id && { id: g.id }),
+                schoolId: g.schoolId, role: g.role,
+                ...(g.designation.trim() && { designation: g.designation.trim() }),
+                ...(g.department && { department: g.department }),
+              })),
+            ]
+          : undefined;
       const common = {
         fullName: form.fullName.trim(),
         email: form.email.trim().toLowerCase(),
@@ -251,13 +256,26 @@ function EmployeeDialog({ mode, initial, schools, schoolsError, onClose, onSaved
 
         <label className="flex items-center gap-2 text-sm text-night dark:text-white">
           <input
-            type="checkbox" checked={multiAccess} className="accent-primary"
-            onChange={(e) => { setMultiAccess(e.target.checked); if (!e.target.checked) setExtraGrants([]); }}
+            type="checkbox" checked={assignAllSchools} className="accent-primary"
+            onChange={(e) => {
+              setAssignAllSchools(e.target.checked);
+              if (e.target.checked) { setMultiAccess(false); setExtraGrants([]); }
+            }}
           />
-          This person also works at other schools/roles
+          Assign to all schools / institutes / colleges / centers
         </label>
 
-        {multiAccess && (
+        {!assignAllSchools && (
+          <label className="flex items-center gap-2 text-sm text-night dark:text-white">
+            <input
+              type="checkbox" checked={multiAccess} className="accent-primary"
+              onChange={(e) => { setMultiAccess(e.target.checked); if (!e.target.checked) setExtraGrants([]); }}
+            />
+            This person also works at specific other schools/roles
+          </label>
+        )}
+
+        {multiAccess && !assignAllSchools && (
           <div className="space-y-2">
             {extraGrants.map((g, i) => (
               <GrantRow
