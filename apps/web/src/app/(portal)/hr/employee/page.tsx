@@ -8,7 +8,7 @@ import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/
 const EMPLOYEE_ROLES = [
   "SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR",
   "TEACHER", "TRAINER", "ACCOUNTANT", "RECEPTION", "LIBRARIAN", "TRANSPORT_MANAGER", "HR",
-  "INVENTORY_MANAGER", "HOSTEL_WARDEN", "SECURITY",
+  "INVENTORY_MANAGER", "HOSTEL_WARDEN", "SECURITY", "SALES_MANAGER", "SALES_EXECUTIVE",
 ] as const;
 
 function roleLabel(role: string) {
