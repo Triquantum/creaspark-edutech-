@@ -30,6 +30,7 @@ model Tenant {
   schools     School[]
   users       User[]
   userAccess  UserAccess[]
+  assetItems  AssetItem[]
 }
 
 enum Plan {
@@ -81,6 +82,8 @@ model School {
   inventoryItems InventoryItem[]
   trainings     Training[]
   userAccess    UserAccess[]
+  assetAllocations AssetAllocation[]
+  assetTransactions AssetTransaction[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -146,6 +149,10 @@ model User {
   salaryCertificatesReceived  SalaryCertificateLog[] @relation("SalaryCertificatesFor")
   salaryCertificatesGenerated SalaryCertificateLog[] @relation("SalaryCertificatesGeneratedBy")
   holidaysCreated             Holiday[] @relation("HolidaysCreated")
+  assetItemsCreated           AssetItem[] @relation("AssetItemsCreated")
+  assetItemsUpdated           AssetItem[] @relation("AssetItemsUpdatedBy")
+  assetAllocationsMade        AssetAllocation[] @relation("AssetAllocationsMade")
+  assetTransactionsRecorded   AssetTransaction[] @relation("AssetTransactionsRecorded")
 
   @@index([tenantId, role])
 }
@@ -1145,4 +1152,155 @@ model TrainingFeedback {
 
   @@unique([trainingId, respondentId])
   @@index([tenantId, trainingId])
+}
+
+// ────────────────────────── Asset Management / Inventory ──────────────────────────
+// Category -> Item -> Stock -> School Allocation -> Distribution. AssetCategory,
+// Vendor and Location are global shared catalogs (same pattern as Department) --
+// promoted from the generic-scaffold GenericRecord rows that used to back the
+// Asset Management > Vendor/Location/Asset Category sidebar pages, so the two
+// existing categories ("IoT Kit", "Avishkar Bundle Kit") carry over via a
+// backfill migration rather than being replaced. AssetItem is the centrally
+// managed stock (tenant-owned, cross-tenant visible to SUPER_ADMIN/ORG_ADMIN
+// like Training/Tasks); allocated/delivered/available quantities are DERIVED
+// from AssetAllocation at query time rather than stored redundantly on
+// AssetItem, so they can never drift out of sync with the underlying rows.
+
+model AssetCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items AssetItem[]
+}
+
+model Vendor {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  notes         String?
+  isArchived    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items AssetItem[]
+}
+
+model Location {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items AssetItem[]
+}
+
+model AssetItem {
+  id                String        @id @default(cuid())
+  tenantId          String
+  tenant            Tenant        @relation(fields: [tenantId], references: [id])
+  itemCode          String        @unique
+  itemName          String
+  assetCategoryId   String
+  assetCategory     AssetCategory @relation(fields: [assetCategoryId], references: [id])
+  description       String?
+  brand             String?
+  model             String?
+  unit              String        @default("unit")
+  totalQuantity     Int           @default(0)
+  damagedQuantity   Int           @default(0)
+  lostQuantity      Int           @default(0)
+  returnedQuantity  Int           @default(0)
+  reorderLevel      Int?
+  locationId        String?
+  location          Location?     @relation(fields: [locationId], references: [id])
+  vendorId          String?
+  vendor            Vendor?       @relation(fields: [vendorId], references: [id])
+  status            String        @default("ACTIVE")
+  notes             String?
+  // Auditability for source-imported rows (Section 24 of the inventory spec) --
+  // left null for items created directly through the UI.
+  sourceFile        String?
+  sourceItemName    String?
+  importNotes       String?
+  createdById       String
+  createdBy         User          @relation("AssetItemsCreated", fields: [createdById], references: [id])
+  updatedById       String?
+  updatedBy         User?         @relation("AssetItemsUpdatedBy", fields: [updatedById], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  allocations  AssetAllocation[]
+  transactions AssetTransaction[]
+
+  @@index([tenantId, assetCategoryId])
+}
+
+enum AssetAllocationStatus {
+  PENDING
+  PARTIALLY_DELIVERED
+  DELIVERED
+}
+
+// One row per (item, school) -- tracks allocation and physical delivery
+// independently, per the spec's core distinction between "allocated" and
+// "delivered".
+model AssetAllocation {
+  id                String                 @id @default(cuid())
+  assetItemId       String
+  assetItem         AssetItem              @relation(fields: [assetItemId], references: [id], onDelete: Cascade)
+  schoolId          String
+  school            School                 @relation(fields: [schoolId], references: [id])
+  allocatedQuantity Int
+  deliveredQuantity Int                    @default(0)
+  status            AssetAllocationStatus  @default(PENDING)
+  allocatedById     String
+  allocatedBy       User                   @relation("AssetAllocationsMade", fields: [allocatedById], references: [id])
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@unique([assetItemId, schoolId])
+  @@index([schoolId])
+}
+
+enum AssetTransactionType {
+  RECEIVED
+  ADJUSTMENT
+  ALLOCATION
+  ALLOCATION_CANCELLED
+  DISTRIBUTION
+  PARTIAL_DISTRIBUTION
+  RETURN
+  DAMAGE
+  LOST
+  TRANSFER
+}
+
+// Append-only ledger -- every stock movement creates a row here so nothing
+// changes stock silently (Section 20/32 of the spec).
+model AssetTransaction {
+  id            String               @id @default(cuid())
+  assetItemId   String
+  assetItem     AssetItem            @relation(fields: [assetItemId], references: [id], onDelete: Cascade)
+  type          AssetTransactionType
+  quantity      Int
+  schoolId      String?
+  school        School?              @relation(fields: [schoolId], references: [id])
+  reference     String?
+  remarks       String?
+  userId        String
+  user          User                 @relation("AssetTransactionsRecorded", fields: [userId], references: [id])
+  previousValue Int?
+  newValue      Int?
+  createdAt     DateTime             @default(now())
+
+  @@index([assetItemId, createdAt])
 }

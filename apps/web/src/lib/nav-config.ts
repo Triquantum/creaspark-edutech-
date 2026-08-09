@@ -71,7 +71,14 @@ export const NAV: NavGroup[] = [
       { label: "Salary Slip Log", href: "/hr/salary-slip-log" },
       { label: "Salary Certificate Log", href: "/hr/salary-certificate-log" },
     ] },
-  { label: "Asset Management", icon: "box", hiddenFrom: ["PARENT", "STUDENT"], children: kids("assets", ["Vendor", "Location", "Asset Category", "Asset", "Asset Assignment", "Purchase"]) },
+  { label: "Asset Management", icon: "box", hiddenFrom: ["PARENT", "STUDENT"], children: [
+    { label: "Vendor", href: "/assets/vendor" },
+    { label: "Location", href: "/assets/location" },
+    { label: "Asset Category", href: "/assets/asset-category" },
+    { label: "Inventory", href: "/assets/inventory" },
+    { label: "School Allocation", href: "/assets/school-allocation" },
+    { label: "Reports", href: "/assets/reports" },
+  ] },
   { label: "Inventory", icon: "package", hiddenFrom: ["PARENT", "STUDENT"], children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
   {
     label: "Leave Application", icon: "log-out", hiddenFrom: ["PARENT", "STUDENT"],
