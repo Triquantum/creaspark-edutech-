@@ -2,7 +2,7 @@ import {
   Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Patch, Post, Query, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsOptional, IsString } from "class-validator";
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsIn, IsOptional, IsString } from "class-validator";
 import { Prisma, Role, TaskStatus } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
@@ -31,16 +31,26 @@ export class UpdateTaskDto {
   @IsOptional() @IsEnum(TaskStatus) status?: TaskStatus;
 }
 
+/** An assignee's own reply to a task they were assigned -- independent of
+ * the manager's overall TaskItem.status/remarks. */
+export class ReplyTaskDto {
+  @IsEnum(TaskStatus) status: TaskStatus;
+  @IsOptional() @IsString() remarks?: string;
+}
+
 export class QueryTasksDto {
   @IsOptional() @IsString() q?: string;
   @IsOptional() @IsString() departmentId?: string;
   @IsOptional() @IsString() assignedToId?: string;
   @IsOptional() @IsEnum(TaskStatus) status?: TaskStatus;
+  /** "inbox" = tasks assigned to the caller, "outbox" = tasks the caller
+   * assigned to others -- lets every role (not just managers) track their
+   * own tasks separately from the manager's tenant-wide list. */
+  @IsOptional() @IsIn(["inbox", "outbox"]) box?: "inbox" | "outbox";
 }
 
-// Only admin-like roles create/assign/delete tasks; the assignee (any role)
-// can still update their own task's status + remarks to report progress --
-// see TasksService.update().
+// Only admin-like roles create/assign/edit/delete tasks; any assignee (any
+// role) replies to their own assignment via TasksService.reply() instead.
 const MANAGE_ROLES = [
   Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR,
 ] as const;
@@ -49,7 +59,12 @@ const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
 
 const TASK_INCLUDE = {
   departments: { select: { department: { select: { id: true, name: true } } } },
-  assignees: { select: { user: { select: { id: true, fullName: true, role: true } } } },
+  assignees: {
+    select: {
+      status: true, remarks: true, respondedAt: true,
+      user: { select: { id: true, fullName: true, role: true } },
+    },
+  },
   assignedBy: { select: { fullName: true } },
   updatedBy: { select: { fullName: true } },
 };
@@ -100,7 +115,11 @@ export class TasksService {
     if (query.departmentId) and.push({ departments: { some: { departmentId: query.departmentId } } });
     if (query.status) and.push({ status: query.status });
     if (query.assignedToId) and.push({ assignees: { some: { userId: query.assignedToId } } });
-    if (!this.isManager(user.role)) {
+    if (query.box === "inbox") {
+      and.push({ assignees: { some: { userId: user.id } } });
+    } else if (query.box === "outbox") {
+      and.push({ assignedById: user.id });
+    } else if (!this.isManager(user.role)) {
       and.push({ OR: [{ assignees: { some: { userId: user.id } } }, { assignedById: user.id }] });
     }
     if (query.q) {
@@ -187,29 +206,12 @@ export class TasksService {
     return task;
   }
 
-  /** Manage roles get a full edit; the assignee (anyone else) can only move
-   * status and add remarks on their own task -- everything else they send
-   * is silently ignored rather than rejected, so a stale client can't 403
-   * a legitimate status update just for also sending an unrelated field. */
+  /** Manager-only full edit (subject/departments/assignees/target/overall
+   * status). Assignees report their own progress via reply() instead. */
   async update(id: string, dto: UpdateTaskDto, user: AuthUser) {
     const task = await this.findTask(id);
     const crossTenant = user.role === Role.SUPER_ADMIN || user.role === Role.ORG_ADMIN;
-    const isManager = this.isManager(user.role) && (crossTenant || task.tenantId === this.tenantId());
-    const isAssignee = task.assignees.some((a) => a.userId === user.id);
-    if (!isManager && !isAssignee) throw new NotFoundException("Task not found");
-
-    if (!isManager) {
-      const updated = await this.prisma.taskItem.update({
-        where: { id },
-        data: {
-          ...(dto.status !== undefined && { status: dto.status }),
-          ...(dto.remarks !== undefined && { remarks: dto.remarks }),
-          updatedById: user.id,
-        },
-        include: TASK_INCLUDE,
-      });
-      return updated;
-    }
+    if (!crossTenant && task.tenantId !== this.tenantId()) throw new NotFoundException("Task not found");
 
     const departmentIds = dto.departmentIds ? await this.validateDepartments(dto.departmentIds) : undefined;
     const assigneeIds = dto.assignedToIds ? await this.validateAssignees(dto.assignedToIds, crossTenant, task.tenantId) : undefined;
@@ -240,6 +242,25 @@ export class TasksService {
     });
     if (newlyAdded.length) await this.notifyAssignees(task.tenantId, user.id, newlyAdded, updated);
     return updated;
+  }
+
+  /** Each assignee replies to their OWN row on a task, independent of the
+   * manager's overall TaskItem.status -- so a task with several assignees
+   * tracks one response per person (who's replied, who's still pending)
+   * instead of one shared status everyone overwrites. */
+  async reply(id: string, dto: ReplyTaskDto, user: AuthUser) {
+    const assignee = await this.prisma.taskAssignee.findUnique({
+      where: { taskId_userId: { taskId: id, userId: user.id } },
+    });
+    if (!assignee) throw new NotFoundException("You are not assigned to this task");
+    await this.prisma.$transaction([
+      this.prisma.taskAssignee.update({
+        where: { id: assignee.id },
+        data: { status: dto.status, remarks: dto.remarks, respondedAt: new Date() },
+      }),
+      this.prisma.taskItem.update({ where: { id }, data: { updatedById: user.id } }),
+    ]);
+    return this.prisma.taskItem.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
   }
 
   async remove(id: string, user: AuthUser) {
@@ -276,8 +297,14 @@ export class TasksController {
   }
 
   @Patch(":id")
+  @Roles(...MANAGE_ROLES)
   update(@Param("id") id: string, @Body() dto: UpdateTaskDto, @CurrentUser() user: AuthUser) {
     return this.svc.update(id, dto, user);
+  }
+
+  @Post(":id/reply")
+  reply(@Param("id") id: string, @Body() dto: ReplyTaskDto, @CurrentUser() user: AuthUser) {
+    return this.svc.reply(id, dto, user);
   }
 
   @Delete(":id")

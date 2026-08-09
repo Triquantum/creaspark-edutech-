@@ -1086,13 +1086,19 @@ model TaskDepartment {
   @@index([departmentId])
 }
 
-// Many-to-many: one task can be assigned to several people at once.
+// Many-to-many: one task can be assigned to several people at once. Each
+// assignee tracks their OWN reply (status/remarks/respondedAt) independently
+// of TaskItem.status -- so a manager can see who has responded and who is
+// still pending on a task with multiple assignees, not just one shared status.
 model TaskAssignee {
-  id     String   @id @default(cuid())
-  taskId String
-  task   TaskItem @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  userId String
-  user   User     @relation(fields: [userId], references: [id])
+  id          String     @id @default(cuid())
+  taskId      String
+  task        TaskItem   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  status      TaskStatus @default(OPEN)
+  remarks     String?
+  respondedAt DateTime?
 
   @@unique([taskId, userId])
   @@index([userId])

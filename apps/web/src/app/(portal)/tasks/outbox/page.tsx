@@ -1,6 +1,5 @@
 "use client";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,11 +7,12 @@ import { ConfirmDialog, RowActions, inputCls } from "@/components/ui/modal";
 import {
   Me, TaskRow, MANAGE_ROLES, STATUS_OPTIONS, STATUS_LABEL, STATUS_CLS, fmtDate,
   CreateTaskModal, TaskDetailModal,
-} from "./task-shared";
+} from "../task-shared";
 
-function TasksPageInner() {
-  const searchParams = useSearchParams();
-  const openId = searchParams.get("open");
+/** Tasks the current user assigned to others (or to themselves) -- shows a
+ * reply-progress rollup per task so the assigner can see at a glance who's
+ * still pending, without opening every task. */
+export default function TaskOutboxPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [rows, setRows] = useState<TaskRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -28,7 +28,7 @@ function TasksPageInner() {
 
   const load = useCallback(() => {
     setState("loading");
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ box: "outbox" });
     if (q) params.set("q", q);
     if (status) params.set("status", status);
     api<TaskRow[]>(`/tasks?${params.toString()}`).then((r) => { setRows(r); setState("ready"); }).catch(() => setState("error"));
@@ -37,19 +37,6 @@ function TasksPageInner() {
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
   useEffect(load, [load]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
-
-  // Deep-link from the Dashboard's "Latest Tasks" widget (?open=<taskId>) --
-  // auto-opens that task's detail modal once its row has loaded. Guarded by
-  // a ref so closing the modal afterward doesn't immediately reopen it.
-  const autoOpenedRef = useRef(false);
-  useEffect(() => {
-    if (!openId || autoOpenedRef.current || rows.length === 0) return;
-    const match = rows.find((r) => r.id === openId);
-    if (match) {
-      setViewing(match);
-      autoOpenedRef.current = true;
-    }
-  }, [openId, rows]);
 
   async function confirmDeleteRow() {
     if (!deletingRow) return;
@@ -72,7 +59,8 @@ function TasksPageInner() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-widest text-slate-400">Work</p>
-          <h1 className="font-display text-2xl font-semibold text-night dark:text-white">All Tasks</h1>
+          <h1 className="font-display text-2xl font-semibold text-night dark:text-white">Task Manager Outbox</h1>
+          <p className="mt-1 text-sm text-slate-500">Tasks you assigned. See who has replied and who's still pending.</p>
         </div>
         {isManager && <Button onClick={() => setCreating(true)}>+ New task</Button>}
       </div>
@@ -95,7 +83,9 @@ function TasksPageInner() {
           </p>
         )}
         {state === "ready" && rows.length === 0 && (
-          <p className="p-6 text-sm text-slate-500">No tasks yet.</p>
+          <p className="p-6 text-sm text-slate-500">
+            {isManager ? "You haven't assigned any tasks yet." : "Only manager roles can assign tasks."}
+          </p>
         )}
         {rows.length > 0 && (
           <div className="overflow-x-auto">
@@ -105,36 +95,42 @@ function TasksPageInner() {
                   <th className="px-4 py-3 font-medium">Serial No.</th>
                   <th className="px-4 py-3 font-medium">Date</th>
                   <th className="px-4 py-3 font-medium">Subject</th>
-                  <th className="px-4 py-3 font-medium">Departments</th>
-                  <th className="px-4 py-3 font-medium">Target Date</th>
                   <th className="px-4 py-3 font-medium">Assigned To</th>
-                  <th className="px-4 py-3 font-medium">Updated By</th>
+                  <th className="px-4 py-3 font-medium">Target Date</th>
+                  <th className="px-4 py-3 font-medium">Replies</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.serialNo}</td>
-                    <td className="px-4 py-3 text-slate-500">{fmtDate(row.createdAt)}</td>
-                    <td className="px-4 py-3 font-medium text-night dark:text-white">{row.subject}</td>
-                    <td className="px-4 py-3 text-slate-500">{row.departments.map((d) => d.department.name).join(", ") || "—"}</td>
-                    <td className="px-4 py-3 text-slate-500">{fmtDate(row.targetDate)}</td>
-                    <td className="px-4 py-3 text-slate-500">{row.assignees.map((a) => a.user.fullName).join(", ") || "—"}</td>
-                    <td className="px-4 py-3 text-slate-500">{row.updatedBy?.fullName ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLS[row.status]}`}>{STATUS_LABEL[row.status]}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <RowActions
-                        onView={() => setViewing(row)}
-                        onEdit={isManager ? () => setViewing(row) : undefined}
-                        onDelete={isManager ? () => setDeletingRow(row) : undefined}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row) => {
+                  const repliedCount = row.assignees.filter((a) => a.respondedAt).length;
+                  const allReplied = repliedCount === row.assignees.length;
+                  return (
+                    <tr key={row.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
+                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.serialNo}</td>
+                      <td className="px-4 py-3 text-slate-500">{fmtDate(row.createdAt)}</td>
+                      <td className="px-4 py-3 font-medium text-night dark:text-white">{row.subject}</td>
+                      <td className="px-4 py-3 text-slate-500">{row.assignees.map((a) => a.user.fullName).join(", ") || "—"}</td>
+                      <td className="px-4 py-3 text-slate-500">{fmtDate(row.targetDate)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${allReplied ? "bg-success/10 text-success" : "bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300"}`}>
+                          {repliedCount}/{row.assignees.length} replied
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_CLS[row.status]}`}>{STATUS_LABEL[row.status]}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <RowActions
+                          onView={() => setViewing(row)}
+                          onEdit={isManager ? () => setViewing(row) : undefined}
+                          onDelete={isManager ? () => setDeletingRow(row) : undefined}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -170,13 +166,5 @@ function TasksPageInner() {
         </div>
       )}
     </div>
-  );
-}
-
-export default function TasksPage() {
-  return (
-    <Suspense fallback={null}>
-      <TasksPageInner />
-    </Suspense>
   );
 }

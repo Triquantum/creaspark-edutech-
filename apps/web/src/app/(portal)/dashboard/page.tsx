@@ -246,16 +246,21 @@ function TasksCard({ tasks }: { tasks: TaskSummary[] }) {
       {tasks.length === 0 && <p className="mt-4 text-sm text-slate-500">No tasks assigned yet.</p>}
       <ul className="mt-4 space-y-4">
         {tasks.slice(0, 5).map((t) => (
-          <li key={t.id} className="flex items-start justify-between gap-3 border-l-2 border-accent pl-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-night dark:text-white">{t.subject}</p>
-              <p className="truncate text-xs text-slate-400">
-                {t.serialNo}{t.assignees.length ? ` · ${t.assignees.map((a) => a.user.fullName).join(", ")}` : ""}
-              </p>
-            </div>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${TASK_STATUS_CLS[t.status]}`}>
-              {TASK_STATUS_LABEL[t.status]}
-            </span>
+          <li key={t.id}>
+            <Link
+              href={`/tasks?open=${t.id}`}
+              className="flex items-start justify-between gap-3 rounded-lg border-l-2 border-accent py-1 pl-3 pr-2 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-night dark:text-white">{t.subject}</p>
+                <p className="truncate text-xs text-slate-400">
+                  {t.serialNo}{t.assignees.length ? ` · ${t.assignees.map((a) => a.user.fullName).join(", ")}` : ""}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${TASK_STATUS_CLS[t.status]}`}>
+                {TASK_STATUS_LABEL[t.status]}
+              </span>
+            </Link>
           </li>
         ))}
       </ul>

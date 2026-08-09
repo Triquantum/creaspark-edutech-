@@ -43,7 +43,11 @@ export const NAV: NavGroup[] = [
     { label: "Routine", href: "/academic/routine", hiddenFrom: ["TEACHER"] },
   ] },
   { label: "Courses", icon: "monitor", href: "/lms/courses", roles: ["STUDENT", "PARENT"] },
-  { label: "Task Manager", icon: "check-square", href: "/tasks", hiddenFrom: ["PARENT", "STUDENT", "GUEST"] },
+  { label: "Task Manager", icon: "check-square", hiddenFrom: ["PARENT", "STUDENT", "GUEST"], children: [
+    { label: "All Tasks", href: "/tasks" },
+    { label: "Task Manager Inbox", href: "/tasks/inbox" },
+    { label: "Task Manager Outbox", href: "/tasks/outbox" },
+  ] },
   { label: "Training", icon: "award", href: "/training", hiddenFrom: ["GUEST"] },
   { label: "School", icon: "graduation-cap", roles: ["SUPER_ADMIN", "ORG_ADMIN"],
     children: [
