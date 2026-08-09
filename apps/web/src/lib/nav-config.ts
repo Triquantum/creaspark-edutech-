@@ -11,7 +11,8 @@
 export type Role =
   | "SUPER_ADMIN" | "ORG_ADMIN" | "SCHOOL_ADMIN" | "PRINCIPAL" | "VICE_PRINCIPAL" | "COORDINATOR"
   | "TEACHER" | "TRAINER" | "ACCOUNTANT" | "RECEPTION" | "LIBRARIAN" | "TRANSPORT_MANAGER"
-  | "HR" | "INVENTORY_MANAGER" | "HOSTEL_WARDEN" | "SECURITY" | "PARENT" | "STUDENT" | "GUEST";
+  | "HR" | "INVENTORY_MANAGER" | "HOSTEL_WARDEN" | "SECURITY" | "SALES_MANAGER" | "SALES_EXECUTIVE"
+  | "PARENT" | "STUDENT" | "GUEST";
 
 export interface NavLeaf { label: string; href: string; roles?: Role[]; hiddenFrom?: Role[] }
 export interface NavGroup { label: string; icon: string; children?: NavLeaf[]; href?: string; roles?: Role[]; hiddenFrom?: Role[] }
@@ -22,6 +23,8 @@ const kids = (base: string, labels: string[]): NavLeaf[] =>
 
 const SUPER_ADMIN_ONLY: Role[] = ["SUPER_ADMIN"];
 const SCHOOL_MANAGEMENT: Role[] = ["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR", "HR"];
+const SALES_TEAM: Role[] = ["SUPER_ADMIN", "ORG_ADMIN", "SALES_MANAGER", "SALES_EXECUTIVE"];
+const SALES_MANAGE: Role[] = ["SUPER_ADMIN", "ORG_ADMIN", "SALES_MANAGER"];
 
 export const NAV: NavGroup[] = [
   { label: "Dashboard", icon: "home", href: "/dashboard" },
@@ -78,6 +81,15 @@ export const NAV: NavGroup[] = [
     { label: "Inventory", href: "/assets/inventory" },
     { label: "School Allocation", href: "/assets/school-allocation" },
     { label: "Reports", href: "/assets/reports" },
+  ] },
+  { label: "Sales Team", icon: "trending-up", roles: SALES_TEAM, children: [
+    { label: "My Day", href: "/sales/my-day" },
+    { label: "Activities", href: "/sales/activities" },
+    { label: "Leads", href: "/sales/leads" },
+    { label: "Follow-up Center", href: "/sales/follow-ups" },
+    { label: "Opportunities", href: "/sales/opportunities" },
+    { label: "Daily Report", href: "/sales/daily-report" },
+    { label: "Team Performance", href: "/sales/team-performance", roles: SALES_MANAGE },
   ] },
   { label: "Inventory", icon: "package", hiddenFrom: ["PARENT", "STUDENT"], children: kids("inventory", ["Category", "Product", "Warehouse", "Supplier", "Purchase", "Sale"]) },
   {

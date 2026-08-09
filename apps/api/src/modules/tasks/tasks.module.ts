@@ -314,5 +314,5 @@ export class TasksController {
   }
 }
 
-@Module({ controllers: [TasksController], providers: [TasksService] })
+@Module({ controllers: [TasksController], providers: [TasksService], exports: [TasksService] })
 export class TasksModule {}

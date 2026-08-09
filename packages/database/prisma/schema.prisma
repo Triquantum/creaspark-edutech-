@@ -84,6 +84,10 @@ model School {
   userAccess    UserAccess[]
   assetAllocations AssetAllocation[]
   assetTransactions AssetTransaction[]
+  salesLeadsConverted SalesLead[]
+  salesActivities  SalesActivity[]
+  salesFollowUps   SalesFollowUp[]
+  salesOpportunities SalesOpportunity[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -153,6 +157,14 @@ model User {
   assetItemsUpdated           AssetItem[] @relation("AssetItemsUpdatedBy")
   assetAllocationsMade        AssetAllocation[] @relation("AssetAllocationsMade")
   assetTransactionsRecorded   AssetTransaction[] @relation("AssetTransactionsRecorded")
+  salesActivities             SalesActivity[] @relation("SalesActivitiesByUser")
+  salesFollowUps              SalesFollowUp[] @relation("SalesFollowUpsAssigned")
+  salesLeadsAssigned          SalesLead[] @relation("SalesLeadsAssigned")
+  salesOpportunitiesAssigned  SalesOpportunity[] @relation("SalesOpportunitiesAssigned")
+  salesDailyReports           SalesDailyReport[] @relation("SalesDailyReportsBy")
+  salesDailyReportsReviewed   SalesDailyReport[] @relation("SalesDailyReportsReviewed")
+  salesTargetsFor             SalesTarget[] @relation("SalesTargetsFor")
+  salesTargetsCreatedBy       SalesTarget[] @relation("SalesTargetsCreatedBy")
 
   @@index([tenantId, role])
 }
@@ -175,6 +187,8 @@ enum Role {
   INVENTORY_MANAGER
   HOSTEL_WARDEN
   SECURITY
+  SALES_EXECUTIVE
+  SALES_MANAGER
   PARENT
   STUDENT
   GUEST
@@ -1074,6 +1088,8 @@ model TaskItem {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  salesActivity SalesActivity?
+
   @@index([tenantId, status])
   @@index([tenantId, assignedById])
 }
@@ -1303,4 +1319,275 @@ model AssetTransaction {
   createdAt     DateTime             @default(now())
 
   @@index([assetItemId, createdAt])
+}
+
+// ────────────────────────── Sales Management & Daily Activity Tracking ──────────────────────────
+// SalesActivity is the single source of truth for "what a salesperson did"
+// (calls, visits, meetings, demos, proposals, ...). Visit check-in/check-out
+// live directly on the activity row rather than a separate table, since a
+// visit IS an activity -- location is captured ONLY at check-in/check-out,
+// never polled continuously (no background GPS tracking). SalesFollowUp is
+// a distinct queryable table powering the Follow-up Center (Today/Upcoming/
+// Overdue/Completed) -- created standalone or auto-generated from an
+// activity's nextFollowUpDate. Daily-report and target ACHIEVEMENT numbers
+// are always derived live from SalesActivity/SalesOpportunity rows at read
+// time, never stored redundantly, so they can't drift out of sync (same
+// principle as Asset Management's derived stock quantities above).
+
+enum SalesActivityType {
+  CALL
+  SCHOOL_VISIT
+  CUSTOMER_VISIT
+  MEETING
+  ONLINE_MEETING
+  PRODUCT_DEMO
+  EMAIL
+  MESSAGE
+  FOLLOW_UP
+  LEAD_CREATION
+  PROPOSAL
+  QUOTATION
+  NEGOTIATION
+  DELIVERY
+  TRAINING_DEMO
+  OTHER
+}
+
+enum SalesLeadSource {
+  WEBSITE
+  REFERRAL
+  DIRECT_CONTACT
+  EVENT
+  SCHOOL_VISIT
+  EXISTING_CUSTOMER
+  CAMPAIGN
+  OTHER
+}
+
+enum SalesLeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum SalesOpportunityStage {
+  LEAD
+  CONTACTED
+  INTERESTED
+  MEETING
+  DEMO
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum SalesFollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum SalesReportStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+}
+
+enum SalesTargetPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum SalesTargetMetric {
+  CALLS
+  VISITS
+  MEETINGS
+  LEADS
+  DEMOS
+  PROPOSALS
+  CONVERSIONS
+  REVENUE
+}
+
+enum SalesPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// A potential customer/school, not necessarily a registered School yet --
+// salespeople work leads before they become real accounts. convertedSchoolId
+// links to the real School once registered (reusing the existing School
+// module rather than duplicating it).
+model SalesLead {
+  id                String           @id @default(cuid())
+  tenantId          String
+  schoolName        String
+  contactPerson     String?
+  phone             String?
+  email             String?
+  location          String?
+  source            SalesLeadSource  @default(OTHER)
+  status            SalesLeadStatus  @default(NEW)
+  priority          SalesPriority    @default(MEDIUM)
+  notes             String?
+  assignedToId      String
+  assignedTo        User             @relation("SalesLeadsAssigned", fields: [assignedToId], references: [id])
+  convertedSchoolId String?
+  convertedSchool   School?          @relation(fields: [convertedSchoolId], references: [id])
+  leadDate          DateTime         @default(now())
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  activities    SalesActivity[]
+  opportunities SalesOpportunity[]
+  followUps     SalesFollowUp[]
+
+  @@index([tenantId, assignedToId, status])
+}
+
+model SalesActivity {
+  id               String            @id @default(cuid())
+  tenantId         String
+  userId           String
+  user             User              @relation("SalesActivitiesByUser", fields: [userId], references: [id])
+  type             SalesActivityType
+  schoolId         String?
+  school           School?           @relation(fields: [schoolId], references: [id])
+  leadId           String?
+  lead             SalesLead?        @relation(fields: [leadId], references: [id])
+  opportunityId    String?
+  opportunity      SalesOpportunity? @relation(fields: [opportunityId], references: [id])
+  contactPerson    String?
+  purpose          String?
+  description      String?
+  outcome          String?
+  activityDate     DateTime          @default(now())
+  startTime        DateTime?
+  endTime          DateTime?
+  checkInAt        DateTime?
+  checkInLat       Float?
+  checkInLng       Float?
+  checkOutAt       DateTime?
+  checkOutLat      Float?
+  checkOutLng      Float?
+  nextAction       String?
+  nextFollowUpDate DateTime?
+  priority         SalesPriority     @default(MEDIUM)
+  status           TaskStatus        @default(OPEN)
+  generatedTaskId  String?           @unique
+  generatedTask    TaskItem?         @relation(fields: [generatedTaskId], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  followUp SalesFollowUp?
+
+  @@index([tenantId, userId, activityDate])
+  @@index([tenantId, schoolId])
+}
+
+// A scheduled future action, created standalone or auto-generated from an
+// activity's nextFollowUpDate -- powers the Follow-up Center as one
+// queryable table (Today/Upcoming/Overdue derived from dueDate + status at
+// query time; never silently changed).
+model SalesFollowUp {
+  id                  String              @id @default(cuid())
+  tenantId            String
+  userId              String
+  user                User                @relation("SalesFollowUpsAssigned", fields: [userId], references: [id])
+  schoolId            String?
+  school              School?             @relation(fields: [schoolId], references: [id])
+  leadId              String?
+  lead                SalesLead?          @relation(fields: [leadId], references: [id])
+  opportunityId       String?
+  opportunity         SalesOpportunity?   @relation(fields: [opportunityId], references: [id])
+  sourceActivityId    String?             @unique
+  sourceActivity      SalesActivity?      @relation(fields: [sourceActivityId], references: [id])
+  nextAction          String
+  dueDate             DateTime
+  priority            SalesPriority       @default(MEDIUM)
+  status              SalesFollowUpStatus @default(PENDING)
+  completedAt         DateTime?
+  completedActivityId String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([tenantId, userId, status, dueDate])
+}
+
+model SalesOpportunity {
+  id                  String                @id @default(cuid())
+  tenantId            String
+  title               String
+  schoolId            String?
+  school              School?               @relation(fields: [schoolId], references: [id])
+  leadId              String?
+  lead                SalesLead?            @relation(fields: [leadId], references: [id])
+  value               Decimal?              @db.Decimal(12, 2)
+  stage               SalesOpportunityStage @default(LEAD)
+  probability         Int                   @default(10)
+  expectedClosingDate DateTime?
+  nextAction          String?
+  nextFollowUpDate    DateTime?
+  assignedToId        String
+  assignedTo          User                  @relation("SalesOpportunitiesAssigned", fields: [assignedToId], references: [id])
+  wonAt               DateTime?
+  lostAt              DateTime?
+  lostReason          String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  activities SalesActivity[]
+  followUps  SalesFollowUp[]
+
+  @@index([tenantId, assignedToId, stage])
+}
+
+model SalesDailyReport {
+  id                 String            @id @default(cuid())
+  tenantId           String
+  userId             String
+  user               User              @relation("SalesDailyReportsBy", fields: [userId], references: [id])
+  reportDate         DateTime          @db.Date
+  status             SalesReportStatus @default(DRAFT)
+  achievements       String?
+  majorOpportunities String?
+  challenges         String?
+  supportRequired    String?
+  tomorrowPriorities String?
+  tomorrowPlan       String?
+  managerComments    String?
+  reviewedById       String?
+  reviewedBy         User?             @relation("SalesDailyReportsReviewed", fields: [reviewedById], references: [id])
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([userId, reportDate])
+  @@index([tenantId, reportDate])
+}
+
+model SalesTarget {
+  id          String            @id @default(cuid())
+  tenantId    String
+  userId      String?
+  user        User?             @relation("SalesTargetsFor", fields: [userId], references: [id])
+  period      SalesTargetPeriod
+  periodStart DateTime          @db.Date
+  periodEnd   DateTime          @db.Date
+  metric      SalesTargetMetric
+  targetValue Decimal           @db.Decimal(12, 2)
+  createdById String
+  createdBy   User              @relation("SalesTargetsCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([userId, period, periodStart, metric])
+  @@index([tenantId, period, periodStart])
 }

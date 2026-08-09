@@ -31,6 +31,7 @@ import { EmployeesModule } from "./modules/employees/employees.module";
 import { TrainingsModule } from "./modules/trainings/trainings.module";
 import { HolidaysModule } from "./modules/holidays/holidays.module";
 import { AssetsModule } from "./modules/assets/assets.module";
+import { SalesModule } from "./modules/sales/sales.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -67,6 +68,7 @@ import { HealthController } from "./modules/health.controller";
     TrainingsModule,
     HolidaysModule,
     AssetsModule,
+    SalesModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
