@@ -2,6 +2,20 @@ import { supabase } from "./supabase";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+// Per-tab active grant override (sessionStorage, not localStorage) -- lets
+// one open tab operate under a switched role/school without affecting any
+// other tab or device signed into the same account.
+const ACTIVE_GRANT_KEY = "educore:active-grant-token";
+export function getActiveGrantToken(): string | null {
+  return typeof window !== "undefined" ? sessionStorage.getItem(ACTIVE_GRANT_KEY) : null;
+}
+export function setActiveGrantToken(token: string) {
+  if (typeof window !== "undefined") sessionStorage.setItem(ACTIVE_GRANT_KEY, token);
+}
+export function clearActiveGrantToken() {
+  if (typeof window !== "undefined") sessionStorage.removeItem(ACTIVE_GRANT_KEY);
+}
+
 /** Dispatched whenever a message/announcement is marked read from somewhere
  * other than the Topbar's own bell dropdown (e.g. the dedicated /message
  * page), so the bell's unread badge/list can drop it immediately instead of
@@ -17,11 +31,13 @@ export function notifyNotificationsChanged() {
 export async function api<T>(path: string, init?: RequestInit & { skipAuthRedirect?: boolean }): Promise<T> {
   const { skipAuthRedirect, ...requestInit } = init ?? {};
   const { data: { session } } = await supabase.auth.getSession();
+  const activeGrant = getActiveGrantToken();
   const res = await fetch(`${BASE}/api/v1${path}`, {
     ...requestInit,
     headers: {
       "Content-Type": "application/json",
       ...(session && { Authorization: `Bearer ${session.access_token}` }),
+      ...(activeGrant && { "X-Active-Grant": activeGrant }),
       ...requestInit.headers,
     },
   });
@@ -36,11 +52,13 @@ export async function api<T>(path: string, init?: RequestInit & { skipAuthRedire
  * that api()'s always-res.json() can't handle. */
 export async function apiBlob(path: string, init?: RequestInit): Promise<Blob> {
   const { data: { session } } = await supabase.auth.getSession();
+  const activeGrant = getActiveGrantToken();
   const res = await fetch(`${BASE}/api/v1${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
       ...(session && { Authorization: `Bearer ${session.access_token}` }),
+      ...(activeGrant && { "X-Active-Grant": activeGrant }),
       ...init?.headers,
     },
   });

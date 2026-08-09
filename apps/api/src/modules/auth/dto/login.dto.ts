@@ -15,3 +15,7 @@ export class LoginWithTokenDto {
   @IsString() token: string;
   @IsString() password: string;
 }
+
+export class SwitchContextDto {
+  @IsString() grantId: string;
+}

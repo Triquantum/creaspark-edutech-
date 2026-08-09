@@ -1,10 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { InstitutionType, Role } from "@educore/database";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
-import { RegisterSchoolDto } from "./dto/login.dto";
+import { signSwitchToken } from "../../common/auth/switch-context-token";
+import { RegisterSchoolDto, SwitchContextDto } from "./dto/login.dto";
 
 const LOGIN_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes — just long enough to pick an account and type a password
 
@@ -16,11 +17,31 @@ export class AuthService {
   constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
 
   async me(user: AuthUser) {
-    const [dbUser, tenant] = await Promise.all([
+    const [dbUser, tenant, grants] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: user.id }, select: { fullName: true } }),
       this.prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } }),
+      this.prisma.userAccess.findMany({
+        where: { userId: user.id, isActive: true },
+        include: { tenant: { select: { name: true } }, school: { select: { id: true, name: true } } },
+        orderBy: { isPrimary: "desc" },
+      }),
     ]);
-    return { ...user, fullName: dbUser?.fullName, tenantName: tenant?.name };
+    const activeGrantId = user.activeGrantId ?? grants.find((g) => g.isPrimary)?.id;
+    return { ...user, fullName: dbUser?.fullName, tenantName: tenant?.name, grants, activeGrantId };
+  }
+
+  /** Switching only mints a pointer token {userId, grantId} -- no role/
+   * tenant/school travels in the token itself, so a grant deactivated after
+   * this call stops working on the very next request (TenantMiddleware
+   * re-fetches it live), not just at next switch. */
+  async switchContext(dto: SwitchContextDto, user: AuthUser) {
+    const grant = await this.prisma.userAccess.findUnique({ where: { id: dto.grantId } });
+    if (!grant || grant.userId !== user.id || !grant.isActive) throw new NotFoundException("Grant not found");
+    const token = signSwitchToken({ userId: user.id, grantId: grant.id });
+    await this.prisma.auditLog.create({
+      data: { tenantId: grant.tenantId, userId: user.id, action: "auth.switch_context", entity: "UserAccess", entityId: grant.id },
+    });
+    return { token, grant };
   }
 
   /**

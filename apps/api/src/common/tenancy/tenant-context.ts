@@ -3,6 +3,8 @@ import { AsyncLocalStorage } from "async_hooks";
 export interface TenantContext {
   tenantId: string;
   tenantSlug: string;
+  /** Set only when the request carried a verified X-Active-Grant override. */
+  schoolId?: string;
 }
 
 /**

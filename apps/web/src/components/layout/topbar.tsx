@@ -1,8 +1,8 @@
 "use client";
-import { Bell, KeyRound, LogOut, Menu, MessageSquare, Mic, MicOff, Moon, Search, Sun, WifiOff } from "lucide-react";
+import { Bell, KeyRound, LogOut, Menu, MessageSquare, Mic, MicOff, Moon, Search, Sun, UserCog, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { api, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/api";
+import { api, NOTIFICATIONS_CHANGED_EVENT, setActiveGrantToken, clearActiveGrantToken } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { flattenPages, Role } from "@/lib/nav-config";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
@@ -38,7 +38,15 @@ interface InboxMessage {
   sender?: { fullName: string; role: string };
   section?: { name: string; class: { name: string } } | null;
 }
-interface Me { fullName?: string; email: string; role: string }
+interface GrantRow {
+  id: string; role: string; designation: string | null; isPrimary: boolean;
+  tenant: { name: string }; school: { id: string; name: string } | null;
+}
+interface Me { fullName?: string; email: string; role: string; activeGrantId?: string; grants?: GrantRow[] }
+
+function roleLabel(role: string) {
+  return role.toLowerCase().split("_").map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ");
+}
 
 // Mirrors GET /teachers' @Roles() guard — skips the request entirely for
 // roles that would always get a 403 (e.g. TEACHER, PARENT, STUDENT).
@@ -133,6 +141,61 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           </div>
         </form>
       )}
+    </Modal>
+  );
+}
+
+/** Lists the caller's own UserAccess grants and lets them pick which one is
+ * active for this tab. A full page reload after switching is deliberate --
+ * role affects the sidebar, dashboard variant, and every page's own role
+ * checks app-wide, so reloading is the simplest way to guarantee nothing
+ * stays stale rather than plumbing a global "current role" refresh. */
+function SwitchContextModal({ grants, activeGrantId, onClose }: {
+  grants: GrantRow[]; activeGrantId?: string; onClose: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function switchTo(grantId: string) {
+    if (grantId === activeGrantId) { onClose(); return; }
+    setBusyId(grantId);
+    setError(null);
+    try {
+      const { token } = await api<{ token: string }>("/auth/switch-context", { method: "POST", body: JSON.stringify({ grantId }) });
+      setActiveGrantToken(token);
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not switch");
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Modal title="Switch role / school" onClose={onClose}>
+      <div className="space-y-2">
+        {grants.map((g) => (
+          <button
+            key={g.id}
+            onClick={() => switchTo(g.id)}
+            disabled={busyId !== null}
+            className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition-colors disabled:opacity-50 ${
+              g.id === activeGrantId
+                ? "border-primary bg-primary/5"
+                : "border-slate-200 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+            }`}
+          >
+            <span>
+              <span className="block font-medium text-night dark:text-white">
+                {roleLabel(g.role)}{g.designation && ` · ${g.designation}`}
+              </span>
+              <span className="mt-0.5 block text-xs text-slate-500">{g.school?.name ?? `${g.tenant.name} (all schools)`}</span>
+            </span>
+            {g.id === activeGrantId && <span className="shrink-0 text-xs font-medium text-primary">Active</span>}
+            {busyId === g.id && <span className="shrink-0 text-xs text-slate-400">Switching…</span>}
+          </button>
+        ))}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      </div>
     </Modal>
   );
 }
@@ -265,8 +328,11 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const avatarRef = useClickOutside(() => setAvatarOpen(false));
   const [changePwOpen, setChangePwOpen] = useState(false);
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const hasMultipleGrants = (me?.grants?.length ?? 0) > 1;
 
   async function signOut() {
+    clearActiveGrantToken();
     await supabase.auth.signOut();
     router.push("/login");
   }
@@ -394,6 +460,12 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
                   <p className="truncate text-xs text-slate-400">{me.email}</p>
                 </div>
               )}
+              {hasMultipleGrants && (
+                <button onClick={() => { setSwitchOpen(true); setAvatarOpen(false); }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-night hover:bg-black/5 dark:text-white dark:hover:bg-white/10">
+                  <UserCog size={15} /> Switch role / school
+                </button>
+              )}
               <button onClick={() => { setChangePwOpen(true); setAvatarOpen(false); }}
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-night hover:bg-black/5 dark:text-white dark:hover:bg-white/10">
                 <KeyRound size={15} /> Change password
@@ -408,6 +480,9 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       {changePwOpen && <ChangePasswordModal onClose={() => setChangePwOpen(false)} />}
+      {switchOpen && me?.grants && (
+        <SwitchContextModal grants={me.grants} activeGrantId={me.activeGrantId} onClose={() => setSwitchOpen(false)} />
+      )}
     </header>
   );
 }

@@ -2,6 +2,8 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { passportJwtSecret } from "jwks-rsa";
+import { Request } from "express";
+import { ActiveGrantOverride } from "../../../common/tenancy/tenant.middleware";
 
 interface SupabaseJwtPayload {
   sub: string;
@@ -23,12 +25,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       audience: "authenticated",
       issuer: `${process.env.SUPABASE_URL!.replace(/\/+$/, "")}/auth/v1`,
       algorithms: ["ES256", "RS256"],
+      passReqToCallback: true,
     });
   }
 
-  validate(payload: SupabaseJwtPayload) {
+  /** TenantMiddleware runs before this (Express middleware precedes Nest
+   * guards) and already fully validated any X-Active-Grant header --
+   * re-fetched the UserAccess row, checked ownership/isActive, and stashed
+   * the result on req.activeGrant. This just reads that, so the switched
+   * role/tenant/school flow through to every @CurrentUser()/RolesGuard
+   * check without a second DB round trip. */
+  validate(req: Request, payload: SupabaseJwtPayload) {
     const { role, tenantId } = payload.app_metadata ?? {};
     if (!role || !tenantId) throw new UnauthorizedException("Account is missing role/tenant setup");
+    const override = (req as Request & { activeGrant?: ActiveGrantOverride }).activeGrant;
+    if (override) {
+      return {
+        id: payload.sub, tenantId: override.tenantId, role: override.role, email: payload.email,
+        schoolId: override.schoolId, activeGrantId: override.grantId,
+      };
+    }
     return { id: payload.sub, tenantId, role, email: payload.email };
   }
 }
