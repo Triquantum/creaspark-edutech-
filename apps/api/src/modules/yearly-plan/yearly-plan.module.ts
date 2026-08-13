@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Patch, Post, UseGuards,
+  BadRequestException, Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Patch, Post, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
@@ -48,6 +48,10 @@ export class CreateEntryDto {
   @IsOptional() @IsString() remarks?: string;
 }
 export class UpdateEntryDto extends CreateEntryDto {}
+export class CreateAssignmentDto {
+  @IsString() schoolId: string;
+  @IsString() teacherId: string;
+}
 
 @Injectable()
 export class YearlyPlanService {
@@ -63,7 +67,14 @@ export class YearlyPlanService {
 
   private async findGrade(id: string) {
     const grade = await this.prisma.yearlyPlanGrade.findUnique({
-      where: { id }, include: { entries: { orderBy: { rowIndex: "asc" } } },
+      where: { id },
+      include: {
+        entries: { orderBy: { rowIndex: "asc" } },
+        assignments: {
+          include: { school: { select: { id: true, name: true } }, teacher: { select: { id: true, fullName: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
     });
     if (!grade) throw new NotFoundException("Yearly plan not found");
     return grade;
@@ -112,6 +123,29 @@ export class YearlyPlanService {
     await this.prisma.yearlyPlanEntry.delete({ where: { id } });
     return { deleted: true };
   }
+
+  /** Teacher must actually be staff at the given school -- the frontend
+   * picker already scopes teachers by school, this is the server-side
+   * backstop against a stale/tampered request pairing a teacher with a
+   * school they don't work at. */
+  async addAssignment(gradeId: string, dto: CreateAssignmentDto) {
+    await this.findGrade(gradeId);
+    const staff = await this.prisma.staffProfile.findUnique({ where: { userId: dto.teacherId } });
+    if (!staff || staff.schoolId !== dto.schoolId) {
+      throw new BadRequestException("This teacher is not on that school's staff");
+    }
+    return this.prisma.yearlyPlanAssignment.create({
+      data: { gradeId, schoolId: dto.schoolId, teacherId: dto.teacherId },
+      include: { school: { select: { id: true, name: true } }, teacher: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async removeAssignment(id: string) {
+    const assignment = await this.prisma.yearlyPlanAssignment.findUnique({ where: { id } });
+    if (!assignment) throw new NotFoundException("Assignment not found");
+    await this.prisma.yearlyPlanAssignment.delete({ where: { id } });
+    return { deleted: true };
+  }
 }
 
 @ApiTags("yearly-plan") @ApiBearerAuth() @UseGuards(JwtAuthGuard, RolesGuard) @Roles(...VIEW)
@@ -139,6 +173,12 @@ export class YearlyPlanController {
 
   @Delete("entries/:id") @Roles(...MANAGE)
   removeEntry(@Param("id") id: string) { return this.svc.removeEntry(id); }
+
+  @Post("grades/:id/assignments") @Roles(...MANAGE)
+  addAssignment(@Param("id") id: string, @Body() dto: CreateAssignmentDto) { return this.svc.addAssignment(id, dto); }
+
+  @Delete("assignments/:id") @Roles(...MANAGE)
+  removeAssignment(@Param("id") id: string) { return this.svc.removeAssignment(id); }
 }
 
 @Module({ controllers: [YearlyPlanController], providers: [YearlyPlanService] })

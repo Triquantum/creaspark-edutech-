@@ -88,6 +88,7 @@ model School {
   salesActivities  SalesActivity[]
   salesFollowUps   SalesFollowUp[]
   salesOpportunities SalesOpportunity[]
+  yearlyPlanAssignments YearlyPlanAssignment[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -166,6 +167,7 @@ model User {
   salesTargetsFor             SalesTarget[] @relation("SalesTargetsFor")
   salesTargetsCreatedBy       SalesTarget[] @relation("SalesTargetsCreatedBy")
   yearlyPlanGradesCreated     YearlyPlanGrade[] @relation("YearlyPlanGradesCreated")
+  yearlyPlanTeacherAssignments YearlyPlanAssignment[] @relation("YearlyPlanTeacherAssignments")
 
   @@index([tenantId, role])
 }
@@ -1607,9 +1609,29 @@ model YearlyPlanGrade {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  entries YearlyPlanEntry[]
+  entries     YearlyPlanEntry[]
+  assignments YearlyPlanAssignment[]
 
   @@unique([academicYear, gradeLabel])
+}
+
+// Which school + teacher is responsible for delivering a given grade's
+// plan. A grade can have several rows (multiple schools, or a school with
+// more than one teacher covering it); teacherId is validated server-side
+// to actually belong to schoolId's staff.
+model YearlyPlanAssignment {
+  id        String          @id @default(cuid())
+  gradeId   String
+  grade     YearlyPlanGrade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  schoolId  String
+  school    School          @relation(fields: [schoolId], references: [id])
+  teacherId String
+  teacher   User            @relation("YearlyPlanTeacherAssignments", fields: [teacherId], references: [id])
+  createdAt DateTime        @default(now())
+
+  @@unique([gradeId, schoolId, teacherId])
+  @@index([schoolId])
+  @@index([teacherId])
 }
 
 // One row per week/unit of the plan. Source spreadsheets vary in column

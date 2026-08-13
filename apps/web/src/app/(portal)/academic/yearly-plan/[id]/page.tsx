@@ -14,8 +14,11 @@ interface EntryRow {
   learningOutcome: string | null; activity: string | null; sdgMapping: string | null; skills: string | null;
   values: string | null; digitalContent: string | null; assessment: string | null; remarks: string | null;
 }
-interface GradeDetail { id: string; academicYear: string; gradeLabel: string; entries: EntryRow[] }
+interface AssignmentRow { id: string; school: { id: string; name: string }; teacher: { id: string; fullName: string } }
+interface GradeDetail { id: string; academicYear: string; gradeLabel: string; entries: EntryRow[]; assignments: AssignmentRow[] }
 interface Me { role: string }
+interface SchoolOpt { id: string; name: string }
+interface TeacherOpt { id: string; fullName: string }
 
 const FIELD_LABELS: { key: keyof EntryRow; label: string }[] = [
   { key: "term", label: "Term" }, { key: "workingDays", label: "Working days" }, { key: "instructedDays", label: "Instructed days" },
@@ -98,6 +101,71 @@ function EntryViewModal({ entry, onClose }: { entry: EntryRow; onClose: () => vo
   );
 }
 
+/** School -> Teacher cascading picker, reusing the same GET /teachers?
+ * schoolId= endpoint the Teacher Assignment module already uses -- the
+ * teacher list only loads once a school is chosen, since "which teachers"
+ * only makes sense scoped to one school's staff. */
+function AssignModal({ gradeId, existing, onClose, onSaved }: {
+  gradeId: string; existing: AssignmentRow[]; onClose: () => void; onSaved: () => void;
+}) {
+  const [schools, setSchools] = useState<SchoolOpt[]>([]);
+  const [schoolId, setSchoolId] = useState("");
+  const [teachers, setTeachers] = useState<TeacherOpt[]>([]);
+  const [teacherId, setTeacherId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
+  useEffect(() => {
+    setTeacherId("");
+    if (!schoolId) { setTeachers([]); return; }
+    api<TeacherOpt[]>(`/teachers?schoolId=${schoolId}&activeOnly=true`).then(setTeachers).catch(() => setTeachers([]));
+  }, [schoolId]);
+
+  const alreadyAssigned = existing.some((a) => a.school.id === schoolId && a.teacher.id === teacherId);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!schoolId || !teacherId) return;
+    setBusy(true); setError(null);
+    try {
+      await api(`/academic/yearly-plan/grades/${gradeId}/assignments`, {
+        method: "POST", body: JSON.stringify({ schoolId, teacherId }),
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not assign");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Assign school & teacher" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field id="as-school" label="School">
+          <select id="as-school" required value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className={inputCls}>
+            <option value="">Select school…</option>
+            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field id="as-teacher" label="Teacher" optional={!schoolId}>
+          <select id="as-teacher" required value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className={inputCls} disabled={!schoolId}>
+            <option value="">{schoolId ? "Select teacher…" : "Choose a school first"}</option>
+            {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+          </select>
+        </Field>
+        {alreadyAssigned && <p className="text-xs text-amber-600 dark:text-amber-400">This teacher is already assigned at this school.</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-3 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy || !schoolId || !teacherId || alreadyAssigned}>{busy ? "Assigning…" : "Assign"}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function YearlyPlanDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -107,6 +175,8 @@ export default function YearlyPlanDetailPage() {
   const [viewing, setViewing] = useState<EntryRow | null>(null);
   const [editing, setEditing] = useState<EntryRow | null>(null);
   const [deleting, setDeleting] = useState<EntryRow | null>(null);
+  const [showAssign, setShowAssign] = useState(false);
+  const [removingAssignment, setRemovingAssignment] = useState<AssignmentRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -135,6 +205,21 @@ export default function YearlyPlanDetailPage() {
     }
   }
 
+  async function confirmRemoveAssignment() {
+    if (!removingAssignment) return;
+    setBusy(true);
+    try {
+      await api(`/academic/yearly-plan/assignments/${removingAssignment.id}`, { method: "DELETE" });
+      setToast("Assignment removed");
+      setRemovingAssignment(null);
+      load();
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not remove");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -145,6 +230,31 @@ export default function YearlyPlanDetailPage() {
       </div>
 
       {state === "error" && <p className="text-sm text-slate-500">Couldn&apos;t load this plan.</p>}
+
+      {grade && (
+        <Card className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-base font-semibold text-night dark:text-white">Assigned Schools &amp; Teachers</h2>
+            {canManage && <Button variant="ghost" className="h-9 px-4 text-sm" onClick={() => setShowAssign(true)}>+ Assign</Button>}
+          </div>
+          {grade.assignments.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">No school or teacher assigned yet.</p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {grade.assignments.map((a) => (
+                <span key={a.id} className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs dark:border-white/10">
+                  <span className="font-medium text-night dark:text-white">{a.school.name}</span>
+                  <span className="text-slate-400">·</span>
+                  <span className="text-slate-500">{a.teacher.fullName}</span>
+                  {canManage && (
+                    <button aria-label="Remove assignment" onClick={() => setRemovingAssignment(a)} className="ml-1 text-slate-400 hover:text-danger">✕</button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       {grade && (
         <Card className="p-0 overflow-hidden">
@@ -191,6 +301,22 @@ export default function YearlyPlanDetailPage() {
           message={`Remove ${deleting.month ?? ""} ${deleting.week ?? ""} from the plan?`}
           onConfirm={confirmDelete}
           onClose={() => setDeleting(null)}
+          busy={busy}
+        />
+      )}
+      {showAssign && grade && (
+        <AssignModal
+          gradeId={grade.id} existing={grade.assignments}
+          onClose={() => setShowAssign(false)}
+          onSaved={() => { setToast("Assigned"); setShowAssign(false); load(); }}
+        />
+      )}
+      {removingAssignment && (
+        <ConfirmDialog
+          title="Remove assignment?"
+          message={`Remove ${removingAssignment.teacher.fullName} at ${removingAssignment.school.name} from this plan?`}
+          onConfirm={confirmRemoveAssignment}
+          onClose={() => setRemovingAssignment(null)}
           busy={busy}
         />
       )}
