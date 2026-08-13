@@ -16,7 +16,7 @@ interface TransactionRow {
   previousValue: number | null; newValue: number | null; user: { fullName: string }; school: { name: string } | null;
 }
 interface ItemDetail {
-  id: string; itemCode: string; itemName: string; description: string | null; brand: string | null; model: string | null;
+  id: string; itemCode: string; itemName: string; description: string | null; brand: string | null; model: string | null; imageUrl: string | null;
   unit: string; totalQuantity: number; damagedQuantity: number; lostQuantity: number; returnedQuantity: number;
   reorderLevel: number | null; status: string; notes: string | null;
   assetCategory: { id: string; name: string }; location: { id: string; name: string } | null; vendor: { id: string; name: string } | null;
@@ -421,11 +421,16 @@ export default function InventoryItemDetailPage({ params }: { params: Promise<{ 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
-            <Link href="/assets/inventory" className="hover:underline">Inventory</Link> · {item.itemCode}
-          </p>
-          <h1 className="font-display text-2xl font-semibold text-night dark:text-white">{item.itemName}</h1>
+        <div className="flex items-center gap-3">
+          {item.imageUrl && (
+            <img src={item.imageUrl} alt="" className="h-14 w-14 rounded-xl object-cover border border-slate-200 dark:border-white/10" />
+          )}
+          <div>
+            <p className="text-xs font-medium uppercase tracking-widest text-slate-400">
+              <Link href="/assets/inventory" className="hover:underline">Inventory</Link> · {item.itemCode}
+            </p>
+            <h1 className="font-display text-2xl font-semibold text-night dark:text-white">{item.itemName}</h1>
+          </div>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button variant="ghost" onClick={() => setModal("movement")}>Return / Damage / Lost</Button>

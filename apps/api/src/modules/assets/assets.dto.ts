@@ -43,6 +43,7 @@ export class CreateAssetItemDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() model?: string;
+  @IsOptional() @IsString() imageUrl?: string;
   @IsOptional() @IsString() unit?: string;
   @IsOptional() @IsInt() @Min(0) totalQuantity?: number;
   @IsOptional() @IsInt() @Min(0) reorderLevel?: number;
@@ -57,6 +58,7 @@ export class UpdateAssetItemDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() model?: string;
+  @IsOptional() @IsString() imageUrl?: string;
   @IsOptional() @IsString() unit?: string;
   @IsOptional() @IsInt() @Min(0) reorderLevel?: number;
   @IsOptional() @IsString() locationId?: string;

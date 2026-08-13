@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, apiBlob } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/ui/modal";
@@ -11,8 +12,18 @@ interface VendorOpt { id: string; name: string }
 interface LocationOpt { id: string; name: string }
 interface ItemRow {
   id: string; itemCode: string; itemName: string; unit: string; status: string; reorderLevel: number | null;
-  totalQuantity: number; allocatedQuantity: number; deliveredQuantity: number; availableQuantity: number;
+  totalQuantity: number; allocatedQuantity: number; deliveredQuantity: number; availableQuantity: number; imageUrl: string | null;
   assetCategory: { id: string; name: string }; location: { id: string; name: string } | null; vendor: { id: string; name: string } | null;
+}
+
+/** Same bucket already used by the Product inventory module's image upload
+ * -- shared Storage bucket, random-UUID paths, no collision risk. */
+async function uploadItemImage(file: File): Promise<string> {
+  const ext = file.name.split(".").pop() ?? "bin";
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from("inventory").upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error(`Image upload failed: ${error.message}`);
+  return supabase.storage.from("inventory").getPublicUrl(path).data.publicUrl;
 }
 interface Dashboard {
   totalItems: number; totalStock: number; totalAvailable: number; totalAllocated: number;
@@ -42,11 +53,35 @@ function ItemDialog({ initial, categories, locations, vendors, onClose, onSaved 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(initial?.imageUrl ?? null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function pickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setImageError(null);
+    if (file && !file.type.startsWith("image/")) {
+      setImageError("Choose an image file");
+      return;
+    }
+    setImageFile(file);
+    if (file) setImagePreview(URL.createObjectURL(file));
+  }
+
+  function clearImage() {
+    setImageFile(null);
+    setImagePreview(null);
+    setImageError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
+      const imageUrl = imageFile ? await uploadItemImage(imageFile) : (imagePreview ? undefined : null);
       if (initial) {
         await api(`/assets/items/${initial.id}`, {
           method: "PATCH",
@@ -54,6 +89,7 @@ function ItemDialog({ initial, categories, locations, vendors, onClose, onSaved 
             itemName: form.itemName.trim(), assetCategoryId: form.assetCategoryId, unit: form.unit.trim() || "unit",
             reorderLevel: form.reorderLevel.trim() ? Number(form.reorderLevel) : undefined,
             locationId: form.locationId || undefined, vendorId: form.vendorId || undefined,
+            ...(imageUrl !== undefined && { imageUrl }),
           }),
         });
       } else {
@@ -64,6 +100,7 @@ function ItemDialog({ initial, categories, locations, vendors, onClose, onSaved 
             unit: form.unit.trim() || "unit", totalQuantity: Number(form.totalQuantity) || 0,
             reorderLevel: form.reorderLevel.trim() ? Number(form.reorderLevel) : undefined,
             locationId: form.locationId || undefined, vendorId: form.vendorId || undefined,
+            imageUrl: imageUrl || undefined,
           }),
         });
       }
@@ -88,6 +125,25 @@ function ItemDialog({ initial, categories, locations, vendors, onClose, onSaved 
             </select>
           </Field>
         </div>
+
+        <Field id="it-image" label="Item photo" optional>
+          <div className="flex items-center gap-3">
+            {imagePreview ? (
+              <img src={imagePreview} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-white/10" />
+            ) : (
+              <div className="grid h-16 w-16 place-items-center rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-400 dark:border-white/10">
+                No photo
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <input id="it-image" ref={fileInputRef} type="file" accept="image/*" onChange={pickImage} className="text-sm" />
+              {imagePreview && (
+                <button type="button" onClick={clearImage} className="text-left text-xs text-slate-500 hover:text-danger">Remove photo</button>
+              )}
+            </div>
+          </div>
+          {imageError && <p className="mt-1 text-xs text-danger">{imageError}</p>}
+        </Field>
         {!initial && (
           <Field id="it-code" label="Item code" optional>
             <input id="it-code" value={form.itemCode} onChange={(e) => setForm({ ...form, itemCode: e.target.value })} className={inputCls} placeholder="Auto-generated if left blank" />
@@ -259,7 +315,14 @@ export default function InventoryPage() {
                     <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.itemCode}</td>
                       <td className="px-4 py-3 font-medium text-night dark:text-white">
-                        <Link href={`/assets/inventory/${r.id}`} className="hover:underline">{r.itemName}</Link>
+                        <Link href={`/assets/inventory/${r.id}`} className="flex items-center gap-2.5 hover:underline">
+                          {r.imageUrl ? (
+                            <img src={r.imageUrl} alt="" className="h-8 w-8 rounded-md object-cover border border-slate-200 dark:border-white/10" />
+                          ) : (
+                            <span className="grid h-8 w-8 place-items-center rounded-md border border-dashed border-slate-200 text-[9px] text-slate-400 dark:border-white/10">—</span>
+                          )}
+                          {r.itemName}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-slate-500">{r.assetCategory.name}</td>
                       <td className="px-4 py-3 text-slate-500">{r.location?.name ?? "—"}</td>

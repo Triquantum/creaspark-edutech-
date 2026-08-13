@@ -1233,6 +1233,7 @@ model AssetItem {
   description       String?
   brand             String?
   model             String?
+  imageUrl          String?
   unit              String        @default("unit")
   totalQuantity     Int           @default(0)
   damagedQuantity   Int           @default(0)

@@ -251,7 +251,7 @@ export class AssetsService {
       const created = await tx.assetItem.create({
         data: {
           tenantId, itemCode, itemName: dto.itemName, assetCategoryId: dto.assetCategoryId,
-          description: dto.description, brand: dto.brand, model: dto.model, unit: dto.unit ?? "unit",
+          description: dto.description, brand: dto.brand, model: dto.model, imageUrl: dto.imageUrl, unit: dto.unit ?? "unit",
           totalQuantity, reorderLevel: dto.reorderLevel, locationId: dto.locationId, vendorId: dto.vendorId,
           notes: dto.notes, createdById: user.id, updatedById: user.id,
         },
