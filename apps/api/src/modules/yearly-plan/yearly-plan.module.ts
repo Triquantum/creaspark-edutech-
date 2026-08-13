@@ -1,8 +1,8 @@
 import {
-  BadRequestException, Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Patch, Post, UseGuards,
+  BadRequestException, Body, Controller, Delete, Get, Injectable, Module, NotFoundException, Param, Patch, Post, Query, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Role } from "@educore/database";
+import { Prisma, Role } from "@educore/database";
 import { IsInt, IsOptional, IsString, Min } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -52,17 +52,56 @@ export class CreateAssignmentDto {
   @IsString() schoolId: string;
   @IsString() teacherId: string;
 }
+export class ListGradesQueryDto {
+  @IsOptional() @IsString() academicYear?: string;
+  @IsOptional() @IsString() gradeLabel?: string;
+  @IsOptional() @IsString() schoolId?: string;
+  @IsOptional() @IsString() subject?: string;
+  @IsOptional() @IsString() month?: string;
+  @IsOptional() @IsString() week?: string;
+}
 
 @Injectable()
 export class YearlyPlanService {
   constructor(private prisma: PrismaService) {}
 
-  async listGrades() {
+  async listGrades(filter: ListGradesQueryDto = {}) {
+    const where: Prisma.YearlyPlanGradeWhereInput = {};
+    if (filter.academicYear) where.academicYear = filter.academicYear;
+    if (filter.gradeLabel) where.gradeLabel = filter.gradeLabel;
+    if (filter.schoolId) where.assignments = { some: { schoolId: filter.schoolId } };
+
+    const entryFilter: Prisma.YearlyPlanEntryWhereInput = {};
+    if (filter.subject) entryFilter.subject = filter.subject;
+    if (filter.month) entryFilter.month = filter.month;
+    if (filter.week) entryFilter.week = filter.week;
+    if (Object.keys(entryFilter).length) where.entries = { some: entryFilter };
+
     const grades = await this.prisma.yearlyPlanGrade.findMany({
+      where,
       orderBy: [{ academicYear: "desc" }, { sortOrder: "asc" }],
       include: { _count: { select: { entries: true } } },
     });
     return grades.map((g) => ({ ...g, entryCount: g._count.entries }));
+  }
+
+  /** Distinct values for the list page's filter bar. Subject/month/week are
+   * pulled from entries since those columns don't exist on the grade itself. */
+  async filterOptions() {
+    const [years, grades, subjects, months, weeks] = await Promise.all([
+      this.prisma.yearlyPlanGrade.findMany({ distinct: ["academicYear"], select: { academicYear: true }, orderBy: { academicYear: "desc" } }),
+      this.prisma.yearlyPlanGrade.findMany({ distinct: ["gradeLabel"], select: { gradeLabel: true }, orderBy: { sortOrder: "asc" } }),
+      this.prisma.yearlyPlanEntry.findMany({ distinct: ["subject"], select: { subject: true }, where: { subject: { not: null } } }),
+      this.prisma.yearlyPlanEntry.findMany({ distinct: ["month"], select: { month: true }, where: { month: { not: null } } }),
+      this.prisma.yearlyPlanEntry.findMany({ distinct: ["week"], select: { week: true }, where: { week: { not: null } } }),
+    ]);
+    return {
+      academicYears: years.map((y) => y.academicYear),
+      gradeLabels: grades.map((g) => g.gradeLabel),
+      subjects: subjects.map((s) => s.subject as string),
+      months: months.map((m) => m.month as string),
+      weeks: weeks.map((w) => w.week as string),
+    };
   }
 
   private async findGrade(id: string) {
@@ -153,7 +192,8 @@ export class YearlyPlanService {
 export class YearlyPlanController {
   constructor(private svc: YearlyPlanService) {}
 
-  @Get("grades") listGrades() { return this.svc.listGrades(); }
+  @Get("grades") listGrades(@Query() query: ListGradesQueryDto) { return this.svc.listGrades(query); }
+  @Get("grades/filter-options") filterOptions() { return this.svc.filterOptions(); }
   @Get("grades/:id") gradeDetail(@Param("id") id: string) { return this.svc.gradeDetail(id); }
 
   @Post("grades") @Roles(...MANAGE)

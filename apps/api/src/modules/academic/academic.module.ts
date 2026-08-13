@@ -15,6 +15,10 @@ import { AuthUser, CurrentUser } from "../../common/decorators/current-user.deco
 // ── DTOs ──
 export class ClassDto { @IsString() schoolId: string; @IsString() name: string }
 export class ClassUpdateDto { @IsOptional() @IsString() name?: string }
+export class ClassBulkCreateDto {
+  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) schoolIds: string[];
+  @IsString() name: string;
+}
 export class SectionDto { @IsString() classId: string; @IsString() name: string }
 export class SectionUpdateDto { @IsOptional() @IsString() classId?: string; @IsOptional() @IsString() name?: string }
 export class SubjectDto {
@@ -138,6 +142,34 @@ export class AcademicService {
     await this.prisma.class.delete({ where: { id } });
     await this.audit(actor, "class.delete", "Class", id, tenantId);
     return { deleted: true };
+  }
+
+  /** Toggle-grid bulk create, mirroring Subject's "assign to schools" UX.
+   * Unlike Subject, Class isn't a shared cross-tenant catalog -- divisions/
+   * students hang off a specific per-school Class row -- so this still
+   * creates one independent Class row per school, just in a single request
+   * instead of one form submission per school. Schools that already have a
+   * class with this name are silently skipped rather than failing the
+   * whole batch. */
+  async createClassBulk(dto: ClassBulkCreateDto, user: AuthUser, actor: string) {
+    const schools = await this.prisma.school.findMany({ where: { id: { in: dto.schoolIds } } });
+    if (schools.length !== dto.schoolIds.length) throw new NotFoundException("One or more schools not found");
+    if (!this.isPlatformAdmin(user)) {
+      const { tenantId } = currentTenant();
+      if (schools.some((sc) => sc.tenantId !== tenantId))
+        throw new BadRequestException("Can only assign schools in your own organization");
+    }
+    const existing = await this.prisma.class.findMany({
+      where: { name: dto.name, schoolId: { in: dto.schoolIds } },
+      select: { schoolId: true },
+    });
+    const existingIds = new Set(existing.map((c) => c.schoolId));
+    const toCreate = schools.filter((sc) => !existingIds.has(sc.id));
+    const created = await this.prisma.$transaction(
+      toCreate.map((sc) => this.prisma.class.create({ data: { tenantId: sc.tenantId, schoolId: sc.id, name: dto.name } })),
+    );
+    for (const c of created) await this.audit(actor, "class.create", "Class", c.id, c.tenantId);
+    return { createdCount: created.length, skippedCount: existingIds.size };
   }
 
   // ── Sections (divisions) ──
@@ -411,6 +443,10 @@ const DELETE_ONLY = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN] as const;
 // here specifically, matching the platform-wide pattern used for this feature.
 const SUBJECT_MANAGE = [...MANAGE, Role.ORG_ADMIN] as const;
 const SUBJECT_DELETE = [...DELETE_ONLY, Role.ORG_ADMIN] as const;
+// Bulk class create spans multiple schools at once, which only makes sense
+// for the cross-tenant platform roles -- a single-school SCHOOL_ADMIN/
+// PRINCIPAL/COORDINATOR already has the plain single-school create route.
+const CLASS_BULK_MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN] as const;
 
 @ApiTags("academic")
 @ApiBearerAuth()
@@ -425,6 +461,8 @@ export class AcademicController {
   @Get("classes") classes(@CurrentUser() u: AuthUser, @Query("schoolId") schoolId?: string) { return this.svc.classes(u, schoolId); }
   @Post("classes") @Roles(...MANAGE)
   createClass(@Body() dto: ClassDto, @CurrentUser() u: AuthUser) { return this.svc.createClass(dto, u, u.id); }
+  @Post("classes/bulk") @Roles(...CLASS_BULK_MANAGE)
+  createClassBulk(@Body() dto: ClassBulkCreateDto, @CurrentUser() u: AuthUser) { return this.svc.createClassBulk(dto, u, u.id); }
   @Patch("classes/:id") @Roles(...MANAGE)
   updateClass(@Param("id") id: string, @Body() dto: ClassUpdateDto, @CurrentUser() u: AuthUser) { return this.svc.updateClass(id, dto, u, u.id); }
   @Delete("classes/:id") @Roles(...DELETE_ONLY)

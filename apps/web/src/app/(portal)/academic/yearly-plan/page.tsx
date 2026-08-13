@@ -10,9 +10,19 @@ const MANAGE_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN"]);
 
 interface GradeRow { id: string; academicYear: string; gradeLabel: string; sortOrder: number; entryCount: number }
 interface Me { role: string }
+interface FilterOptions { academicYears: string[]; gradeLabels: string[]; subjects: string[]; months: string[]; weeks: string[] }
+interface SchoolOpt { id: string; name: string }
+interface Filters { schoolId: string; academicYear: string; gradeLabel: string; subject: string; month: string; week: string }
+const EMPTY_FILTERS: Filters = { schoolId: "", academicYear: "", gradeLabel: "", subject: "", month: "", week: "" };
+
+function fyYearOptions(count = 10): string[] {
+  const base = new Date().getFullYear();
+  return Array.from({ length: count }, (_, i) => `${base + i}-${base + i + 1}`);
+}
 
 function GradeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ academicYear: "2026-2027", gradeLabel: "", sortOrder: "0" });
+  const yearOptions = fyYearOptions();
+  const [form, setForm] = useState({ academicYear: yearOptions[0], gradeLabel: "", sortOrder: "0" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +47,9 @@ function GradeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     <Modal title="New yearly plan" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field id="yp-year" label="Academic year">
-          <input id="yp-year" required value={form.academicYear} onChange={(e) => setForm({ ...form, academicYear: e.target.value })} className={inputCls} placeholder="e.g. 2026-2027" />
+          <select id="yp-year" required value={form.academicYear} onChange={(e) => setForm({ ...form, academicYear: e.target.value })} className={inputCls}>
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
         </Field>
         <Field id="yp-grade" label="Grade / Class label">
           <input id="yp-grade" required value={form.gradeLabel} onChange={(e) => setForm({ ...form, gradeLabel: e.target.value })} className={inputCls} placeholder="e.g. Grade 5" />
@@ -64,16 +76,30 @@ export default function YearlyPlanPage() {
   const [deleting, setDeleting] = useState<GradeRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  const [schools, setSchools] = useState<SchoolOpt[]>([]);
 
   const load = useCallback(() => {
     setState("loading");
-    api<GradeRow[]>("/academic/yearly-plan/grades").then((r) => { setRows(r); setState("ready"); }).catch(() => setState("error"));
-  }, []);
+    const params = new URLSearchParams();
+    if (filters.schoolId) params.set("schoolId", filters.schoolId);
+    if (filters.academicYear) params.set("academicYear", filters.academicYear);
+    if (filters.gradeLabel) params.set("gradeLabel", filters.gradeLabel);
+    if (filters.subject) params.set("subject", filters.subject);
+    if (filters.month) params.set("month", filters.month);
+    if (filters.week) params.set("week", filters.week);
+    const qs = params.toString();
+    api<GradeRow[]>(`/academic/yearly-plan/grades${qs ? `?${qs}` : ""}`).then((r) => { setRows(r); setState("ready"); }).catch(() => setState("error"));
+  }, [filters]);
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => {}); }, []);
+  useEffect(() => { api<FilterOptions>("/academic/yearly-plan/grades/filter-options").then(setFilterOptions).catch(() => {}); }, []);
+  useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => {}); }, []);
   useEffect(load, [load]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
   const canManage = !!me && MANAGE_ROLES.has(me.role);
+  const hasActiveFilters = Object.values(filters).some(Boolean);
 
   async function confirmDelete() {
     if (!deleting) return;
@@ -101,8 +127,52 @@ export default function YearlyPlanPage() {
         {canManage && <Button onClick={() => setShowAdd(true)}>+ Add grade</Button>}
       </div>
 
+      <Card className="flex flex-wrap items-end gap-3 p-4">
+        <Field id="yp-f-school" label="School">
+          <select id="yp-f-school" value={filters.schoolId} onChange={(e) => setFilters({ ...filters, schoolId: e.target.value })} className={inputCls}>
+            <option value="">All schools</option>
+            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field id="yp-f-year" label="FY Year">
+          <select id="yp-f-year" value={filters.academicYear} onChange={(e) => setFilters({ ...filters, academicYear: e.target.value })} className={inputCls}>
+            <option value="">All years</option>
+            {filterOptions?.academicYears.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </Field>
+        <Field id="yp-f-grade" label="Grade">
+          <select id="yp-f-grade" value={filters.gradeLabel} onChange={(e) => setFilters({ ...filters, gradeLabel: e.target.value })} className={inputCls}>
+            <option value="">All grades</option>
+            {filterOptions?.gradeLabels.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </Field>
+        <Field id="yp-f-subject" label="Subject">
+          <select id="yp-f-subject" value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} className={inputCls}>
+            <option value="">All subjects</option>
+            {filterOptions?.subjects.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field id="yp-f-month" label="Month">
+          <select id="yp-f-month" value={filters.month} onChange={(e) => setFilters({ ...filters, month: e.target.value })} className={inputCls}>
+            <option value="">All months</option>
+            {filterOptions?.months.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </Field>
+        <Field id="yp-f-week" label="Week">
+          <select id="yp-f-week" value={filters.week} onChange={(e) => setFilters({ ...filters, week: e.target.value })} className={inputCls}>
+            <option value="">All weeks</option>
+            {filterOptions?.weeks.map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </Field>
+        {hasActiveFilters && (
+          <Button type="button" variant="ghost" onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>
+        )}
+      </Card>
+
       {state === "error" && <p className="text-sm text-slate-500">Couldn&apos;t reach the API. Start it with <code>docker compose up</code>, then reload.</p>}
-      {state === "ready" && rows.length === 0 && <p className="text-sm text-slate-500">No yearly plans uploaded yet.</p>}
+      {state === "ready" && rows.length === 0 && (
+        <p className="text-sm text-slate-500">{hasActiveFilters ? "No yearly plans match these filters." : "No yearly plans uploaded yet."}</p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((g) => (
