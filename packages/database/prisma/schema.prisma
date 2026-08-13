@@ -165,6 +165,7 @@ model User {
   salesDailyReportsReviewed   SalesDailyReport[] @relation("SalesDailyReportsReviewed")
   salesTargetsFor             SalesTarget[] @relation("SalesTargetsFor")
   salesTargetsCreatedBy       SalesTarget[] @relation("SalesTargetsCreatedBy")
+  yearlyPlanGradesCreated     YearlyPlanGrade[] @relation("YearlyPlanGradesCreated")
 
   @@index([tenantId, role])
 }
@@ -1590,4 +1591,53 @@ model SalesTarget {
 
   @@unique([userId, period, periodStart, metric])
   @@index([tenantId, period, periodStart])
+}
+
+// Global catalog (not tenant-scoped) -- the curriculum is authored once by
+// CREASPARK and applies uniformly across every client school, same pattern
+// as AssetCategory/Vendor/Location. One row per grade per academic year.
+model YearlyPlanGrade {
+  id           String   @id @default(cuid())
+  academicYear String
+  gradeLabel   String
+  sortOrder    Int      @default(0)
+  sourceFile   String?
+  createdById  String
+  createdBy    User     @relation("YearlyPlanGradesCreated", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  entries YearlyPlanEntry[]
+
+  @@unique([academicYear, gradeLabel])
+}
+
+// One row per week/unit of the plan. Source spreadsheets vary in column
+// layout across grades (Subject present or not, Digital Content only in
+// Grade 7, etc.) -- fields are nullable to accommodate that instead of
+// forcing every grade into an identical shape.
+model YearlyPlanEntry {
+  id              String          @id @default(cuid())
+  gradeId         String
+  grade           YearlyPlanGrade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  rowIndex        Int
+  term            String?
+  month           String?
+  week            String?
+  workingDays     Int?
+  instructedDays  Int?
+  subject         String?
+  unitChapter     String?
+  learningOutcome String?
+  activity        String?
+  sdgMapping      String?
+  skills          String?
+  values          String?
+  digitalContent  String?
+  assessment      String?
+  remarks         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([gradeId, rowIndex])
 }

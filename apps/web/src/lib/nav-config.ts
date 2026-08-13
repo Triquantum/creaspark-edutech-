@@ -44,6 +44,7 @@ export const NAV: NavGroup[] = [
     { label: "Syllabus", href: "/academic/syllabus", hiddenFrom: ["TEACHER"] },
     { label: "Assignment", href: "/academic/assignment", hiddenFrom: ["TEACHER"] },
     { label: "Routine", href: "/academic/routine", hiddenFrom: ["TEACHER"] },
+    { label: "Yearly Plan", href: "/academic/yearly-plan" },
   ] },
   { label: "Courses", icon: "monitor", href: "/lms/courses", roles: ["STUDENT", "PARENT"] },
   { label: "Task Manager", icon: "check-square", hiddenFrom: ["PARENT", "STUDENT", "GUEST"], children: [
