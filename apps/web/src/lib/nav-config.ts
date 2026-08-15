@@ -47,6 +47,7 @@ export const NAV: NavGroup[] = [
     { label: "Yearly Plan", href: "/academic/yearly-plan" },
   ] },
   { label: "Courses", icon: "monitor", href: "/lms/courses", roles: ["STUDENT", "PARENT"] },
+  { label: "Virtual Class", icon: "cpu", href: "/circuit-lab", hiddenFrom: ["PARENT", "GUEST"] },
   { label: "Task Manager", icon: "check-square", hiddenFrom: ["PARENT", "STUDENT", "GUEST"], children: [
     { label: "All Tasks", href: "/tasks" },
     { label: "Task Manager Inbox", href: "/tasks/inbox" },

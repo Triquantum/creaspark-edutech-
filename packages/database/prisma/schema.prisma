@@ -78,6 +78,7 @@ model School {
   quizzes       Quiz[]
   subjectViews  SubjectView[]
   subjects      Subject[]
+  circuitProjects CircuitProject[]
   media         MediaItem[]
   inventoryItems InventoryItem[]
   trainings     Training[]
@@ -226,6 +227,7 @@ model Class {
   assignments Assignment[]
   quizzes     Quiz[]
   subjectViews SubjectView[]
+  circuitProjects CircuitProject[]
 
   @@unique([schoolId, name])
   @@index([tenantId])
@@ -287,6 +289,7 @@ model Subject {
   quizzes     Quiz[]
   subjectViews SubjectView[]
   teacherAssignments TeacherAssignment[]
+  circuitProjects CircuitProject[]
 
   @@index([tenantId])
 }
@@ -348,6 +351,7 @@ model Student {
   assignmentSubmissions  Submission[]
   quizAttempts           QuizAttempt[]
   subjectViews           SubjectView[]
+  circuitProjects        CircuitProject[]
 
   @@unique([schoolId, admissionNo])
   @@index([tenantId, schoolId, sectionId])
@@ -975,6 +979,39 @@ enum SubmissionStatus {
   SUBMITTED
   LATE
   GRADED
+}
+
+enum CircuitSimulator {
+  WOKWI
+  PICSIMLAB
+}
+
+// Wokwi/PICSimLab are embedded external simulators (iframe), not hosted by
+// us — projectUrl is a student-pasted share link (Wokwi only; PICSimLab has
+// no save/share link, so notes is the primary record there).
+model CircuitProject {
+  id           String   @id @default(cuid())
+  tenantId     String
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id])
+  classId      String?
+  class        Class?   @relation(fields: [classId], references: [id])
+  subjectId    String?
+  subject      Subject? @relation(fields: [subjectId], references: [id])
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title        String
+  simulator    CircuitSimulator
+  projectUrl   String?
+  notes        String?
+  reviewedById String?
+  feedback     String?
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, studentId])
+  @@index([tenantId, schoolId, classId])
 }
 
 model Quiz {
