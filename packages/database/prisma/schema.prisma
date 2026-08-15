@@ -839,6 +839,7 @@ model PortionReport {
   chapterName     String?                         // the chapter/portion this entry is about
   description     String?                         // what the chapter covers, independent of this period's topics
   topicsCovered   String
+  remarks         String?                         // teacher's own remarks at submission time -- distinct from reviewRemarks
   percentComplete Int?                            // teacher's own 0–100 estimate
   mode            PortionMode?                    // Practical (lab) vs Theory (classroom) vs Project
   completionStatus PortionCompletionStatus?        // progress on the chapter as a whole

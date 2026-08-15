@@ -10,7 +10,7 @@ interface Option { id: string; name: string }
 interface PortionReport {
   id: string; period: "DAILY" | "WEEKLY"; periodDate: string;
   subjectId: string; classId: string | null; sectionId: string | null;
-  chapterName: string | null; description: string | null; topicsCovered: string;
+  chapterName: string | null; description: string | null; topicsCovered: string; remarks: string | null;
   status: "SUBMITTED" | "REVIEWED" | "FLAGGED";
   mode: "PRACTICAL" | "THEORY" | "PROJECT" | null; completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | null;
   projectStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | null;
@@ -167,6 +167,7 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
   const [chapterName, setChapterName] = useState("");
   const [description, setDescription] = useState("");
   const [topicsCovered, setTopicsCovered] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [mode, setMode] = useState<"PRACTICAL" | "THEORY" | "PROJECT">("THEORY");
   const [completionStatus, setCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
   const [projectStatus, setProjectStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED">("NOT_STARTED");
@@ -189,12 +190,13 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
         body: JSON.stringify({
           subjectId, classId: classId || undefined, sectionId: sectionId || undefined,
           period, periodDate, chapterName, description: description || undefined, topicsCovered,
-          mode, completionStatus, projectStatus,
+          remarks: remarks || undefined, mode, completionStatus, projectStatus,
         }),
       });
       setChapterName("");
       setDescription("");
       setTopicsCovered("");
+      setRemarks("");
       setCompletionStatus("IN_PROGRESS");
       setProjectStatus("NOT_STARTED");
       onSubmitted();
@@ -274,6 +276,10 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
         <Field id="pf-topics" label="Topics covered">
           <textarea id="pf-topics" required rows={3} value={topicsCovered} onChange={(e) => setTopicsCovered(e.target.value)}
             placeholder="What was taught in this period" className={`${inputCls} h-auto py-2.5`} />
+        </Field>
+        <Field id="pf-remarks" label="Remarks" optional>
+          <textarea id="pf-remarks" rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)}
+            placeholder="Any additional remarks" className={`${inputCls} h-auto py-2.5`} />
         </Field>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <Button type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit"}</Button>
@@ -373,6 +379,10 @@ function MyReports({ reloadKey }: { reloadKey: number }) {
               <dd className="mt-1 text-slate-500">{viewing.topicsCovered}</dd>
             </div>
             <div>
+              <dt className="font-medium text-night dark:text-white">Remarks</dt>
+              <dd className="mt-1 text-slate-500">{viewing.remarks ?? "No remarks."}</dd>
+            </div>
+            <div>
               <dt className="font-medium text-night dark:text-white">Review note</dt>
               <dd className="mt-1 text-slate-500">{viewing.reviewNote ?? "No review note yet."}</dd>
             </div>
@@ -381,7 +391,7 @@ function MyReports({ reloadKey }: { reloadKey: number }) {
               <dd className="mt-1 text-slate-500">{viewing.reviewComments ?? "No comments yet."}</dd>
             </div>
             <div>
-              <dt className="font-medium text-night dark:text-white">Remarks</dt>
+              <dt className="font-medium text-night dark:text-white">Reviewer remarks</dt>
               <dd className="mt-1 text-slate-500">{viewing.reviewRemarks ?? "No remarks yet."}</dd>
             </div>
           </dl>
@@ -424,6 +434,7 @@ function ReviewTable({ role }: { role: string }) {
   const [editChapterName, setEditChapterName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editTopicsCovered, setEditTopicsCovered] = useState("");
+  const [editRemarks, setEditRemarks] = useState("");
   const [editMode, setEditMode] = useState<"PRACTICAL" | "THEORY" | "PROJECT">("THEORY");
   const [editCompletionStatus, setEditCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
   const [editProjectStatus, setEditProjectStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED">("NOT_STARTED");
@@ -532,6 +543,7 @@ function ReviewTable({ role }: { role: string }) {
     setEditChapterName(r.chapterName ?? "");
     setEditDescription(r.description ?? "");
     setEditTopicsCovered(r.topicsCovered);
+    setEditRemarks(r.remarks ?? "");
     setEditMode(r.mode ?? "THEORY");
     setEditCompletionStatus(r.completionStatus ?? "IN_PROGRESS");
     setEditProjectStatus(r.projectStatus ?? "NOT_STARTED");
@@ -549,6 +561,7 @@ function ReviewTable({ role }: { role: string }) {
           subjectId: editSubjectId || undefined, classId: editClassId || undefined, sectionId: editSectionId || undefined,
           period: editPeriod, periodDate: editPeriodDate, chapterName: editChapterName || undefined,
           description: editDescription || undefined, topicsCovered: editTopicsCovered,
+          remarks: editRemarks || undefined,
           mode: editMode, completionStatus: editCompletionStatus, projectStatus: editProjectStatus,
         }),
       });
@@ -748,6 +761,10 @@ function ReviewTable({ role }: { role: string }) {
             <Field id="ef-topics" label="Topics covered">
               <textarea id="ef-topics" required rows={3} value={editTopicsCovered} onChange={(e) => setEditTopicsCovered(e.target.value)}
                 placeholder="What was taught in this period" className={`${inputCls} h-auto py-2.5`} />
+            </Field>
+            <Field id="ef-remarks" label="Remarks" optional>
+              <textarea id="ef-remarks" rows={2} value={editRemarks} onChange={(e) => setEditRemarks(e.target.value)}
+                placeholder="Any additional remarks" className={`${inputCls} h-auto py-2.5`} />
             </Field>
             {editError && <p role="alert" className="text-sm text-danger">{editError}</p>}
             <div className="flex justify-end gap-3">

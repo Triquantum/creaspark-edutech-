@@ -25,6 +25,7 @@ export class CreatePortionReportDto {
   @IsString() chapterName: string;
   @IsOptional() @IsString() description?: string;
   @IsString() topicsCovered: string;
+  @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
   @IsIn(["PRACTICAL", "THEORY", "PROJECT"]) mode: "PRACTICAL" | "THEORY" | "PROJECT";
   @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED";
@@ -65,6 +66,7 @@ export class AdminUpdatePortionReportDto {
   @IsOptional() @IsString() chapterName?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() topicsCovered?: string;
+  @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
   @IsOptional() @IsIn(["PRACTICAL", "THEORY", "PROJECT"]) mode?: "PRACTICAL" | "THEORY" | "PROJECT";
   @IsOptional() @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus?: "PENDING" | "IN_PROGRESS" | "COMPLETED";
@@ -120,7 +122,7 @@ export class PortionService {
         subjectId: dto.subjectId, classId: dto.classId, sectionId: dto.sectionId,
         period: dto.period, periodDate: new Date(dto.periodDate),
         chapterName: dto.chapterName, description: dto.description,
-        topicsCovered: dto.topicsCovered, percentComplete: dto.percentComplete,
+        topicsCovered: dto.topicsCovered, remarks: dto.remarks, percentComplete: dto.percentComplete,
         mode: dto.mode, completionStatus: dto.completionStatus, projectStatus: dto.projectStatus,
       },
       include: { subject: { select: { name: true } }, teacher: { select: { fullName: true } } },
@@ -380,6 +382,7 @@ export class PortionService {
         ...(dto.chapterName !== undefined && { chapterName: dto.chapterName }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.topicsCovered !== undefined && { topicsCovered: dto.topicsCovered }),
+        ...(dto.remarks !== undefined && { remarks: dto.remarks }),
         ...(dto.percentComplete !== undefined && { percentComplete: dto.percentComplete }),
         ...(dto.mode !== undefined && { mode: dto.mode }),
         ...(dto.completionStatus !== undefined && { completionStatus: dto.completionStatus }),
