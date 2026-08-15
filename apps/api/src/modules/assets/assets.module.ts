@@ -16,7 +16,7 @@ import {
 
 // Same manage-role set as the pre-existing InventoryItemModule (Inventory >
 // Product): platform/org/school admins plus the dedicated inventory role.
-const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.INVENTORY_MANAGER] as const;
+const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.INVENTORY_MANAGER, Role.ACADEMIC_ADMIN] as const;
 
 @ApiTags("asset-categories") @ApiBearerAuth() @UseGuards(JwtAuthGuard, RolesGuard) @Roles(...MANAGE)
 @Controller("assets/categories")

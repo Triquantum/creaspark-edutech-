@@ -39,7 +39,7 @@ export class UpdateEventDto {
   @IsOptional() @IsArray() audience?: Role[];
 }
 
-const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR, Role.TEACHER] as const;
+const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR, Role.TEACHER, Role.ACADEMIC_ADMIN] as const;
 
 @Injectable()
 export class EventsService {

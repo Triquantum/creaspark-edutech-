@@ -436,8 +436,8 @@ export class AcademicService {
   }
 }
 
-const MANAGE = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR] as const;
-const DELETE_ONLY = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN] as const;
+const MANAGE = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.COORDINATOR, Role.ACADEMIC_ADMIN] as const;
+const DELETE_ONLY = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.ACADEMIC_ADMIN] as const;
 // Subjects are a cross-tenant shared catalog (unlike Class/Section/Department/
 // AcademicYear, which stay tenant-local) — ORG_ADMIN gets manage/delete rights
 // here specifically, matching the platform-wide pattern used for this feature.
@@ -488,9 +488,9 @@ export class AcademicController {
 
   // Departments
   @Get("departments") departments(@CurrentUser() u: AuthUser, @Query("schoolId") schoolId?: string) { return this.svc.departments(u, schoolId); }
-  @Post("departments") @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR)
+  @Post("departments") @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   createDepartment(@Body() dto: DepartmentDto, @CurrentUser() u: AuthUser) { return this.svc.createDepartment(dto, u, u.id); }
-  @Patch("departments/:id") @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR)
+  @Patch("departments/:id") @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   updateDepartment(@Param("id") id: string, @Body() dto: DepartmentUpdateDto, @CurrentUser() u: AuthUser) { return this.svc.updateDepartment(id, dto, u, u.id); }
   @Delete("departments/:id") @Roles(...DELETE_ONLY)
   deleteDepartment(@Param("id") id: string, @CurrentUser() u: AuthUser) { return this.svc.deleteDepartment(id, u, u.id); }

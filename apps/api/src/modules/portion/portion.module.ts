@@ -81,7 +81,7 @@ export class EmailPortionReportDto extends QueryPortionReportsDto {
   @IsEmail() toEmail: string;
 }
 
-const REVIEW_ROLES = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR] as const;
+const REVIEW_ROLES = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.ACADEMIC_ADMIN] as const;
 const SUBMIT_ROLES = [Role.TEACHER, Role.TRAINER] as const;
 // Priority order for who a school's automated reminder appears to come
 // from — prefers whoever's most directly responsible for that teacher.

@@ -17,6 +17,7 @@ import { AuthUser, CurrentUser } from "../../common/decorators/current-user.deco
 const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN] as const;
 const VIEW = [
   Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.TEACHER,
+  Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN,
 ] as const;
 
 export class CreateGradeDto {

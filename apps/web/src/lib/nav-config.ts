@@ -10,6 +10,7 @@
  */
 export type Role =
   | "SUPER_ADMIN" | "ORG_ADMIN" | "SCHOOL_ADMIN" | "PRINCIPAL" | "VICE_PRINCIPAL" | "COORDINATOR"
+  | "ACADEMIC_ADMIN" | "FINANCE_HR_ADMIN"
   | "TEACHER" | "TRAINER" | "ACCOUNTANT" | "RECEPTION" | "LIBRARIAN" | "TRANSPORT_MANAGER"
   | "HR" | "INVENTORY_MANAGER" | "HOSTEL_WARDEN" | "SECURITY" | "SALES_MANAGER" | "SALES_EXECUTIVE"
   | "PARENT" | "STUDENT" | "GUEST";
@@ -31,7 +32,7 @@ export const NAV: NavGroup[] = [
   { label: "Student", icon: "user", href: "/students", hiddenFrom: ["PARENT", "STUDENT"] },
   { label: "Parents", icon: "users", href: "/parents", hiddenFrom: ["PARENT"] },
   { label: "Teacher", icon: "user-check", href: "/teachers", hiddenFrom: ["TEACHER"] },
-  { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER", "PARENT", "STUDENT"] },
+  { label: "User", icon: "shield", href: "/users", hiddenFrom: ["TEACHER", "PARENT", "STUDENT", "ACADEMIC_ADMIN", "FINANCE_HR_ADMIN"] },
   // Teachers only need their assigned Subject here -- Class/Division/Department/
   // Teacher Assignment/Syllabus/Assignment/Routine are admin-side org-chart and
   // scheduling tools, not something a teacher manages day to day.
@@ -70,8 +71,8 @@ export const NAV: NavGroup[] = [
   { label: "Media", icon: "image", href: "/media" },
   { label: "Mail / SMS", icon: "mail", href: "/mail-sms", hiddenFrom: ["PARENT", "STUDENT"] },
   { label: "Online Exam", icon: "monitor", hiddenFrom: ["PARENT", "STUDENT"], children: kids("online-exam", ["Question Group", "Question Level", "Question Bank", "Online Exam", "Instruction"]) },
-  { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT", "STUDENT"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
-  { label: "HR", icon: "user-check", roles: ["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR", "HR"],
+  { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT", "STUDENT", "ACADEMIC_ADMIN"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },
+  { label: "HR", icon: "user-check", roles: ["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR", "HR", "FINANCE_HR_ADMIN"],
     children: [
       { label: "Employee", href: "/hr/employee" },
       { label: "Salary Slip Log", href: "/hr/salary-slip-log" },

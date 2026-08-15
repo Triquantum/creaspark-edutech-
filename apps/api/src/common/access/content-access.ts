@@ -7,7 +7,7 @@ import { AuthUser } from "../decorators/current-user.decorator";
 /** School-level "office" roles that oversee a school's LMS content
  * alongside the teachers who actually author it (Super/Org Admin get
  * cross-tenant view access separately, handled per-service). */
-export const ADMIN_ROLES = [Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR] as const;
+export const ADMIN_ROLES = [Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.ACADEMIC_ADMIN] as const;
 
 /** Shared by Lesson/Assignment/Quiz: true if `user` may edit/delete this
  * specific content item -- its own teacher-author, or one of the school's

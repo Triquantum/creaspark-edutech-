@@ -15,13 +15,13 @@ export class FeesController {
   constructor(private fees: FeesService) {}
 
   @Get("invoices")
-  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.PRINCIPAL)
+  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.FINANCE_HR_ADMIN)
   invoices(@Query("status") status?: string, @Query("studentId") studentId?: string) {
     return this.fees.listInvoices(status, studentId);
   }
 
   @Post("payments")
-  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN)
+  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.FINANCE_HR_ADMIN)
   pay(
     @Body() body: { invoiceId: string; amount: number; mode: PaymentMode; reference?: string },
     @CurrentUser() user: AuthUser,
@@ -30,7 +30,7 @@ export class FeesController {
   }
 
   @Get("summary")
-  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.PRINCIPAL)
+  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.FINANCE_HR_ADMIN)
   summary() {
     return this.fees.collectionsSummary();
   }
@@ -42,7 +42,7 @@ export class FeesController {
   }
 
   @Get("payments")
-  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.PRINCIPAL)
+  @Roles(Role.ACCOUNTANT, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.FINANCE_HR_ADMIN)
   payments(@Query("studentId") studentId?: string) {
     return this.fees.paymentHistory(studentId);
   }

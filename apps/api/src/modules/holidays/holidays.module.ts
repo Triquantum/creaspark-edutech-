@@ -13,7 +13,7 @@ import { AuthUser, CurrentUser } from "../../common/decorators/current-user.deco
 import { CreateHolidayDto, UpdateHolidayDto } from "./holidays.dto";
 
 const MANAGE_ROLES = [
-  Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR,
+  Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.ACADEMIC_ADMIN,
 ] as const;
 
 const HOLIDAY_INCLUDE = { createdBy: { select: { fullName: true } } };

@@ -16,7 +16,7 @@ export class TeachersController {
   constructor(private teachers: TeachersService) {}
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR, Role.STUDENT)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR, Role.STUDENT, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   list(
     @CurrentUser() user: AuthUser, @Query("q") q?: string, @Query("schoolId") schoolId?: string,
     @Query("activeOnly") activeOnly?: string,
@@ -25,19 +25,19 @@ export class TeachersController {
   }
 
   @Post()
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   create(@Body() dto: CreateTeacherDto, @CurrentUser() user: AuthUser) {
     return this.teachers.create(dto, user, user.id);
   }
 
   @Patch(":id")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   update(@Param("id") id: string, @Body() dto: UpdateTeacherDto, @CurrentUser() user: AuthUser) {
     return this.teachers.update(id, dto, user, user.id);
   }
 
   @Delete(":id")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.ACADEMIC_ADMIN)
   remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
     return this.teachers.remove(id, user, user.id);
   }

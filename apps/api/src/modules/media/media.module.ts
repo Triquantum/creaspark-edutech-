@@ -26,7 +26,7 @@ export class UpdateMediaDto {
 }
 
 // Upload/edit/delete: Super Admin, Org Admin, School Admin, Teacher.
-const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER] as const;
+const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER, Role.ACADEMIC_ADMIN] as const;
 // View: everyone above, plus Parent and Student.
 const READ = [...MANAGE, Role.PARENT, Role.STUDENT] as const;
 

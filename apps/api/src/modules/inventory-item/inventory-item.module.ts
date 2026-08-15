@@ -39,7 +39,7 @@ export class UpdateInventoryItemDto {
 // Manage (upload/edit/delete) and view: platform/org/school admins plus the
 // dedicated inventory role — narrower than Media, since this session's
 // request didn't ask for teacher/parent/student visibility here.
-const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.INVENTORY_MANAGER] as const;
+const MANAGE = [Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.INVENTORY_MANAGER, Role.ACADEMIC_ADMIN] as const;
 
 @Injectable()
 export class InventoryItemService {

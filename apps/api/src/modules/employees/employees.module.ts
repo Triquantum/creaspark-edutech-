@@ -9,7 +9,7 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
 
-const HR_ROLES = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR] as const;
+const HR_ROLES = [Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.HR, Role.FINANCE_HR_ADMIN] as const;
 
 @ApiTags("employees")
 @ApiBearerAuth()
@@ -19,7 +19,7 @@ export class EmployeesController {
   constructor(private employees: EmployeesService) {}
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.HR, Role.FINANCE_HR_ADMIN)
   list(
     @CurrentUser() user: AuthUser, @Query("q") q?: string, @Query("schoolId") schoolId?: string,
     @Query("activeOnly") activeOnly?: string,

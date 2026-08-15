@@ -18,7 +18,7 @@ export class StudentsController {
   constructor(private students: StudentsService, private prisma: PrismaService) {}
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.RECEPTION, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   list(@Query() query: QueryStudentsDto, @CurrentUser() user: AuthUser) {
     return this.students.list(user, query);
   }
@@ -32,43 +32,43 @@ export class StudentsController {
   }
 
   @Get("birthdays/today")
-  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   todaysBirthdays(@CurrentUser() user: AuthUser, @Query("schoolId") schoolId?: string) {
     return this.students.todaysBirthdays(user, schoolId);
   }
 
   @Get(":id")
-  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR)
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
   get(@Param("id") id: string, @CurrentUser() user: AuthUser) {
     return this.students.get(user, id);
   }
 
   @Post()
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION, Role.ACADEMIC_ADMIN)
   create(@Body() dto: CreateStudentDto, @CurrentUser() user: AuthUser) {
     return this.students.create(dto, user, user.id);
   }
 
   @Patch(":id")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION, Role.ACADEMIC_ADMIN)
   update(@Param("id") id: string, @Body() dto: UpdateStudentDto, @CurrentUser() user: AuthUser) {
     return this.students.update(id, dto, user, user.id);
   }
 
   @Post("bulk")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION, Role.ACADEMIC_ADMIN)
   bulkUpsert(@Body() dto: BulkUpsertStudentsDto, @CurrentUser() user: AuthUser) {
     return this.students.bulkUpsert(dto, user, user.id);
   }
 
   @Delete(":id")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.ACADEMIC_ADMIN)
   remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
     return this.students.remove(id, user, user.id);
   }
 
   @Post(":id/login")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION, Role.ACADEMIC_ADMIN)
   createLogin(@Param("id") id: string, @CurrentUser() user: AuthUser) {
     return this.students.createLogin(id, user, user.id);
   }

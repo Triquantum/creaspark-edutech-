@@ -52,7 +52,7 @@ export class QueryTasksDto {
 // Only admin-like roles create/assign/edit/delete tasks; any assignee (any
 // role) replies to their own assignment via TasksService.reply() instead.
 const MANAGE_ROLES = [
-  Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR,
+  Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL, Role.COORDINATOR, Role.ACADEMIC_ADMIN,
 ] as const;
 
 const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
