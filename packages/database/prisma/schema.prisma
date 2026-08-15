@@ -1192,6 +1192,11 @@ enum TrainingStatus {
   CANCELLED
 }
 
+enum TrainingMode {
+  ONLINE
+  OFFLINE
+}
+
 model Training {
   id             String         @id @default(cuid())
   tenantId       String
@@ -1203,6 +1208,8 @@ model Training {
   resourcePerson String?                          // trainer/facilitator name, distinct from conductedBy (who scheduled it)
   agenda         String?
   status         TrainingStatus @default(SCHEDULED)
+  mode           TrainingMode   @default(OFFLINE)
+  documentUrls   String[]       @default([])
   conductedAt    DateTime
   conductedById  String
   conductedBy    User           @relation("TrainingsConducted", fields: [conductedById], references: [id])

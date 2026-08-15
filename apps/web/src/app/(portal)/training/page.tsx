@@ -1,6 +1,7 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, apiBlob } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
@@ -23,6 +24,8 @@ interface SchoolOpt { id: string; name: string }
 interface ClassOpt { id: string; name: string; schoolId: string; schoolName: string }
 const TRAINING_STATUSES = ["SCHEDULED", "ONGOING", "COMPLETED", "CANCELLED"] as const;
 type TrainingStatusValue = (typeof TRAINING_STATUSES)[number];
+const TRAINING_MODES = ["ONLINE", "OFFLINE"] as const;
+type TrainingModeValue = (typeof TRAINING_MODES)[number];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -44,6 +47,8 @@ interface TrainingRow {
   id: string; title: string; description: string | null; subject: string | null;
   venue: string | null; duration: string | null; resourcePerson: string | null; agenda: string | null;
   status: TrainingStatusValue;
+  mode: TrainingModeValue;
+  documentUrls: string[];
   conductedAt: string;
   targetRoles: string[]; targetSchoolId: string | null; targetSchool: { name: string } | null;
   targetClassIds: string[];
@@ -77,10 +82,14 @@ function TrainingFormModal({ schools, classes, existing, onClose, onSaved }: {
   const [description, setDescription] = useState(existing?.description ?? "");
   const [subject, setSubject] = useState(existing?.subject ?? "");
   const [status, setStatus] = useState<TrainingStatusValue>(existing?.status ?? "SCHEDULED");
+  const [mode, setMode] = useState<TrainingModeValue>(existing?.mode ?? "OFFLINE");
   const [venue, setVenue] = useState(existing?.venue ?? "");
   const [duration, setDuration] = useState(existing?.duration ?? "");
   const [resourcePerson, setResourcePerson] = useState(existing?.resourcePerson ?? "");
   const [agenda, setAgenda] = useState(existing?.agenda ?? "");
+  const [existingDocuments, setExistingDocuments] = useState<string[]>(existing?.documentUrls ?? []);
+  const [newDocFiles, setNewDocFiles] = useState<File[]>([]);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const [conductedAt, setConductedAt] = useState(existing ? toDateInput(existing.conductedAt) : "");
   const [targetRoles, setTargetRoles] = useState<Set<string>>(new Set(existing?.targetRoles ?? []));
   const [targetSchoolId, setTargetSchoolId] = useState(existing?.targetSchoolId ?? "");
@@ -107,16 +116,38 @@ function TrainingFormModal({ schools, classes, existing, onClose, onSaved }: {
     });
   }
 
+  function pickDocuments(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    setNewDocFiles((prev) => [...prev, ...files]);
+    if (docInputRef.current) docInputRef.current.value = "";
+  }
+
+  async function uploadDocuments(): Promise<string[]> {
+    const urls: string[] = [];
+    for (const file of newDocFiles) {
+      const ext = file.name.split(".").pop() ?? "bin";
+      const path = `${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage.from("training-documents").upload(path, file, {
+        contentType: file.type, upsert: false,
+      });
+      if (uploadErr) throw new Error(`Document upload failed: ${uploadErr.message}`);
+      urls.push(supabase.storage.from("training-documents").getPublicUrl(path).data.publicUrl);
+    }
+    return urls;
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
+      const uploadedDocUrls = await uploadDocuments();
       const body = {
         title: title.trim(), description: description.trim() || undefined,
-        subject: subject.trim() || undefined, status,
+        subject: subject.trim() || undefined, status, mode,
         venue: venue.trim() || undefined, duration: duration.trim() || undefined,
         resourcePerson: resourcePerson.trim() || undefined, agenda: agenda.trim() || undefined,
+        documentUrls: [...existingDocuments, ...uploadedDocUrls],
         conductedAt: new Date(conductedAt).toISOString(),
         targetRoles: [...targetRoles], targetSchoolId: targetSchoolId || undefined,
         targetClassIds: classMode === "SPECIFIC" ? [...targetClassIds] : [],
@@ -165,19 +196,54 @@ function TrainingFormModal({ schools, classes, existing, onClose, onSaved }: {
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-4">
+          <Field id="tr-mode" label="Mode of training">
+            <select id="tr-mode" value={mode} onChange={(e) => setMode(e.target.value as TrainingModeValue)} className={inputCls}>
+              {TRAINING_MODES.map((m) => <option key={m} value={m}>{m[0] + m.slice(1).toLowerCase()}</option>)}
+            </select>
+          </Field>
           <Field id="tr-venue" label="Venue" optional>
             <input id="tr-venue" value={venue} onChange={(e) => setVenue(e.target.value)} className={inputCls} />
           </Field>
-          <Field id="tr-duration" label="Duration" optional>
-            <input id="tr-duration" placeholder="e.g. 9am - 1pm" value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls} />
-          </Field>
         </div>
+        <Field id="tr-duration" label="Duration" optional>
+          <input id="tr-duration" placeholder="e.g. 9am - 1pm" value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls} />
+        </Field>
         <Field id="tr-resource-person" label="Resource person / Trainer" optional>
           <input id="tr-resource-person" value={resourcePerson} onChange={(e) => setResourcePerson(e.target.value)} className={inputCls} />
         </Field>
         <Field id="tr-agenda" label="Agenda" optional>
           <textarea id="tr-agenda" rows={3} className={`${inputCls} h-auto py-3`} value={agenda} onChange={(e) => setAgenda(e.target.value)} />
         </Field>
+        <div>
+          <p className="mb-1.5 text-sm font-medium">Documents <span className="text-slate-400">(optional, multiple)</span></p>
+          <div className="space-y-2">
+            {existingDocuments.map((url) => (
+              <div key={url} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-white/10">
+                <a href={url} target="_blank" rel="noreferrer" className="truncate text-accent hover:underline">
+                  {url.split("/").pop()}
+                </a>
+                <button type="button" onClick={() => setExistingDocuments((prev) => prev.filter((u) => u !== url))}
+                  className="ml-3 shrink-0 text-xs text-slate-400 hover:text-danger">
+                  Remove
+                </button>
+              </div>
+            ))}
+            {newDocFiles.map((file, i) => (
+              <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-white/10">
+                <span className="truncate text-slate-600 dark:text-slate-300">{file.name}</span>
+                <button type="button" onClick={() => setNewDocFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="ml-3 shrink-0 text-xs text-slate-400 hover:text-danger">
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={() => docInputRef.current?.click()}
+              className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-400 hover:border-accent hover:text-accent dark:border-white/20">
+              + Add document
+            </button>
+          </div>
+          <input ref={docInputRef} type="file" multiple onChange={pickDocuments} className="hidden" />
+        </div>
         <div>
           <p className="mb-1.5 text-sm font-medium">Target roles <span className="text-slate-400">(none selected = everyone)</span></p>
           <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 p-3 dark:border-white/10">
@@ -245,6 +311,66 @@ function TrainingFormModal({ schools, classes, existing, onClose, onSaved }: {
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function TrainingDetailModal({ training, classes, onClose }: { training: TrainingRow; classes: ClassOpt[]; onClose: () => void }) {
+  const rows: [string, React.ReactNode][] = [
+    ["Title", training.title],
+    ["Description", training.description ?? "—"],
+    ["Subject", training.subject ?? "—"],
+    ["Status", statusLabel(training.status)],
+    ["Mode", training.mode[0] + training.mode.slice(1).toLowerCase()],
+    ["Conducted on", fmtDate(training.conductedAt)],
+    ["Conducted by", training.conductedBy.fullName],
+    ["Venue", training.venue ?? "—"],
+    ["Duration", training.duration ?? "—"],
+    ["Resource person / Trainer", training.resourcePerson ?? "—"],
+    ["Agenda", training.agenda ?? "—"],
+    [
+      "Audience",
+      training.targetRoles.length === 0 ? "Everyone" : training.targetRoles.map(roleLabel).join(", "),
+    ],
+    ["School", training.targetSchool?.name ?? "All schools"],
+    [
+      "Classes / grades",
+      training.targetClassIds.length === 0
+        ? "All classes"
+        : [...new Set(training.targetClassIds.map((id) => classes.find((c) => c.id === id)?.name ?? id))].join(", "),
+    ],
+  ];
+
+  return (
+    <Modal title={`Training details · ${training.title}`} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+              <p className="mt-0.5 text-night dark:text-white">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-400">Documents</p>
+          {training.documentUrls.length === 0 ? (
+            <p className="mt-0.5 text-sm text-slate-500">No documents attached.</p>
+          ) : (
+            <div className="mt-1 space-y-1">
+              {training.documentUrls.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noreferrer"
+                  className="block truncate text-sm text-accent hover:underline">
+                  {url.split("/").pop()}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end">
+          <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
+        </div>
+      </div>
     </Modal>
   );
 }
@@ -488,6 +614,7 @@ export default function TrainingPage() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [creating, setCreating] = useState(false);
   const [editingFor, setEditingFor] = useState<TrainingRow | null>(null);
+  const [viewingFor, setViewingFor] = useState<TrainingRow | null>(null);
   const [feedbackFor, setFeedbackFor] = useState<{ training: TrainingRow; existing: FeedbackResponse | null } | null>(null);
   const [summaryFor, setSummaryFor] = useState<TrainingRow | null>(null);
   const [attendanceFor, setAttendanceFor] = useState<TrainingRow | null>(null);
@@ -698,6 +825,7 @@ export default function TrainingPage() {
                     <td className="px-4 py-3 text-right">
                       {isSuperAdmin ? (
                         <div className="flex justify-end gap-2">
+                          <Button variant="ghost" onClick={() => setViewingFor(row)}>View</Button>
                           <Button variant="ghost" onClick={() => setAttendanceFor(row)}>Attendance</Button>
                           <Button variant="ghost" onClick={() => setSummaryFor(row)}>View responses</Button>
                           <Button variant="ghost" onClick={() => printReport(row)}>Print / PDF</Button>
@@ -734,6 +862,7 @@ export default function TrainingPage() {
           onSaved={() => { setFeedbackFor(null); setToast("Feedback submitted"); load(); }}
         />
       )}
+      {viewingFor && <TrainingDetailModal training={viewingFor} classes={classes} onClose={() => setViewingFor(null)} />}
       {summaryFor && <FeedbackSummaryModal training={summaryFor} onClose={() => setSummaryFor(null)} />}
       {attendanceFor && (
         <AttendanceModal

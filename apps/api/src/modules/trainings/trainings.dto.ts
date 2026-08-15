@@ -3,7 +3,7 @@ import {
   IsOptional, IsString, Max, Min, ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
-import { Role, TrainingStatus } from "@educore/database";
+import { Role, TrainingMode, TrainingStatus } from "@educore/database";
 
 export class CreateTrainingDto {
   @IsString() title: string;
@@ -14,6 +14,8 @@ export class CreateTrainingDto {
   @IsOptional() @IsString() resourcePerson?: string;
   @IsOptional() @IsString() agenda?: string;
   @IsOptional() @IsEnum(TrainingStatus) status?: TrainingStatus;
+  @IsOptional() @IsEnum(TrainingMode) mode?: TrainingMode;
+  @IsOptional() @IsArray() @IsString({ each: true }) documentUrls?: string[];
   @IsDateString() conductedAt: string;
   /** Empty/omitted = every role. */
   @IsOptional() @IsArray() @IsEnum(Role, { each: true }) targetRoles?: Role[];
@@ -36,6 +38,8 @@ export class UpdateTrainingDto {
   @IsOptional() @IsString() resourcePerson?: string;
   @IsOptional() @IsString() agenda?: string;
   @IsOptional() @IsEnum(TrainingStatus) status?: TrainingStatus;
+  @IsOptional() @IsEnum(TrainingMode) mode?: TrainingMode;
+  @IsOptional() @IsArray() @IsString({ each: true }) documentUrls?: string[];
   @IsOptional() @IsDateString() conductedAt?: string;
   @IsOptional() @IsArray() @IsEnum(Role, { each: true }) targetRoles?: Role[];
   @IsOptional() @IsString() targetSchoolId?: string;
