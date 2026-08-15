@@ -20,9 +20,25 @@ function fmtDate(s: string) {
 
 interface Me { id: string; role: string }
 interface SchoolOpt { id: string; name: string }
+const TRAINING_STATUSES = ["SCHEDULED", "ONGOING", "COMPLETED", "CANCELLED"] as const;
+type TrainingStatusValue = (typeof TRAINING_STATUSES)[number];
+
+function statusLabel(status: string) {
+  return status[0] + status.slice(1).toLowerCase();
+}
+function statusBadgeCls(status: string) {
+  switch (status) {
+    case "ONGOING": return "bg-accent/10 text-accent";
+    case "COMPLETED": return "bg-success/10 text-success";
+    case "CANCELLED": return "bg-danger/10 text-danger";
+    default: return "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300";
+  }
+}
+
 interface TrainingRow {
-  id: string; title: string; description: string | null;
+  id: string; title: string; description: string | null; subject: string | null;
   venue: string | null; duration: string | null; resourcePerson: string | null; agenda: string | null;
+  status: TrainingStatusValue;
   conductedAt: string;
   targetRoles: string[]; targetSchool: { name: string } | null;
   conductedBy: { fullName: string };
@@ -46,6 +62,8 @@ interface FeedbackSummary {
 function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[]; onClose: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [subject, setSubject] = useState("");
+  const [status, setStatus] = useState<TrainingStatusValue>("SCHEDULED");
   const [venue, setVenue] = useState("");
   const [duration, setDuration] = useState("");
   const [resourcePerson, setResourcePerson] = useState("");
@@ -73,6 +91,7 @@ function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[];
         method: "POST",
         body: JSON.stringify({
           title: title.trim(), description: description.trim() || undefined,
+          subject: subject.trim() || undefined, status,
           venue: venue.trim() || undefined, duration: duration.trim() || undefined,
           resourcePerson: resourcePerson.trim() || undefined, agenda: agenda.trim() || undefined,
           conductedAt: new Date(conductedAt).toISOString(),
@@ -104,6 +123,16 @@ function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[];
             <select id="tr-school" value={targetSchoolId} onChange={(e) => setTargetSchoolId(e.target.value)} className={inputCls}>
               <option value="">All schools</option>
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field id="tr-subject" label="Subject" optional>
+            <input id="tr-subject" placeholder="e.g. Classroom Management" value={subject} onChange={(e) => setSubject(e.target.value)} className={inputCls} />
+          </Field>
+          <Field id="tr-status" label="Status">
+            <select id="tr-status" value={status} onChange={(e) => setStatus(e.target.value as TrainingStatusValue)} className={inputCls}>
+              {TRAINING_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
             </select>
           </Field>
         </div>
@@ -372,6 +401,15 @@ export default function TrainingPage() {
     setFeedbackFor({ training: row, existing });
   }
 
+  async function changeStatus(row: TrainingRow, status: TrainingStatusValue) {
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status } : r)));
+    try {
+      await api(`/trainings/${row.id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+    } catch {
+      load();
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -401,6 +439,7 @@ export default function TrainingPage() {
                   <th className="px-4 py-3 font-medium">Title</th>
                   <th className="px-4 py-3 font-medium">Date</th>
                   <th className="px-4 py-3 font-medium">Audience</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Conducted by</th>
                   <th className="px-4 py-3 font-medium">{isSuperAdmin ? "Responses" : "Status"}</th>
                   <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -414,6 +453,18 @@ export default function TrainingPage() {
                     <td className="px-4 py-3 text-slate-500">
                       {row.targetRoles.length === 0 ? "Everyone" : row.targetRoles.map(roleLabel).join(", ")}
                       {row.targetSchool && ` · ${row.targetSchool.name}`}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isSuperAdmin ? (
+                        <select
+                          value={row.status} onChange={(e) => changeStatus(row, e.target.value as TrainingStatusValue)}
+                          className={`rounded-full border-0 px-2.5 py-0.5 text-xs font-medium ${statusBadgeCls(row.status)}`}
+                        >
+                          {TRAINING_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
+                        </select>
+                      ) : (
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeCls(row.status)}`}>{statusLabel(row.status)}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">{row.conductedBy.fullName}</td>
                     <td className="px-4 py-3">

@@ -1,6 +1,6 @@
 import {
   Body, Controller, Get, Injectable, Module, NotFoundException,
-  Param, Post, UseGuards,
+  Param, Patch, Post, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
@@ -10,7 +10,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
-import { CreateTrainingDto, MarkAttendanceDto, SubmitFeedbackDto } from "./trainings.dto";
+import { CreateTrainingDto, MarkAttendanceDto, SubmitFeedbackDto, UpdateTrainingStatusDto } from "./trainings.dto";
 
 const TRAINING_INCLUDE = {
   conductedBy: { select: { fullName: true } },
@@ -78,7 +78,9 @@ export class TrainingsService {
     const training = await this.prisma.training.create({
       data: {
         tenantId: currentTenant().tenantId, title: dto.title, description: dto.description,
-        venue: dto.venue, duration: dto.duration, resourcePerson: dto.resourcePerson, agenda: dto.agenda,
+        subject: dto.subject, venue: dto.venue, duration: dto.duration,
+        resourcePerson: dto.resourcePerson, agenda: dto.agenda,
+        ...(dto.status && { status: dto.status }),
         conductedAt: new Date(dto.conductedAt), conductedById: user.id,
         targetRoles, targetSchoolId: dto.targetSchoolId,
       },
@@ -115,6 +117,14 @@ export class TrainingsService {
     const training = await this.prisma.training.findUnique({ where: { id } });
     if (!training) throw new NotFoundException("Training not found");
     return training;
+  }
+
+  /** SUPER_ADMIN-only: move a training through its Scheduled/Ongoing/Completed/Cancelled lifecycle. */
+  async updateStatus(id: string, dto: UpdateTrainingStatusDto) {
+    await this.findTraining(id);
+    return this.prisma.training.update({
+      where: { id }, data: { status: dto.status }, include: TRAINING_INCLUDE,
+    });
   }
 
   /** SUPER_ADMIN-only: every response plus rating averages. */
@@ -214,6 +224,12 @@ export class TrainingsController {
   @Roles(Role.SUPER_ADMIN)
   create(@Body() dto: CreateTrainingDto, @CurrentUser() user: AuthUser) {
     return this.svc.create(dto, user);
+  }
+
+  @Patch(":id/status")
+  @Roles(Role.SUPER_ADMIN)
+  updateStatus(@Param("id") id: string, @Body() dto: UpdateTrainingStatusDto) {
+    return this.svc.updateStatus(id, dto);
   }
 
   @Get(":id/feedback")

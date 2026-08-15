@@ -1185,22 +1185,31 @@ model TaskAssignee {
 // Task Manager's notifyAssignee), who each submit one structured feedback
 // response.
 
+enum TrainingStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
 model Training {
-  id             String   @id @default(cuid())
+  id             String         @id @default(cuid())
   tenantId       String
   title          String
   description    String?
+  subject        String?
   venue          String?
   duration       String?                         // free text -- "2 hours", "9am-1pm", etc.
   resourcePerson String?                          // trainer/facilitator name, distinct from conductedBy (who scheduled it)
   agenda         String?
+  status         TrainingStatus @default(SCHEDULED)
   conductedAt    DateTime
   conductedById  String
-  conductedBy    User     @relation("TrainingsConducted", fields: [conductedById], references: [id])
+  conductedBy    User           @relation("TrainingsConducted", fields: [conductedById], references: [id])
   targetRoles    Role[]
   targetSchoolId String?
-  targetSchool   School?  @relation(fields: [targetSchoolId], references: [id])
-  createdAt      DateTime @default(now())
+  targetSchool   School?        @relation(fields: [targetSchoolId], references: [id])
+  createdAt      DateTime       @default(now())
 
   feedback   TrainingFeedback[]
   attendance TrainingAttendance[]
