@@ -14,8 +14,12 @@ const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
 
 // Bundled build-time assets (see nest-cli.json's compilerOptions.assets) --
 // not user-uploaded files, so no fetch-arbitrary-URL risk like School.logoUrl.
-const WATERMARK_LOGO_PATH = join(__dirname, "assets", "creaspark-logo.jpeg");
-const SEAL_PATH = join(__dirname, "assets", "seal-main.png");
+// nest-cli's asset copier places these at <dist>/modules/employees/assets,
+// while `nest build`'s own tsc output nests one level deeper at
+// <dist>/src/modules/employees -- so __dirname needs three levels up (past
+// src/) before descending back into modules/employees/assets, not one.
+const WATERMARK_LOGO_PATH = join(__dirname, "..", "..", "..", "modules", "employees", "assets", "creaspark-logo.jpeg");
+const SEAL_PATH = join(__dirname, "..", "..", "..", "modules", "employees", "assets", "seal-main.png");
 
 /** Generalized version of TeachersService covering every staff role (not
  * just TEACHER, which keeps its own dedicated page) -- an HR-facing

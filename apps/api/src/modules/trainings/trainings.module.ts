@@ -5,6 +5,8 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma, Role } from "@educore/database";
 import type { Response } from "express";
+import { readFileSync } from "fs";
+import { join } from "path";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -23,9 +25,72 @@ const TRAINING_INCLUDE = {
   targetSchool: { select: { name: true } },
 };
 
+// Report PDF styling -- shared across every section so headings, rules, and
+// body text stay visually consistent instead of drifting section to section.
+const NAVY = "#1e3a8a";
+const SLATE = "#334155";
+const MUTED = "#64748b";
+const LINE = "#e2e8f0";
+
+// Reuses the same bundled letterhead logo as the Employee salary
+// certificate/slip (apps/api/src/modules/employees/assets) rather than
+// duplicating the asset. nest-cli's asset copier places it at
+// <dist>/modules/employees/assets, while `nest build`'s own tsc output
+// nests this file one level deeper at <dist>/src/modules/trainings -- so
+// __dirname needs three levels up (past src/) before descending back into
+// modules/employees/assets.
+const WATERMARK_LOGO_PATH = join(__dirname, "..", "..", "..", "modules", "employees", "assets", "creaspark-logo.jpeg");
+
+function roleLabel(role: string): string {
+  return role.toLowerCase().split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+function statusLabel(status: string): string {
+  return status[0] + status.slice(1).toLowerCase();
+}
+
 @Injectable()
 export class TrainingsService {
   constructor(private prisma: PrismaService) {}
+
+  private assetCache = new Map<string, Buffer | null>();
+
+  /** Lazily read once per warm instance, matching employees.service.ts's
+   * own asset-loading pattern -- bundled assets never change between
+   * requests, and a missing file is cached as null so a report doesn't
+   * retry a failed disk read on every generation. */
+  private loadAsset(path: string): Buffer | null {
+    if (!this.assetCache.has(path)) {
+      try {
+        this.assetCache.set(path, readFileSync(path));
+      } catch {
+        this.assetCache.set(path, null);
+      }
+    }
+    return this.assetCache.get(path) ?? null;
+  }
+
+  /** Faint, centered background mark drawn before any other content on the
+   * page so text and table rows sit on top of it. Called again after each
+   * addPage() so multi-page attendance rosters carry it on every page, not
+   * just the first. Silently skipped if the bundled asset is missing. */
+  private drawWatermark(doc: PDFKit.PDFDocument) {
+    const logo = this.loadAsset(WATERMARK_LOGO_PATH);
+    if (!logo) return;
+    const size = 320;
+    const x = (doc.page.width - size) / 2;
+    const y = (doc.page.height - size) / 2;
+    doc.opacity(0.08).image(logo, x, y, { width: size, height: size }).opacity(1);
+  }
+
+  /** Uppercased navy heading with a thin rule underneath -- the same visual
+   * unit repeated for Details/Feedback Summary/Attendance so every section
+   * of the report reads as one consistent document. */
+  private sectionHeading(doc: PDFKit.PDFDocument, title: string) {
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(NAVY).text(title.toUpperCase(), { characterSpacing: 0.4 });
+    doc.moveDown(0.2);
+    doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor(LINE).lineWidth(1).stroke();
+    doc.moveDown(0.5);
+  }
 
   /** A user's own school, resolved the same way messages.module.ts's
    * personFilter() does -- staff via StaffProfile, students directly,
@@ -281,10 +346,11 @@ export class TrainingsService {
     return this.getAttendance(id);
   }
 
-  /** Single-training report: details, feedback summary + responses, and
-   * the attendance roster -- pdfkit has no table primitive for the
-   * detail/feedback sections, so they're laid out as plain text lines;
-   * only the attendance roster is dense enough to warrant a grid. */
+  /** Single-training report: details, feedback summary + responses, and the
+   * attendance roster. Details/Feedback use a consistent label/value grid;
+   * Attendance -- the densest, most-reprinted section -- gets a real
+   * bordered table (sorted by school, then teacher name) rather than plain
+   * text lines. A faint Creaspark watermark repeats on every page. */
   private buildTrainingReportPdf(
     training: Awaited<ReturnType<TrainingsService["findTraining"]>> & {
       conductedBy: { fullName: string }; targetSchool: { name: string } | null;
@@ -294,27 +360,42 @@ export class TrainingsService {
     classNames: string[],
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 48, size: "A4" });
+      const doc = new PDFDocument({ margin: 54, size: "A4" });
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
-      doc.fontSize(18).fillColor("#000").text(training.title);
-      doc.fontSize(9).fillColor("#666").text(`Generated ${new Date().toLocaleString("en-IN")}`);
-      doc.moveDown();
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+      const contentWidth = right - left;
 
+      this.drawWatermark(doc);
+
+      doc.font("Helvetica-Bold").fontSize(17).fillColor(NAVY).text(training.title);
+      doc.font("Helvetica").fontSize(9).fillColor(MUTED).text(`Generated ${new Date().toLocaleString("en-IN")}`);
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor(NAVY).lineWidth(1.5).stroke();
+      doc.lineWidth(1);
+      doc.moveDown(1);
+
+      // Grades/classes can repeat once per school they belong to (same id,
+      // different school) -- dedupe the display names, not the ids.
+      const uniqueClassNames = [...new Set(classNames)];
       const audience = [
-        training.targetRoles.length === 0 ? "Everyone" : training.targetRoles.join(", "),
+        training.targetRoles.length === 0 ? "Everyone" : training.targetRoles.map(roleLabel).join(", "),
         training.targetSchool?.name,
-        classNames.length > 0 ? classNames.join(", ") : null,
+        uniqueClassNames.length > 0 ? uniqueClassNames.join(", ") : null,
       ].filter(Boolean).join(" · ");
 
-      doc.fontSize(12).fillColor("#000").text("Details", { underline: true });
-      doc.fontSize(10).fillColor("#333");
-      const details: [string, string][] = [
+      this.sectionHeading(doc, "Details");
+      const labelW = 130;
+      const valueX = left + labelW;
+      const valueW = right - valueX;
+      const detailRows: [string, string][] = [
         ["Subject", training.subject ?? "—"],
-        ["Status", training.status],
+        ["Status", statusLabel(training.status)],
+        ["Mode", training.mode === "ONLINE" ? "Online" : "Offline"],
         ["Conducted on", new Date(training.conductedAt).toLocaleDateString("en-IN")],
         ["Conducted by", training.conductedBy.fullName],
         ["Venue", training.venue ?? "—"],
@@ -322,39 +403,125 @@ export class TrainingsService {
         ["Resource person", training.resourcePerson ?? "—"],
         ["Audience", audience || "Everyone"],
       ];
-      for (const [label, value] of details) doc.text(`${label}: ${value}`);
-      if (training.description) doc.moveDown(0.3).text(`Description: ${training.description}`);
-      if (training.agenda) doc.moveDown(0.3).text(`Agenda: ${training.agenda}`);
+      for (const [label, value] of detailRows) {
+        const rowY = doc.y;
+        const labelH = doc.font("Helvetica-Bold").fontSize(9).heightOfString(label.toUpperCase(), { width: labelW - 10 });
+        const valueH = doc.font("Helvetica").fontSize(10).heightOfString(value, { width: valueW });
+        doc.font("Helvetica-Bold").fontSize(9).fillColor(MUTED).text(label.toUpperCase(), left, rowY, { width: labelW - 10 });
+        doc.font("Helvetica").fontSize(10).fillColor(SLATE).text(value, valueX, rowY, { width: valueW });
+        doc.y = rowY + Math.max(labelH, valueH) + 6;
+      }
+      // pdfkit doesn't reset doc.x back to the margin after a positioned
+      // text() call (x, y, opts) -- without this, the next flowing text()
+      // call below would silently pick up the grid's rightmost x instead
+      // of the page's left margin.
+      doc.x = left;
+      if (training.description) {
+        doc.moveDown(0.3);
+        doc.font("Helvetica-Bold").fontSize(9).fillColor(MUTED).text("DESCRIPTION");
+        doc.font("Helvetica").fontSize(10).fillColor(SLATE).text(training.description, { align: "justify", lineGap: 2 });
+      }
+      if (training.agenda) {
+        doc.moveDown(0.3);
+        doc.font("Helvetica-Bold").fontSize(9).fillColor(MUTED).text("AGENDA");
+        doc.font("Helvetica").fontSize(10).fillColor(SLATE).text(training.agenda, { lineGap: 2 });
+      }
+      if (training.documentUrls.length > 0) {
+        doc.moveDown(0.3);
+        doc.font("Helvetica-Bold").fontSize(9).fillColor(MUTED).text("DOCUMENTS");
+        doc.font("Helvetica").fontSize(9).fillColor(NAVY);
+        training.documentUrls.forEach((url, i) => doc.text(`${i + 1}. ${url.split("/").pop()}`, { lineGap: 1 }));
+      }
 
-      doc.moveDown();
-      doc.fontSize(12).fillColor("#000").text("Feedback summary", { underline: true });
-      doc.fontSize(10).fillColor("#333").text(
-        `Content: ${feedback.averages.content ?? "—"}   Trainer: ${feedback.averages.trainer ?? "—"}   `
-        + `Usefulness: ${feedback.averages.usefulness ?? "—"}   Overall: ${feedback.averages.overall ?? "—"}`,
-      );
-      doc.moveDown(0.3);
+      doc.moveDown(1);
+      this.sectionHeading(doc, "Feedback Summary");
+      const stats: [string, number | null][] = [
+        ["Content", feedback.averages.content],
+        ["Trainer", feedback.averages.trainer],
+        ["Usefulness", feedback.averages.usefulness],
+        ["Overall", feedback.averages.overall],
+      ];
+      const statW = contentWidth / stats.length;
+      const statY = doc.y;
+      stats.forEach(([label, val], i) => {
+        const x = left + i * statW;
+        doc.font("Helvetica").fontSize(8.5).fillColor(MUTED).text(label.toUpperCase(), x, statY, { width: statW, align: "center" });
+        doc.font("Helvetica-Bold").fontSize(16).fillColor(NAVY).text(val != null ? String(val) : "—", x, statY + 12, { width: statW, align: "center" });
+      });
+      doc.x = left;
+      doc.y = statY + 38;
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor(LINE).stroke();
+      doc.moveDown(0.6);
+
       if (feedback.responses.length === 0) {
-        doc.text("No feedback submitted yet.");
+        doc.font("Helvetica").fontSize(10).fillColor(MUTED).text("No feedback submitted yet.");
       } else {
         for (const r of feedback.responses) {
-          doc.text(
-            `${r.respondent.fullName} (${r.respondent.role}) — Content ${r.contentRating}, `
-            + `Trainer ${r.trainerRating}, Usefulness ${r.usefulnessRating}, Overall ${r.overallRating}`,
+          doc.font("Helvetica-Bold").fontSize(10).fillColor(SLATE)
+            .text(`${r.respondent.fullName}  `, { continued: true })
+            .font("Helvetica").fontSize(9).fillColor(MUTED).text(`(${roleLabel(r.respondent.role)})`);
+          doc.font("Helvetica").fontSize(9).fillColor(SLATE).text(
+            `Content ${r.contentRating} · Trainer ${r.trainerRating} · Usefulness ${r.usefulnessRating} · Overall ${r.overallRating}`,
           );
-          if (r.comments) doc.fontSize(9).fillColor("#666").text(r.comments, { indent: 12 }).fontSize(10).fillColor("#333");
+          if (r.comments) doc.font("Helvetica-Oblique").fontSize(9).fillColor(MUTED).text(r.comments, { indent: 10 });
+          doc.moveDown(0.4);
         }
       }
 
-      doc.moveDown();
-      doc.fontSize(12).fillColor("#000").text("Attendance", { underline: true });
-      doc.fontSize(10).fillColor("#333");
+      doc.moveDown(0.6);
+      this.sectionHeading(doc, "Attendance");
       if (attendance.length === 0) {
-        doc.text("No one is targeted by this training yet.");
+        doc.font("Helvetica").fontSize(10).fillColor(MUTED).text("No one is targeted by this training yet.");
       } else {
-        for (const a of attendance) {
+        const sorted = [...attendance].sort((a, b) => {
+          const schoolCmp = (a.schoolName || "￿").localeCompare(b.schoolName || "￿");
+          return schoolCmp !== 0 ? schoolCmp : a.fullName.localeCompare(b.fullName);
+        });
+
+        const cols = [
+          { key: "no", label: "#", width: 24, align: "left" as const },
+          { key: "name", label: "Name", width: 135, align: "left" as const },
+          { key: "role", label: "Role", width: 62, align: "left" as const },
+          { key: "school", label: "School", width: contentWidth - 24 - 135 - 62 - 85, align: "left" as const },
+          { key: "status", label: "Status", width: 85, align: "right" as const },
+        ];
+        const rowH = 20;
+        const headerH = 22;
+
+        const drawHeader = (y: number) => {
+          doc.rect(left, y, contentWidth, headerH).fill(NAVY);
+          let x = left;
+          doc.font("Helvetica-Bold").fontSize(9).fillColor("#fff");
+          for (const col of cols) {
+            doc.text(col.label, x + 8, y + 6, { width: col.width - 12, align: col.align });
+            x += col.width;
+          }
+          return y + headerH;
+        };
+
+        let y = drawHeader(doc.y);
+        sorted.forEach((a, i) => {
+          if (y + rowH > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+            this.drawWatermark(doc);
+            y = drawHeader(doc.page.margins.top);
+          }
+          if (i % 2 === 1) doc.rect(left, y, contentWidth, rowH).fill("#f8fafc");
           const mark = a.present === true ? "Present" : a.present === false ? "Absent" : "Not marked";
-          doc.text(`${a.fullName} (${a.role}${a.schoolName ? ` · ${a.schoolName}` : ""}) — ${mark}`);
-        }
+          const markColor = a.present === true ? "#16a34a" : a.present === false ? "#dc2626" : MUTED;
+          const cellOpts = { height: rowH - 6, ellipsis: true };
+          let x = left;
+          doc.font("Helvetica").fontSize(9).fillColor(SLATE);
+          doc.text(String(i + 1), x + 8, y + 6, { width: cols[0].width - 12, ...cellOpts }); x += cols[0].width;
+          doc.text(a.fullName, x + 8, y + 6, { width: cols[1].width - 12, ...cellOpts }); x += cols[1].width;
+          doc.text(roleLabel(a.role), x + 8, y + 6, { width: cols[2].width - 12, ...cellOpts }); x += cols[2].width;
+          doc.text(a.schoolName ?? "—", x + 8, y + 6, { width: cols[3].width - 12, ...cellOpts }); x += cols[3].width;
+          doc.font("Helvetica-Bold").fillColor(markColor).text(mark, x + 8, y + 6, { width: cols[4].width - 16, align: "right", ...cellOpts });
+          doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor(LINE).stroke();
+          y += rowH;
+        });
+        doc.x = left;
+        doc.y = y + 10;
       }
 
       doc.end();
