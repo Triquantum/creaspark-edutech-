@@ -653,7 +653,10 @@ export default function TrainingPage() {
                       {row.targetRoles.length === 0 ? "Everyone" : row.targetRoles.map(roleLabel).join(", ")}
                       {row.targetSchool && ` · ${row.targetSchool.name}`}
                       {row.targetClassIds.length > 0 && (
-                        ` · ${row.targetClassIds.map((id) => classes.find((c) => c.id === id)?.name ?? id).join(", ")}`
+                        // Different schools can share the same grade name (e.g. "Grade 3" in
+                        // several schools) -- targetClassIds itself holds distinct class IDs,
+                        // but naively mapping id -> name would repeat that name once per school.
+                        ` · ${[...new Set(row.targetClassIds.map((id) => classes.find((c) => c.id === id)?.name ?? id))].join(", ")}`
                       )}
                     </td>
                     <td className="px-4 py-3">
