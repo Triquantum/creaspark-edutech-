@@ -138,7 +138,11 @@ export class TrainingsService {
     }
     return this.prisma.training.findMany({
       where: { AND: conditions },
-      include: { ...TRAINING_INCLUDE, feedback: { where: { respondentId: user.id }, select: { id: true } } },
+      include: {
+        ...TRAINING_INCLUDE,
+        feedback: { where: { respondentId: user.id }, select: { id: true } },
+        attendance: { where: { userId: user.id }, select: { present: true } },
+      },
       orderBy: { conductedAt: "desc" },
     });
   }

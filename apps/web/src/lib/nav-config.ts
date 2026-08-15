@@ -54,7 +54,7 @@ export const NAV: NavGroup[] = [
     { label: "Task Manager Outbox", href: "/tasks/outbox" },
   ] },
   { label: "Training", icon: "award", href: "/training", hiddenFrom: ["GUEST"] },
-  { label: "FDP", icon: "award", href: "/training", roles: SUPER_ADMIN_ONLY },
+  { label: "FDP", icon: "award", href: "/training", roles: ["SUPER_ADMIN", "TEACHER"] },
   { label: "School", icon: "graduation-cap", roles: ["SUPER_ADMIN", "ORG_ADMIN"],
     children: [
       { label: "Register School", href: "/admin/register-school", roles: SUPER_ADMIN_ONLY },

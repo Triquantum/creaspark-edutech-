@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,10 @@ interface SchoolOpt { id: string; name: string }
 interface ClassOpt { id: string; name: string; schoolId: string; schoolName: string }
 const TRAINING_STATUSES = ["SCHEDULED", "ONGOING", "COMPLETED", "CANCELLED"] as const;
 type TrainingStatusValue = (typeof TRAINING_STATUSES)[number];
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 function statusLabel(status: string) {
   return status[0] + status.slice(1).toLowerCase();
@@ -46,6 +50,7 @@ interface TrainingRow {
   conductedBy: { fullName: string };
   _count?: { feedback: number };
   feedback?: { id: string }[];
+  attendance?: { present: boolean }[];
 }
 interface AttendanceRow {
   userId: string; fullName: string; role: string; schoolName: string | null;
@@ -450,8 +455,30 @@ export default function TrainingPage() {
   const [summaryFor, setSummaryFor] = useState<TrainingRow | null>(null);
   const [attendanceFor, setAttendanceFor] = useState<TrainingRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [filterDate, setFilterDate] = useState("");
+  const [filterMonth, setFilterMonth] = useState("");
+  const [filterSubject, setFilterSubject] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterConductedBy, setFilterConductedBy] = useState("");
 
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
+
+  const subjectOptions = useMemo(
+    () => [...new Set(rows.map((r) => r.subject).filter((s): s is string => !!s))].sort(),
+    [rows],
+  );
+  const conductorOptions = useMemo(
+    () => [...new Set(rows.map((r) => r.conductedBy.fullName))].sort(),
+    [rows],
+  );
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    if (filterDate && toDateInput(row.conductedAt) !== filterDate) return false;
+    if (filterMonth && String(new Date(row.conductedAt).getMonth() + 1).padStart(2, "0") !== filterMonth) return false;
+    if (filterSubject && row.subject !== filterSubject) return false;
+    if (filterStatus && row.status !== filterStatus) return false;
+    if (filterConductedBy && row.conductedBy.fullName !== filterConductedBy) return false;
+    return true;
+  }), [rows, filterDate, filterMonth, filterSubject, filterStatus, filterConductedBy]);
 
   const load = useCallback(() => {
     setState("loading");
@@ -501,6 +528,46 @@ export default function TrainingPage() {
         {isSuperAdmin && <Button onClick={() => setCreating(true)}>+ New training</Button>}
       </div>
 
+      {rows.length > 0 && (
+        <Card className="flex flex-wrap items-end gap-3 p-4">
+          <Field id="tf-date" label="Date" optional>
+            <input id="tf-date" type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className={inputCls} />
+          </Field>
+          <Field id="tf-month" label="Month" optional>
+            <select id="tf-month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className={inputCls}>
+              <option value="">All</option>
+              {MONTHS.map((m, i) => <option key={m} value={String(i + 1).padStart(2, "0")}>{m}</option>)}
+            </select>
+          </Field>
+          <Field id="tf-subject" label="Subject" optional>
+            <select id="tf-subject" value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} className={inputCls}>
+              <option value="">All</option>
+              {subjectOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </Field>
+          <Field id="tf-status" label="Status" optional>
+            <select id="tf-status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={inputCls}>
+              <option value="">All</option>
+              {TRAINING_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
+            </select>
+          </Field>
+          <Field id="tf-conductor" label="Conducted by" optional>
+            <select id="tf-conductor" value={filterConductedBy} onChange={(e) => setFilterConductedBy(e.target.value)} className={inputCls}>
+              <option value="">All</option>
+              {conductorOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          {(filterDate || filterMonth || filterSubject || filterStatus || filterConductedBy) && (
+            <Button
+              type="button" variant="ghost"
+              onClick={() => { setFilterDate(""); setFilterMonth(""); setFilterSubject(""); setFilterStatus(""); setFilterConductedBy(""); }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </Card>
+      )}
+
       <Card className="p-0 overflow-hidden">
         {state === "error" && (
           <p className="p-6 text-sm text-slate-500">
@@ -512,7 +579,10 @@ export default function TrainingPage() {
             {isSuperAdmin ? "No trainings created yet." : "No trainings assigned to you yet."}
           </p>
         )}
-        {rows.length > 0 && (
+        {state === "ready" && rows.length > 0 && filteredRows.length === 0 && (
+          <p className="p-6 text-sm text-slate-500">No trainings match these filters.</p>
+        )}
+        {filteredRows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
@@ -522,12 +592,13 @@ export default function TrainingPage() {
                   <th className="px-4 py-3 font-medium">Audience</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Conducted by</th>
-                  <th className="px-4 py-3 font-medium">{isSuperAdmin ? "Responses" : "Status"}</th>
+                  {!isSuperAdmin && <th className="px-4 py-3 font-medium">My attendance</th>}
+                  <th className="px-4 py-3 font-medium">{isSuperAdmin ? "Responses" : "Feedback"}</th>
                   <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {filteredRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
                     <td className="px-4 py-3 font-medium text-night dark:text-white">{row.title}</td>
                     <td className="px-4 py-3 text-slate-500">{fmtDate(row.conductedAt)}</td>
@@ -551,6 +622,16 @@ export default function TrainingPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">{row.conductedBy.fullName}</td>
+                    {!isSuperAdmin && (
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const present = row.attendance?.[0]?.present;
+                          if (present === true) return <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">Present</span>;
+                          if (present === false) return <span className="rounded-full bg-danger/10 px-2.5 py-0.5 text-xs font-medium text-danger">Absent</span>;
+                          return <span className="text-slate-400">—</span>;
+                        })()}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       {isSuperAdmin ? (
                         <span className="text-slate-500">{row._count?.feedback ?? 0}</span>
