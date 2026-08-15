@@ -634,11 +634,13 @@ export default function TrainingPage() {
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
                 <tr className="border-b border-slate-100 dark:border-white/5">
-                  <th className="px-4 py-3 font-medium">Title</th>
+                  {isSuperAdmin && <th className="px-4 py-3 font-medium">Title</th>}
                   <th className="px-4 py-3 font-medium">Date</th>
-                  <th className="px-4 py-3 font-medium">Audience</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Conducted by</th>
+                  {isSuperAdmin && <th className="px-4 py-3 font-medium">Audience</th>}
+                  {isSuperAdmin && <th className="px-4 py-3 font-medium">Status</th>}
+                  {isSuperAdmin && <th className="px-4 py-3 font-medium">Conducted by</th>}
+                  {!isSuperAdmin && <th className="px-4 py-3 font-medium">Agenda</th>}
+                  {!isSuperAdmin && <th className="px-4 py-3 font-medium">Resource person / Trainer</th>}
                   {!isSuperAdmin && <th className="px-4 py-3 font-medium">My attendance</th>}
                   <th className="px-4 py-3 font-medium">{isSuperAdmin ? "Responses" : "Feedback"}</th>
                   <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -647,31 +649,33 @@ export default function TrainingPage() {
               <tbody>
                 {filteredRows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
-                    <td className="px-4 py-3 font-medium text-night dark:text-white">{row.title}</td>
+                    {isSuperAdmin && <td className="px-4 py-3 font-medium text-night dark:text-white">{row.title}</td>}
                     <td className="px-4 py-3 text-slate-500">{fmtDate(row.conductedAt)}</td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {row.targetRoles.length === 0 ? "Everyone" : row.targetRoles.map(roleLabel).join(", ")}
-                      {row.targetSchool && ` · ${row.targetSchool.name}`}
-                      {row.targetClassIds.length > 0 && (
-                        // Different schools can share the same grade name (e.g. "Grade 3" in
-                        // several schools) -- targetClassIds itself holds distinct class IDs,
-                        // but naively mapping id -> name would repeat that name once per school.
-                        ` · ${[...new Set(row.targetClassIds.map((id) => classes.find((c) => c.id === id)?.name ?? id))].join(", ")}`
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isSuperAdmin ? (
+                    {isSuperAdmin && (
+                      <td className="px-4 py-3 text-slate-500">
+                        {row.targetRoles.length === 0 ? "Everyone" : row.targetRoles.map(roleLabel).join(", ")}
+                        {row.targetSchool && ` · ${row.targetSchool.name}`}
+                        {row.targetClassIds.length > 0 && (
+                          // Different schools can share the same grade name (e.g. "Grade 3" in
+                          // several schools) -- targetClassIds itself holds distinct class IDs,
+                          // but naively mapping id -> name would repeat that name once per school.
+                          ` · ${[...new Set(row.targetClassIds.map((id) => classes.find((c) => c.id === id)?.name ?? id))].join(", ")}`
+                        )}
+                      </td>
+                    )}
+                    {isSuperAdmin && (
+                      <td className="px-4 py-3">
                         <select
                           value={row.status} onChange={(e) => changeStatus(row, e.target.value as TrainingStatusValue)}
                           className={`rounded-full border-0 px-2.5 py-0.5 text-xs font-medium ${statusBadgeCls(row.status)}`}
                         >
                           {TRAINING_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
                         </select>
-                      ) : (
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeCls(row.status)}`}>{statusLabel(row.status)}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{row.conductedBy.fullName}</td>
+                      </td>
+                    )}
+                    {isSuperAdmin && <td className="px-4 py-3 text-slate-500">{row.conductedBy.fullName}</td>}
+                    {!isSuperAdmin && <td className="px-4 py-3 text-slate-500">{row.agenda ?? "—"}</td>}
+                    {!isSuperAdmin && <td className="px-4 py-3 text-slate-500">{row.resourcePerson ?? "—"}</td>}
                     {!isSuperAdmin && (
                       <td className="px-4 py-3">
                         {(() => {
