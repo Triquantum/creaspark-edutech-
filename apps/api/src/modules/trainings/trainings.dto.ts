@@ -19,6 +19,8 @@ export class CreateTrainingDto {
   @IsOptional() @IsArray() @IsEnum(Role, { each: true }) targetRoles?: Role[];
   /** Omitted = every school, platform-wide. */
   @IsOptional() @IsString() targetSchoolId?: string;
+  /** Empty/omitted = every class/grade. */
+  @IsOptional() @IsArray() @IsString({ each: true }) targetClassIds?: string[];
 }
 
 export class UpdateTrainingStatusDto {
@@ -37,6 +39,7 @@ export class UpdateTrainingDto {
   @IsOptional() @IsDateString() conductedAt?: string;
   @IsOptional() @IsArray() @IsEnum(Role, { each: true }) targetRoles?: Role[];
   @IsOptional() @IsString() targetSchoolId?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) targetClassIds?: string[];
 }
 
 class AttendanceRecordDto {

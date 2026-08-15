@@ -1209,6 +1209,10 @@ model Training {
   targetRoles    Role[]
   targetSchoolId String?
   targetSchool   School?        @relation(fields: [targetSchoolId], references: [id])
+  // Empty = every class/grade. Non-empty narrows the audience to teachers
+  // with a TeacherAssignment on one of these classes (via their section) --
+  // other roles are unaffected by this filter.
+  targetClassIds String[]       @default([])
   createdAt      DateTime       @default(now())
 
   feedback   TrainingFeedback[]

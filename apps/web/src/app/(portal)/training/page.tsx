@@ -20,6 +20,7 @@ function fmtDate(s: string) {
 
 interface Me { id: string; role: string }
 interface SchoolOpt { id: string; name: string }
+interface ClassOpt { id: string; name: string; schoolId: string; schoolName: string }
 const TRAINING_STATUSES = ["SCHEDULED", "ONGOING", "COMPLETED", "CANCELLED"] as const;
 type TrainingStatusValue = (typeof TRAINING_STATUSES)[number];
 
@@ -41,6 +42,7 @@ interface TrainingRow {
   status: TrainingStatusValue;
   conductedAt: string;
   targetRoles: string[]; targetSchoolId: string | null; targetSchool: { name: string } | null;
+  targetClassIds: string[];
   conductedBy: { fullName: string };
   _count?: { feedback: number };
   feedback?: { id: string }[];
@@ -63,8 +65,8 @@ function toDateInput(iso: string) {
   return iso.slice(0, 10);
 }
 
-function TrainingFormModal({ schools, existing, onClose, onSaved }: {
-  schools: SchoolOpt[]; existing?: TrainingRow; onClose: () => void; onSaved: () => void;
+function TrainingFormModal({ schools, classes, existing, onClose, onSaved }: {
+  schools: SchoolOpt[]; classes: ClassOpt[]; existing?: TrainingRow; onClose: () => void; onSaved: () => void;
 }) {
   const [title, setTitle] = useState(existing?.title ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
@@ -77,13 +79,25 @@ function TrainingFormModal({ schools, existing, onClose, onSaved }: {
   const [conductedAt, setConductedAt] = useState(existing ? toDateInput(existing.conductedAt) : "");
   const [targetRoles, setTargetRoles] = useState<Set<string>>(new Set(existing?.targetRoles ?? []));
   const [targetSchoolId, setTargetSchoolId] = useState(existing?.targetSchoolId ?? "");
+  const [classMode, setClassMode] = useState<"ALL" | "SPECIFIC">((existing?.targetClassIds.length ?? 0) > 0 ? "SPECIFIC" : "ALL");
+  const [targetClassIds, setTargetClassIds] = useState<Set<string>>(new Set(existing?.targetClassIds ?? []));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const visibleClasses = targetSchoolId ? classes.filter((c) => c.schoolId === targetSchoolId) : classes;
 
   function toggleRole(r: string) {
     setTargetRoles((prev) => {
       const next = new Set(prev);
       if (next.has(r)) next.delete(r); else next.add(r);
+      return next;
+    });
+  }
+
+  function toggleClass(id: string) {
+    setTargetClassIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
@@ -100,6 +114,7 @@ function TrainingFormModal({ schools, existing, onClose, onSaved }: {
         resourcePerson: resourcePerson.trim() || undefined, agenda: agenda.trim() || undefined,
         conductedAt: new Date(conductedAt).toISOString(),
         targetRoles: [...targetRoles], targetSchoolId: targetSchoolId || undefined,
+        targetClassIds: classMode === "SPECIFIC" ? [...targetClassIds] : [],
       };
       if (existing) {
         await api(`/trainings/${existing.id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -174,6 +189,48 @@ function TrainingFormModal({ schools, existing, onClose, onSaved }: {
               );
             })}
           </div>
+        </div>
+        <div>
+          <p className="mb-1.5 text-sm font-medium">
+            Applicable grades / classes
+            <span className="text-slate-400"> (controls which teachers see this in Attendance)</span>
+          </p>
+          <div className="mb-2 flex gap-2">
+            <button
+              type="button" onClick={() => setClassMode("ALL")} aria-pressed={classMode === "ALL"}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors
+                ${classMode === "ALL" ? "border-accent bg-accent text-white" : "border-slate-200 bg-white text-slate-600 hover:border-accent/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}
+            >
+              All classes
+            </button>
+            <button
+              type="button" onClick={() => setClassMode("SPECIFIC")} aria-pressed={classMode === "SPECIFIC"}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors
+                ${classMode === "SPECIFIC" ? "border-accent bg-accent text-white" : "border-slate-200 bg-white text-slate-600 hover:border-accent/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}
+            >
+              Specific classes
+            </button>
+          </div>
+          {classMode === "SPECIFIC" && (
+            <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 p-3 dark:border-white/10">
+              {visibleClasses.length === 0 ? (
+                <p className="text-sm text-slate-400">No classes found{targetSchoolId ? " for the selected school" : ""}.</p>
+              ) : (
+                visibleClasses.map((c) => {
+                  const active = targetClassIds.has(c.id);
+                  return (
+                    <button
+                      key={c.id} type="button" onClick={() => toggleClass(c.id)} aria-pressed={active}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors
+                        ${active ? "border-accent bg-accent text-white" : "border-slate-200 bg-white text-slate-600 hover:border-accent/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}
+                    >
+                      {c.name}{!targetSchoolId && ` · ${c.schoolName}`}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3">
@@ -384,6 +441,7 @@ function AttendanceModal({ training, onClose, onSaved }: { training: TrainingRow
 export default function TrainingPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [schools, setSchools] = useState<SchoolOpt[]>([]);
+  const [classes, setClasses] = useState<ClassOpt[]>([]);
   const [rows, setRows] = useState<TrainingRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [creating, setCreating] = useState(false);
@@ -403,6 +461,7 @@ export default function TrainingPage() {
   useEffect(() => {
     api<Me>("/auth/me").then(setMe).catch(() => setMe(null));
     api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([]));
+    api<ClassOpt[]>("/academic/classes").then(setClasses).catch(() => setClasses([]));
   }, []);
   useEffect(load, [load]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
@@ -475,6 +534,9 @@ export default function TrainingPage() {
                     <td className="px-4 py-3 text-slate-500">
                       {row.targetRoles.length === 0 ? "Everyone" : row.targetRoles.map(roleLabel).join(", ")}
                       {row.targetSchool && ` · ${row.targetSchool.name}`}
+                      {row.targetClassIds.length > 0 && (
+                        ` · ${row.targetClassIds.map((id) => classes.find((c) => c.id === id)?.name ?? id).join(", ")}`
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {isSuperAdmin ? (
@@ -521,11 +583,11 @@ export default function TrainingPage() {
       </Card>
 
       {creating && (
-        <TrainingFormModal schools={schools} onClose={() => setCreating(false)}
+        <TrainingFormModal schools={schools} classes={classes} onClose={() => setCreating(false)}
           onSaved={() => { setCreating(false); setToast("Training created"); load(); }} />
       )}
       {editingFor && (
-        <TrainingFormModal schools={schools} existing={editingFor} onClose={() => setEditingFor(null)}
+        <TrainingFormModal schools={schools} classes={classes} existing={editingFor} onClose={() => setEditingFor(null)}
           onSaved={() => { setEditingFor(null); setToast("Training updated"); load(); }} />
       )}
       {feedbackFor && (

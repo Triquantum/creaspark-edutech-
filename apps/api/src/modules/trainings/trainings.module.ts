@@ -3,7 +3,7 @@ import {
   Param, Patch, Post, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Role } from "@educore/database";
+import { Prisma, Role } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -37,21 +37,39 @@ export class TrainingsService {
     return guardian?.student.schoolId ?? null;
   }
 
-  private async isTargeted(training: { targetRoles: Role[]; targetSchoolId: string | null }, user: AuthUser): Promise<boolean> {
+  private async isTargeted(
+    training: { targetRoles: Role[]; targetSchoolId: string | null; targetClassIds: string[] },
+    user: AuthUser,
+  ): Promise<boolean> {
     const roleOk = training.targetRoles.length === 0 || training.targetRoles.includes(user.role as Role);
     if (!roleOk) return false;
-    if (!training.targetSchoolId) return true;
-    return (await this.resolveMySchoolId(user.id)) === training.targetSchoolId;
+    if (training.targetSchoolId && (await this.resolveMySchoolId(user.id)) !== training.targetSchoolId) return false;
+    if (training.targetClassIds.length > 0 && user.role === Role.TEACHER) {
+      const assigned = await this.prisma.teacherAssignment.findFirst({
+        where: { teacherId: user.id, section: { classId: { in: training.targetClassIds } } },
+      });
+      if (!assigned) return false;
+    }
+    return true;
   }
 
   /** Same audience match used to decide who gets notified -- reused here so
-   * the attendance picker lists exactly the people who were targeted. */
-  private audienceWhere(targetRoles: Role[], targetSchoolId: string | null) {
-    return {
-      isActive: true,
-      ...(targetRoles.length > 0 && { role: { in: targetRoles } }),
-      ...(targetSchoolId && { staffProfile: { schoolId: targetSchoolId } }),
-    };
+   * the attendance picker lists exactly the people who were targeted.
+   * targetClassIds narrows teachers to those with a TeacherAssignment on one
+   * of those classes (via their section); non-teacher roles are unaffected. */
+  private audienceWhere(targetRoles: Role[], targetSchoolId: string | null, targetClassIds: string[]): Prisma.UserWhereInput {
+    const AND: Prisma.UserWhereInput[] = [{ isActive: true }];
+    if (targetRoles.length > 0) AND.push({ role: { in: targetRoles } });
+    if (targetSchoolId) AND.push({ staffProfile: { schoolId: targetSchoolId } });
+    if (targetClassIds.length > 0) {
+      AND.push({
+        OR: [
+          { role: { not: Role.TEACHER } },
+          { teacherAssignments: { some: { section: { classId: { in: targetClassIds } } } } },
+        ],
+      });
+    }
+    return { AND };
   }
 
   /** Notifies the matched audience via the existing Message/bell system --
@@ -60,9 +78,12 @@ export class TrainingsService {
    * tenantId (not the creating Super Admin's placeholder one) since a
    * platform-wide training's audience can span every tenant, and a
    * Message only surfaces in a recipient's own tenant-scoped inbox. */
-  private async notifyAudience(training: { id: string; title: string }, creatorId: string, targetRoles: Role[], targetSchoolId?: string) {
+  private async notifyAudience(
+    training: { id: string; title: string }, creatorId: string,
+    targetRoles: Role[], targetSchoolId: string | undefined, targetClassIds: string[],
+  ) {
     const recipients = await this.prisma.user.findMany({
-      where: this.audienceWhere(targetRoles, targetSchoolId ?? null),
+      where: this.audienceWhere(targetRoles, targetSchoolId ?? null, targetClassIds),
       select: { id: true, tenantId: true },
     });
     if (!recipients.length) return;
@@ -77,6 +98,7 @@ export class TrainingsService {
 
   async create(dto: CreateTrainingDto, user: AuthUser) {
     const targetRoles = dto.targetRoles ?? [];
+    const targetClassIds = dto.targetClassIds ?? [];
     const training = await this.prisma.training.create({
       data: {
         tenantId: currentTenant().tenantId, title: dto.title, description: dto.description,
@@ -84,11 +106,11 @@ export class TrainingsService {
         resourcePerson: dto.resourcePerson, agenda: dto.agenda,
         ...(dto.status && { status: dto.status }),
         conductedAt: new Date(dto.conductedAt), conductedById: user.id,
-        targetRoles, targetSchoolId: dto.targetSchoolId,
+        targetRoles, targetSchoolId: dto.targetSchoolId, targetClassIds,
       },
       include: TRAINING_INCLUDE,
     });
-    await this.notifyAudience(training, user.id, targetRoles, dto.targetSchoolId);
+    await this.notifyAudience(training, user.id, targetRoles, dto.targetSchoolId, targetClassIds);
     return training;
   }
 
@@ -103,13 +125,19 @@ export class TrainingsService {
       });
     }
     const mySchoolId = await this.resolveMySchoolId(user.id);
+    const conditions: Prisma.TrainingWhereInput[] = [
+      { OR: [{ targetRoles: { isEmpty: true } }, { targetRoles: { has: user.role as Role } }] },
+      { OR: [{ targetSchoolId: null }, ...(mySchoolId ? [{ targetSchoolId: mySchoolId }] : [])] },
+    ];
+    if (user.role === Role.TEACHER) {
+      const assignments = await this.prisma.teacherAssignment.findMany({
+        where: { teacherId: user.id }, select: { section: { select: { classId: true } } },
+      });
+      const myClassIds = [...new Set(assignments.map((a) => a.section.classId))];
+      conditions.push({ OR: [{ targetClassIds: { isEmpty: true } }, { targetClassIds: { hasSome: myClassIds } }] });
+    }
     return this.prisma.training.findMany({
-      where: {
-        AND: [
-          { OR: [{ targetRoles: { isEmpty: true } }, { targetRoles: { has: user.role as Role } }] },
-          { OR: [{ targetSchoolId: null }, ...(mySchoolId ? [{ targetSchoolId: mySchoolId }] : [])] },
-        ],
-      },
+      where: { AND: conditions },
       include: { ...TRAINING_INCLUDE, feedback: { where: { respondentId: user.id }, select: { id: true } } },
       orderBy: { conductedAt: "desc" },
     });
@@ -148,6 +176,7 @@ export class TrainingsService {
         ...(dto.conductedAt !== undefined && { conductedAt: new Date(dto.conductedAt) }),
         ...(dto.targetRoles !== undefined && { targetRoles: dto.targetRoles }),
         targetSchoolId: clearable(dto.targetSchoolId),
+        ...(dto.targetClassIds !== undefined && { targetClassIds: dto.targetClassIds }),
       },
       include: TRAINING_INCLUDE,
     });
@@ -208,7 +237,7 @@ export class TrainingsService {
   async getAttendance(id: string) {
     const training = await this.findTraining(id);
     const audience = await this.prisma.user.findMany({
-      where: this.audienceWhere(training.targetRoles, training.targetSchoolId),
+      where: this.audienceWhere(training.targetRoles, training.targetSchoolId, training.targetClassIds),
       select: {
         id: true, fullName: true, role: true,
         staffProfile: { select: { school: { select: { name: true } } } },
