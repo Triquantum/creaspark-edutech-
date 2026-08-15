@@ -1,9 +1,12 @@
 import {
-  Body, Controller, Delete, Get, Injectable, Module, NotFoundException,
-  Param, Patch, Post, UseGuards,
+  BadRequestException, Body, Controller, Delete, Get, Injectable, Module, NotFoundException,
+  Param, Patch, Post, Res, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma, Role } from "@educore/database";
+import type { Response } from "express";
+import PDFDocument from "pdfkit";
+import nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -11,7 +14,8 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
 import {
-  CreateTrainingDto, MarkAttendanceDto, SubmitFeedbackDto, UpdateTrainingDto, UpdateTrainingStatusDto,
+  CreateTrainingDto, EmailTrainingReportDto, MarkAttendanceDto, SubmitFeedbackDto,
+  UpdateTrainingDto, UpdateTrainingStatusDto,
 } from "./trainings.dto";
 
 const TRAINING_INCLUDE = {
@@ -272,6 +276,134 @@ export class TrainingsService {
     );
     return this.getAttendance(id);
   }
+
+  /** Single-training report: details, feedback summary + responses, and
+   * the attendance roster -- pdfkit has no table primitive for the
+   * detail/feedback sections, so they're laid out as plain text lines;
+   * only the attendance roster is dense enough to warrant a grid. */
+  private buildTrainingReportPdf(
+    training: Awaited<ReturnType<TrainingsService["findTraining"]>> & {
+      conductedBy: { fullName: string }; targetSchool: { name: string } | null;
+    },
+    feedback: Awaited<ReturnType<TrainingsService["getFeedback"]>>,
+    attendance: Awaited<ReturnType<TrainingsService["getAttendance"]>>,
+    classNames: string[],
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 48, size: "A4" });
+      const chunks: Buffer[] = [];
+      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+
+      doc.fontSize(18).fillColor("#000").text(training.title);
+      doc.fontSize(9).fillColor("#666").text(`Generated ${new Date().toLocaleString("en-IN")}`);
+      doc.moveDown();
+
+      const audience = [
+        training.targetRoles.length === 0 ? "Everyone" : training.targetRoles.join(", "),
+        training.targetSchool?.name,
+        classNames.length > 0 ? classNames.join(", ") : null,
+      ].filter(Boolean).join(" · ");
+
+      doc.fontSize(12).fillColor("#000").text("Details", { underline: true });
+      doc.fontSize(10).fillColor("#333");
+      const details: [string, string][] = [
+        ["Subject", training.subject ?? "—"],
+        ["Status", training.status],
+        ["Conducted on", new Date(training.conductedAt).toLocaleDateString("en-IN")],
+        ["Conducted by", training.conductedBy.fullName],
+        ["Venue", training.venue ?? "—"],
+        ["Duration", training.duration ?? "—"],
+        ["Resource person", training.resourcePerson ?? "—"],
+        ["Audience", audience || "Everyone"],
+      ];
+      for (const [label, value] of details) doc.text(`${label}: ${value}`);
+      if (training.description) doc.moveDown(0.3).text(`Description: ${training.description}`);
+      if (training.agenda) doc.moveDown(0.3).text(`Agenda: ${training.agenda}`);
+
+      doc.moveDown();
+      doc.fontSize(12).fillColor("#000").text("Feedback summary", { underline: true });
+      doc.fontSize(10).fillColor("#333").text(
+        `Content: ${feedback.averages.content ?? "—"}   Trainer: ${feedback.averages.trainer ?? "—"}   `
+        + `Usefulness: ${feedback.averages.usefulness ?? "—"}   Overall: ${feedback.averages.overall ?? "—"}`,
+      );
+      doc.moveDown(0.3);
+      if (feedback.responses.length === 0) {
+        doc.text("No feedback submitted yet.");
+      } else {
+        for (const r of feedback.responses) {
+          doc.text(
+            `${r.respondent.fullName} (${r.respondent.role}) — Content ${r.contentRating}, `
+            + `Trainer ${r.trainerRating}, Usefulness ${r.usefulnessRating}, Overall ${r.overallRating}`,
+          );
+          if (r.comments) doc.fontSize(9).fillColor("#666").text(r.comments, { indent: 12 }).fontSize(10).fillColor("#333");
+        }
+      }
+
+      doc.moveDown();
+      doc.fontSize(12).fillColor("#000").text("Attendance", { underline: true });
+      doc.fontSize(10).fillColor("#333");
+      if (attendance.length === 0) {
+        doc.text("No one is targeted by this training yet.");
+      } else {
+        for (const a of attendance) {
+          const mark = a.present === true ? "Present" : a.present === false ? "Absent" : "Not marked";
+          doc.text(`${a.fullName} (${a.role}${a.schoolName ? ` · ${a.schoolName}` : ""}) — ${mark}`);
+        }
+      }
+
+      doc.end();
+    });
+  }
+
+  /** Fails fast with a clear message rather than a cryptic SMTP error if
+   * the server has no email credentials configured yet. */
+  private async sendEmail(to: string, subject: string, text: string, attachment: { filename: string; content: Buffer }): Promise<void> {
+    const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+      throw new BadRequestException(
+        "Email sending isn't configured on this server yet — an administrator needs to set SMTP_HOST/SMTP_USER/SMTP_PASS.",
+      );
+    }
+    const transporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT ? Number(SMTP_PORT) : 587,
+      secure: Number(SMTP_PORT) === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+    try {
+      await transporter.sendMail({ from: SMTP_FROM || SMTP_USER, to, subject, text, attachments: [attachment] });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown SMTP error";
+      throw new BadRequestException(`Could not send email: ${message}`);
+    }
+  }
+
+  async reportPdf(id: string): Promise<Buffer> {
+    const training = await this.prisma.training.findUnique({ where: { id }, include: TRAINING_INCLUDE });
+    if (!training) throw new NotFoundException("Training not found");
+    const [feedback, attendance, classes] = await Promise.all([
+      this.getFeedback(id),
+      this.getAttendance(id),
+      training.targetClassIds.length
+        ? this.prisma.class.findMany({ where: { id: { in: training.targetClassIds } }, select: { name: true } })
+        : Promise.resolve([]),
+    ]);
+    return this.buildTrainingReportPdf(training, feedback, attendance, classes.map((c) => c.name));
+  }
+
+  async emailReport(id: string, toEmail: string): Promise<{ sent: boolean }> {
+    const training = await this.findTraining(id);
+    const pdf = await this.reportPdf(id);
+    await this.sendEmail(
+      toEmail,
+      `Training Report — ${training.title}`,
+      `Attached is the training report for "${training.title}", generated ${new Date().toLocaleString("en-IN")}.`,
+      { filename: "training-report.pdf", content: pdf },
+    );
+    return { sent: true };
+  }
 }
 
 @ApiTags("trainings")
@@ -336,6 +468,22 @@ export class TrainingsController {
   @Roles(Role.SUPER_ADMIN)
   markAttendance(@Param("id") id: string, @Body() dto: MarkAttendanceDto, @CurrentUser() user: AuthUser) {
     return this.svc.markAttendance(id, dto, user);
+  }
+
+  /** "Print" is just opening this PDF in a new tab and using the browser's own print dialog. */
+  @Get(":id/report/pdf")
+  @Roles(Role.SUPER_ADMIN)
+  async reportPdf(@Param("id") id: string, @Res() res: Response) {
+    const pdf = await this.svc.reportPdf(id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="training-report.pdf"');
+    res.send(pdf);
+  }
+
+  @Post(":id/report/email")
+  @Roles(Role.SUPER_ADMIN)
+  emailReport(@Param("id") id: string, @Body() dto: EmailTrainingReportDto) {
+    return this.svc.emailReport(id, dto.toEmail);
   }
 }
 

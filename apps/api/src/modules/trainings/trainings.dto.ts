@@ -1,5 +1,5 @@
 import {
-  ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsInt,
+  ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsInt,
   IsOptional, IsString, Max, Min, ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
@@ -58,4 +58,8 @@ export class SubmitFeedbackDto {
   @IsInt() @Min(1) @Max(5) usefulnessRating: number;
   @IsInt() @Min(1) @Max(5) overallRating: number;
   @IsOptional() @IsString() comments?: string;
+}
+
+export class EmailTrainingReportDto {
+  @IsEmail() toEmail: string;
 }

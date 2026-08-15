@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiBlob } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, Field, inputCls } from "@/components/ui/modal";
@@ -443,6 +443,43 @@ function AttendanceModal({ training, onClose, onSaved }: { training: TrainingRow
   );
 }
 
+function EmailReportModal({ training, onClose, onSent }: { training: TrainingRow; onClose: () => void; onSent: () => void }) {
+  const [toEmail, setToEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await api(`/trainings/${training.id}/report/email`, { method: "POST", body: JSON.stringify({ toEmail }) });
+      onSent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the report");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Email report · ${training.title}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-slate-500">Sends the training details, feedback summary, and attendance roster as a PDF attachment.</p>
+        <Field id="report-email-to" label="Recipient email">
+          <input id="report-email-to" type="email" required value={toEmail} onChange={(e) => setToEmail(e.target.value)}
+            placeholder="someone@example.com" className={inputCls} />
+        </Field>
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? "Sending…" : "Send"}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function TrainingPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [schools, setSchools] = useState<SchoolOpt[]>([]);
@@ -454,6 +491,7 @@ export default function TrainingPage() {
   const [feedbackFor, setFeedbackFor] = useState<{ training: TrainingRow; existing: FeedbackResponse | null } | null>(null);
   const [summaryFor, setSummaryFor] = useState<TrainingRow | null>(null);
   const [attendanceFor, setAttendanceFor] = useState<TrainingRow | null>(null);
+  const [emailReportFor, setEmailReportFor] = useState<TrainingRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
@@ -515,6 +553,15 @@ export default function TrainingPage() {
       load();
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Could not delete training");
+    }
+  }
+
+  async function printReport(row: TrainingRow) {
+    try {
+      const blob = await apiBlob(`/trainings/${row.id}/report/pdf`);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not generate the report");
     }
   }
 
@@ -646,6 +693,8 @@ export default function TrainingPage() {
                         <div className="flex justify-end gap-2">
                           <Button variant="ghost" onClick={() => setAttendanceFor(row)}>Attendance</Button>
                           <Button variant="ghost" onClick={() => setSummaryFor(row)}>View responses</Button>
+                          <Button variant="ghost" onClick={() => printReport(row)}>Print / PDF</Button>
+                          <Button variant="ghost" onClick={() => setEmailReportFor(row)}>Email report</Button>
                           <Button variant="ghost" onClick={() => setEditingFor(row)}>Edit</Button>
                           <Button variant="ghost" className="text-danger" onClick={() => deleteTraining(row)}>Delete</Button>
                         </div>
@@ -683,6 +732,12 @@ export default function TrainingPage() {
         <AttendanceModal
           training={attendanceFor} onClose={() => setAttendanceFor(null)}
           onSaved={() => { setAttendanceFor(null); setToast("Attendance saved"); }}
+        />
+      )}
+      {emailReportFor && (
+        <EmailReportModal
+          training={emailReportFor} onClose={() => setEmailReportFor(null)}
+          onSent={() => { setEmailReportFor(null); setToast("Report emailed"); }}
         />
       )}
 
