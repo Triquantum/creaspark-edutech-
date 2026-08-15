@@ -10,7 +10,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
-import { CreateTrainingDto, SubmitFeedbackDto } from "./trainings.dto";
+import { CreateTrainingDto, MarkAttendanceDto, SubmitFeedbackDto } from "./trainings.dto";
 
 const TRAINING_INCLUDE = {
   conductedBy: { select: { fullName: true } },
@@ -42,6 +42,16 @@ export class TrainingsService {
     return (await this.resolveMySchoolId(user.id)) === training.targetSchoolId;
   }
 
+  /** Same audience match used to decide who gets notified -- reused here so
+   * the attendance picker lists exactly the people who were targeted. */
+  private audienceWhere(targetRoles: Role[], targetSchoolId: string | null) {
+    return {
+      isActive: true,
+      ...(targetRoles.length > 0 && { role: { in: targetRoles } }),
+      ...(targetSchoolId && { staffProfile: { schoolId: targetSchoolId } }),
+    };
+  }
+
   /** Notifies the matched audience via the existing Message/bell system --
    * same reuse as portion.module.ts's notifyReviewers and tasks.module.ts's
    * notifyAssignee. Each recipient's message is stamped with THEIR OWN
@@ -50,11 +60,7 @@ export class TrainingsService {
    * Message only surfaces in a recipient's own tenant-scoped inbox. */
   private async notifyAudience(training: { id: string; title: string }, creatorId: string, targetRoles: Role[], targetSchoolId?: string) {
     const recipients = await this.prisma.user.findMany({
-      where: {
-        isActive: true,
-        ...(targetRoles.length > 0 && { role: { in: targetRoles } }),
-        ...(targetSchoolId && { staffProfile: { schoolId: targetSchoolId } }),
-      },
+      where: this.audienceWhere(targetRoles, targetSchoolId ?? null),
       select: { id: true, tenantId: true },
     });
     if (!recipients.length) return;
@@ -72,6 +78,7 @@ export class TrainingsService {
     const training = await this.prisma.training.create({
       data: {
         tenantId: currentTenant().tenantId, title: dto.title, description: dto.description,
+        venue: dto.venue, duration: dto.duration, resourcePerson: dto.resourcePerson, agenda: dto.agenda,
         conductedAt: new Date(dto.conductedAt), conductedById: user.id,
         targetRoles, targetSchoolId: dto.targetSchoolId,
       },
@@ -152,6 +159,43 @@ export class TrainingsService {
       },
     });
   }
+
+  /** SUPER_ADMIN-only: the targeted audience, each row carrying their
+   * existing attendance mark (if any) so the picker opens pre-checked. */
+  async getAttendance(id: string) {
+    const training = await this.findTraining(id);
+    const audience = await this.prisma.user.findMany({
+      where: this.audienceWhere(training.targetRoles, training.targetSchoolId),
+      select: {
+        id: true, fullName: true, role: true,
+        staffProfile: { select: { school: { select: { name: true } } } },
+      },
+      orderBy: { fullName: "asc" },
+    });
+    const records = await this.prisma.trainingAttendance.findMany({ where: { trainingId: id } });
+    const byUser = new Map(records.map((r) => [r.userId, r]));
+    return audience.map((u) => ({
+      userId: u.id, fullName: u.fullName, role: u.role, schoolName: u.staffProfile?.school.name ?? null,
+      present: byUser.get(u.id)?.present ?? null,
+      markedAt: byUser.get(u.id)?.markedAt ?? null,
+    }));
+  }
+
+  /** SUPER_ADMIN-only: bulk upsert Present/Absent marks for the audience. */
+  async markAttendance(id: string, dto: MarkAttendanceDto, user: AuthUser) {
+    await this.findTraining(id);
+    const tenantId = currentTenant().tenantId;
+    await this.prisma.$transaction(
+      dto.records.map((r) =>
+        this.prisma.trainingAttendance.upsert({
+          where: { trainingId_userId: { trainingId: id, userId: r.userId } },
+          create: { tenantId, trainingId: id, userId: r.userId, present: r.present, markedById: user.id },
+          update: { present: r.present, markedById: user.id, markedAt: new Date() },
+        }),
+      ),
+    );
+    return this.getAttendance(id);
+  }
 }
 
 @ApiTags("trainings")
@@ -186,6 +230,18 @@ export class TrainingsController {
   @Post(":id/feedback")
   submitFeedback(@Param("id") id: string, @Body() dto: SubmitFeedbackDto, @CurrentUser() user: AuthUser) {
     return this.svc.submitFeedback(id, dto, user);
+  }
+
+  @Get(":id/attendance")
+  @Roles(Role.SUPER_ADMIN)
+  getAttendance(@Param("id") id: string) {
+    return this.svc.getAttendance(id);
+  }
+
+  @Post(":id/attendance")
+  @Roles(Role.SUPER_ADMIN)
+  markAttendance(@Param("id") id: string, @Body() dto: MarkAttendanceDto, @CurrentUser() user: AuthUser) {
+    return this.svc.markAttendance(id, dto, user);
   }
 }
 

@@ -21,11 +21,17 @@ function fmtDate(s: string) {
 interface Me { id: string; role: string }
 interface SchoolOpt { id: string; name: string }
 interface TrainingRow {
-  id: string; title: string; description: string | null; conductedAt: string;
+  id: string; title: string; description: string | null;
+  venue: string | null; duration: string | null; resourcePerson: string | null; agenda: string | null;
+  conductedAt: string;
   targetRoles: string[]; targetSchool: { name: string } | null;
   conductedBy: { fullName: string };
   _count?: { feedback: number };
   feedback?: { id: string }[];
+}
+interface AttendanceRow {
+  userId: string; fullName: string; role: string; schoolName: string | null;
+  present: boolean | null; markedAt: string | null;
 }
 interface FeedbackResponse {
   id: string; contentRating: number; trainerRating: number; usefulnessRating: number; overallRating: number;
@@ -40,6 +46,10 @@ interface FeedbackSummary {
 function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[]; onClose: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [venue, setVenue] = useState("");
+  const [duration, setDuration] = useState("");
+  const [resourcePerson, setResourcePerson] = useState("");
+  const [agenda, setAgenda] = useState("");
   const [conductedAt, setConductedAt] = useState("");
   const [targetRoles, setTargetRoles] = useState<Set<string>>(new Set());
   const [targetSchoolId, setTargetSchoolId] = useState("");
@@ -63,6 +73,8 @@ function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[];
         method: "POST",
         body: JSON.stringify({
           title: title.trim(), description: description.trim() || undefined,
+          venue: venue.trim() || undefined, duration: duration.trim() || undefined,
+          resourcePerson: resourcePerson.trim() || undefined, agenda: agenda.trim() || undefined,
           conductedAt: new Date(conductedAt).toISOString(),
           targetRoles: [...targetRoles], targetSchoolId: targetSchoolId || undefined,
         }),
@@ -95,6 +107,20 @@ function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[];
             </select>
           </Field>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field id="tr-venue" label="Venue" optional>
+            <input id="tr-venue" value={venue} onChange={(e) => setVenue(e.target.value)} className={inputCls} />
+          </Field>
+          <Field id="tr-duration" label="Duration" optional>
+            <input id="tr-duration" placeholder="e.g. 9am - 1pm" value={duration} onChange={(e) => setDuration(e.target.value)} className={inputCls} />
+          </Field>
+        </div>
+        <Field id="tr-resource-person" label="Resource person / Trainer" optional>
+          <input id="tr-resource-person" value={resourcePerson} onChange={(e) => setResourcePerson(e.target.value)} className={inputCls} />
+        </Field>
+        <Field id="tr-agenda" label="Agenda" optional>
+          <textarea id="tr-agenda" rows={3} className={`${inputCls} h-auto py-3`} value={agenda} onChange={(e) => setAgenda(e.target.value)} />
+        </Field>
         <div>
           <p className="mb-1.5 text-sm font-medium">Target roles <span className="text-slate-400">(none selected = everyone)</span></p>
           <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 p-3 dark:border-white/10">
@@ -235,6 +261,87 @@ function FeedbackSummaryModal({ training, onClose }: { training: TrainingRow; on
   );
 }
 
+function AttendanceModal({ training, onClose, onSaved }: { training: TrainingRow; onClose: () => void; onSaved: () => void }) {
+  const [rows, setRows] = useState<AttendanceRow[] | null>(null);
+  const [marks, setMarks] = useState<Map<string, boolean>>(new Map());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<AttendanceRow[]>(`/trainings/${training.id}/attendance`).then((r) => {
+      setRows(r);
+      setMarks(new Map(r.filter((row) => row.present !== null).map((row) => [row.userId, row.present as boolean])));
+    }).catch(() => setRows([]));
+  }, [training.id]);
+
+  function setMark(userId: string, present: boolean) {
+    setMarks((prev) => new Map(prev).set(userId, present));
+  }
+
+  async function save() {
+    setError(null);
+    setBusy(true);
+    try {
+      await api(`/trainings/${training.id}/attendance`, {
+        method: "POST",
+        body: JSON.stringify({ records: [...marks.entries()].map(([userId, present]) => ({ userId, present })) }),
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save attendance");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Attendance · ${training.title}`} onClose={onClose} wide>
+      {!rows ? (
+        <p className="text-sm text-slate-500">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-slate-500">No one is targeted by this training yet.</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="max-h-96 space-y-2 overflow-y-auto">
+            {rows.map((row) => {
+              const mark = marks.get(row.userId);
+              return (
+                <div key={row.userId} className="flex items-center justify-between rounded-xl border border-slate-100 p-3 text-sm dark:border-white/10">
+                  <div>
+                    <p className="font-medium text-night dark:text-white">{row.fullName}</p>
+                    <p className="text-xs text-slate-400">{roleLabel(row.role)}{row.schoolName && ` · ${row.schoolName}`}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button" onClick={() => setMark(row.userId, true)} aria-pressed={mark === true}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors
+                        ${mark === true ? "border-success bg-success text-white" : "border-slate-200 bg-white text-slate-600 hover:border-success/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}
+                    >
+                      Present
+                    </button>
+                    <button
+                      type="button" onClick={() => setMark(row.userId, false)} aria-pressed={mark === false}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors
+                        ${mark === false ? "border-danger bg-danger text-white" : "border-slate-200 bg-white text-slate-600 hover:border-danger/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}
+                    >
+                      Absent
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
+            <Button type="button" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save attendance"}</Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export default function TrainingPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [schools, setSchools] = useState<SchoolOpt[]>([]);
@@ -243,6 +350,7 @@ export default function TrainingPage() {
   const [creating, setCreating] = useState(false);
   const [feedbackFor, setFeedbackFor] = useState<{ training: TrainingRow; existing: FeedbackResponse | null } | null>(null);
   const [summaryFor, setSummaryFor] = useState<TrainingRow | null>(null);
+  const [attendanceFor, setAttendanceFor] = useState<TrainingRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const isSuperAdmin = me?.role === "SUPER_ADMIN";
@@ -319,7 +427,10 @@ export default function TrainingPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {isSuperAdmin ? (
-                        <Button variant="ghost" onClick={() => setSummaryFor(row)}>View responses</Button>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" onClick={() => setAttendanceFor(row)}>Attendance</Button>
+                          <Button variant="ghost" onClick={() => setSummaryFor(row)}>View responses</Button>
+                        </div>
                       ) : (
                         <Button variant="ghost" onClick={() => openFeedback(row)}>
                           {(row.feedback?.length ?? 0) > 0 ? "Edit feedback" : "Give feedback"}
@@ -346,6 +457,12 @@ export default function TrainingPage() {
         />
       )}
       {summaryFor && <FeedbackSummaryModal training={summaryFor} onClose={() => setSummaryFor(null)} />}
+      {attendanceFor && (
+        <AttendanceModal
+          training={attendanceFor} onClose={() => setAttendanceFor(null)}
+          onSaved={() => { setAttendanceFor(null); setToast("Attendance saved"); }}
+        />
+      )}
 
       {toast && (
         <div role="status" className="fixed bottom-6 right-6 z-50 rounded-xl bg-night px-4 py-3 text-sm text-white shadow-lift">

@@ -149,6 +149,8 @@ model User {
   tasksUpdated            TaskItem[] @relation("TasksUpdatedBy")
   trainingsConducted      Training[] @relation("TrainingsConducted")
   trainingFeedback        TrainingFeedback[]
+  trainingAttendance      TrainingAttendance[] @relation("TrainingAttendee")
+  trainingAttendanceMarked TrainingAttendance[] @relation("TrainingAttendanceMarkedBy")
   userAccess              UserAccess[]
   salarySlipsReceived     SalarySlipLog[] @relation("SalarySlipsFor")
   salarySlipsGenerated    SalarySlipLog[] @relation("SalarySlipsGeneratedBy")
@@ -1188,6 +1190,10 @@ model Training {
   tenantId       String
   title          String
   description    String?
+  venue          String?
+  duration       String?                         // free text -- "2 hours", "9am-1pm", etc.
+  resourcePerson String?                          // trainer/facilitator name, distinct from conductedBy (who scheduled it)
+  agenda         String?
   conductedAt    DateTime
   conductedById  String
   conductedBy    User     @relation("TrainingsConducted", fields: [conductedById], references: [id])
@@ -1196,9 +1202,26 @@ model Training {
   targetSchool   School?  @relation(fields: [targetSchoolId], references: [id])
   createdAt      DateTime @default(now())
 
-  feedback TrainingFeedback[]
+  feedback   TrainingFeedback[]
+  attendance TrainingAttendance[]
 
   @@index([targetSchoolId])
+}
+
+model TrainingAttendance {
+  id         String   @id @default(cuid())
+  tenantId   String
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("TrainingAttendee", fields: [userId], references: [id])
+  present    Boolean  @default(true)
+  markedById String
+  markedBy   User     @relation("TrainingAttendanceMarkedBy", fields: [markedById], references: [id])
+  markedAt   DateTime @default(now())
+
+  @@unique([trainingId, userId])
+  @@index([tenantId, trainingId])
 }
 
 model TrainingFeedback {
