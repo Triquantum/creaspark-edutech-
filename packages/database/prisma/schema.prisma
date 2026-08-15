@@ -869,6 +869,7 @@ enum PortionStatus {
 enum PortionMode {
   PRACTICAL
   THEORY
+  PROJECT
 }
 
 enum PortionCompletionStatus {

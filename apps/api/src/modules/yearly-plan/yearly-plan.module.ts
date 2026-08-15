@@ -65,11 +65,17 @@ export class ListGradesQueryDto {
 export class YearlyPlanService {
   constructor(private prisma: PrismaService) {}
 
-  async listGrades(filter: ListGradesQueryDto = {}) {
+  async listGrades(filter: ListGradesQueryDto = {}, user?: AuthUser) {
     const where: Prisma.YearlyPlanGradeWhereInput = {};
     if (filter.academicYear) where.academicYear = filter.academicYear;
     if (filter.gradeLabel) where.gradeLabel = filter.gradeLabel;
-    if (filter.schoolId) where.assignments = { some: { schoolId: filter.schoolId } };
+    // Teachers only ever see grades they're personally assigned to -- never
+    // the school's full yearly-plan roster (that's School Admin+ territory).
+    if (user?.role === Role.TEACHER) {
+      where.assignments = { some: { teacherId: user.id, ...(filter.schoolId && { schoolId: filter.schoolId }) } };
+    } else if (filter.schoolId) {
+      where.assignments = { some: { schoolId: filter.schoolId } };
+    }
 
     const entryFilter: Prisma.YearlyPlanEntryWhereInput = {};
     if (filter.subject) entryFilter.subject = filter.subject;
@@ -119,8 +125,18 @@ export class YearlyPlanService {
     return grade;
   }
 
-  gradeDetail(id: string) {
-    return this.findGrade(id);
+  // Teachers only ever see their own assignment(s) for this grade, never the
+  // school's full assignment roster -- both to keep other teachers'/schools'
+  // names out of a teacher's browser, and so the detail page's "Assigned
+  // Schools & Teachers" card has nothing to render for them.
+  async gradeDetail(id: string, user?: AuthUser) {
+    const grade = await this.findGrade(id);
+    if (user?.role === Role.TEACHER) {
+      const own = grade.assignments.filter((a) => a.teacherId === user.id);
+      if (own.length === 0) throw new NotFoundException("Yearly plan not found");
+      return { ...grade, assignments: own };
+    }
+    return grade;
   }
 
   createGrade(dto: CreateGradeDto, user: AuthUser) {
@@ -192,9 +208,9 @@ export class YearlyPlanService {
 export class YearlyPlanController {
   constructor(private svc: YearlyPlanService) {}
 
-  @Get("grades") listGrades(@Query() query: ListGradesQueryDto) { return this.svc.listGrades(query); }
+  @Get("grades") listGrades(@Query() query: ListGradesQueryDto, @CurrentUser() user: AuthUser) { return this.svc.listGrades(query, user); }
   @Get("grades/filter-options") filterOptions() { return this.svc.filterOptions(); }
-  @Get("grades/:id") gradeDetail(@Param("id") id: string) { return this.svc.gradeDetail(id); }
+  @Get("grades/:id") gradeDetail(@Param("id") id: string, @CurrentUser() user: AuthUser) { return this.svc.gradeDetail(id, user); }
 
   @Post("grades") @Roles(...MANAGE)
   createGrade(@Body() dto: CreateGradeDto, @CurrentUser() user: AuthUser) { return this.svc.createGrade(dto, user); }

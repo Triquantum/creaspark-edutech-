@@ -231,7 +231,7 @@ export default function YearlyPlanDetailPage() {
 
       {state === "error" && <p className="text-sm text-slate-500">Couldn&apos;t load this plan.</p>}
 
-      {grade && (
+      {grade && me?.role !== "TEACHER" && (
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-base font-semibold text-night dark:text-white">Assigned Schools &amp; Teachers</h2>

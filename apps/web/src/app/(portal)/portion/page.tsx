@@ -12,7 +12,7 @@ interface PortionReport {
   subjectId: string; classId: string | null; sectionId: string | null;
   chapterName: string | null; description: string | null; topicsCovered: string;
   percentComplete: number | null; status: "SUBMITTED" | "REVIEWED" | "FLAGGED";
-  mode: "PRACTICAL" | "THEORY" | null; completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | null;
+  mode: "PRACTICAL" | "THEORY" | "PROJECT" | null; completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | null;
   reviewNote: string | null;
   reviewComments: string | null;
   reviewRemarks: string | null;
@@ -47,13 +47,18 @@ function CompletionBadge({ status }: { status: PortionReport["completionStatus"]
   return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${COMPLETION_STYLE[status]}`}>{COMPLETION_LABEL[status]}</span>;
 }
 
+const MODE_STYLE: Record<NonNullable<PortionReport["mode"]>, string> = {
+  PRACTICAL: "bg-primary/10 text-primary",
+  THEORY: "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300",
+  PROJECT: "bg-accent/15 text-accent",
+};
+const MODE_LABEL: Record<NonNullable<PortionReport["mode"]>, string> = {
+  PRACTICAL: "Practical (Lab)", THEORY: "Theory (Class)", PROJECT: "Project",
+};
+
 function ModeBadge({ mode }: { mode: PortionReport["mode"] }) {
   if (!mode) return <span className="text-slate-400">—</span>;
-  return (
-    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mode === "PRACTICAL" ? "bg-primary/10 text-primary" : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300"}`}>
-      {mode === "PRACTICAL" ? "Practical (Lab)" : "Theory (Class)"}
-    </span>
-  );
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${MODE_STYLE[mode]}`}>{MODE_LABEL[mode]}</span>;
 }
 
 interface FilterValues {
@@ -148,7 +153,7 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
   const [description, setDescription] = useState("");
   const [topicsCovered, setTopicsCovered] = useState("");
   const [percentComplete, setPercentComplete] = useState("");
-  const [mode, setMode] = useState<"PRACTICAL" | "THEORY">("THEORY");
+  const [mode, setMode] = useState<"PRACTICAL" | "THEORY" | "PROJECT">("THEORY");
   const [completionStatus, setCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,9 +234,10 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
               placeholder="e.g. Chapter 4 — Fractions" className={inputCls} />
           </Field>
           <Field id="pf-mode" label="Mode">
-            <select id="pf-mode" value={mode} onChange={(e) => setMode(e.target.value as "PRACTICAL" | "THEORY")} className={inputCls}>
+            <select id="pf-mode" value={mode} onChange={(e) => setMode(e.target.value as "PRACTICAL" | "THEORY" | "PROJECT")} className={inputCls}>
               <option value="THEORY">Theory (from Class)</option>
               <option value="PRACTICAL">Practical (on Lab)</option>
+              <option value="PROJECT">Project</option>
             </select>
           </Field>
           <Field id="pf-completion" label="Portion status">
@@ -401,7 +407,7 @@ function ReviewTable({ role }: { role: string }) {
   const [editDescription, setEditDescription] = useState("");
   const [editTopicsCovered, setEditTopicsCovered] = useState("");
   const [editPercentComplete, setEditPercentComplete] = useState("");
-  const [editMode, setEditMode] = useState<"PRACTICAL" | "THEORY">("THEORY");
+  const [editMode, setEditMode] = useState<"PRACTICAL" | "THEORY" | "PROJECT">("THEORY");
   const [editCompletionStatus, setEditCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -699,9 +705,10 @@ function ReviewTable({ role }: { role: string }) {
                   placeholder="e.g. Chapter 4 — Fractions" className={inputCls} />
               </Field>
               <Field id="ef-mode" label="Mode">
-                <select id="ef-mode" value={editMode} onChange={(e) => setEditMode(e.target.value as "PRACTICAL" | "THEORY")} className={inputCls}>
+                <select id="ef-mode" value={editMode} onChange={(e) => setEditMode(e.target.value as "PRACTICAL" | "THEORY" | "PROJECT")} className={inputCls}>
                   <option value="THEORY">Theory (from Class)</option>
                   <option value="PRACTICAL">Practical (on Lab)</option>
+                  <option value="PROJECT">Project</option>
                 </select>
               </Field>
               <Field id="ef-completion" label="Portion status">

@@ -26,7 +26,7 @@ export class CreatePortionReportDto {
   @IsOptional() @IsString() description?: string;
   @IsString() topicsCovered: string;
   @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
-  @IsIn(["PRACTICAL", "THEORY"]) mode: "PRACTICAL" | "THEORY";
+  @IsIn(["PRACTICAL", "THEORY", "PROJECT"]) mode: "PRACTICAL" | "THEORY" | "PROJECT";
   @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED";
 }
 
@@ -37,7 +37,7 @@ export class QueryPortionReportsDto {
   @IsOptional() @IsString() classId?: string;
   @IsOptional() @IsString() q?: string;
   @IsOptional() @IsIn(["SUBMITTED", "REVIEWED", "FLAGGED"]) status?: "SUBMITTED" | "REVIEWED" | "FLAGGED";
-  @IsOptional() @IsIn(["PRACTICAL", "THEORY"]) mode?: "PRACTICAL" | "THEORY";
+  @IsOptional() @IsIn(["PRACTICAL", "THEORY", "PROJECT"]) mode?: "PRACTICAL" | "THEORY" | "PROJECT";
   @IsOptional() @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus?: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
@@ -65,7 +65,7 @@ export class AdminUpdatePortionReportDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() topicsCovered?: string;
   @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
-  @IsOptional() @IsIn(["PRACTICAL", "THEORY"]) mode?: "PRACTICAL" | "THEORY";
+  @IsOptional() @IsIn(["PRACTICAL", "THEORY", "PROJECT"]) mode?: "PRACTICAL" | "THEORY" | "PROJECT";
   @IsOptional() @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus?: "PENDING" | "IN_PROGRESS" | "COMPLETED";
 }
 
