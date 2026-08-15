@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Injectable, Module, NotFoundException,
+  Body, Controller, Delete, Get, Injectable, Module, NotFoundException,
   Param, Patch, Post, UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
@@ -10,7 +10,9 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
-import { CreateTrainingDto, MarkAttendanceDto, SubmitFeedbackDto, UpdateTrainingStatusDto } from "./trainings.dto";
+import {
+  CreateTrainingDto, MarkAttendanceDto, SubmitFeedbackDto, UpdateTrainingDto, UpdateTrainingStatusDto,
+} from "./trainings.dto";
 
 const TRAINING_INCLUDE = {
   conductedBy: { select: { fullName: true } },
@@ -127,6 +129,37 @@ export class TrainingsService {
     });
   }
 
+  /** SUPER_ADMIN-only: full edit. Optional text fields sent as "" clear the
+   * stored value to null; omitted fields are left untouched. */
+  async update(id: string, dto: UpdateTrainingDto) {
+    await this.findTraining(id);
+    const clearable = (v: string | undefined) => (v === undefined ? undefined : v || null);
+    return this.prisma.training.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+        description: clearable(dto.description),
+        subject: clearable(dto.subject),
+        venue: clearable(dto.venue),
+        duration: clearable(dto.duration),
+        resourcePerson: clearable(dto.resourcePerson),
+        agenda: clearable(dto.agenda),
+        ...(dto.status !== undefined && { status: dto.status }),
+        ...(dto.conductedAt !== undefined && { conductedAt: new Date(dto.conductedAt) }),
+        ...(dto.targetRoles !== undefined && { targetRoles: dto.targetRoles }),
+        targetSchoolId: clearable(dto.targetSchoolId),
+      },
+      include: TRAINING_INCLUDE,
+    });
+  }
+
+  /** SUPER_ADMIN-only: delete a training. Cascades to its attendance and feedback rows. */
+  async remove(id: string) {
+    await this.findTraining(id);
+    await this.prisma.training.delete({ where: { id } });
+    return { deleted: true };
+  }
+
   /** SUPER_ADMIN-only: every response plus rating averages. */
   async getFeedback(id: string) {
     await this.findTraining(id);
@@ -230,6 +263,18 @@ export class TrainingsController {
   @Roles(Role.SUPER_ADMIN)
   updateStatus(@Param("id") id: string, @Body() dto: UpdateTrainingStatusDto) {
     return this.svc.updateStatus(id, dto);
+  }
+
+  @Patch(":id")
+  @Roles(Role.SUPER_ADMIN)
+  update(@Param("id") id: string, @Body() dto: UpdateTrainingDto) {
+    return this.svc.update(id, dto);
+  }
+
+  @Delete(":id")
+  @Roles(Role.SUPER_ADMIN)
+  remove(@Param("id") id: string) {
+    return this.svc.remove(id);
   }
 
   @Get(":id/feedback")

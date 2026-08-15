@@ -25,6 +25,20 @@ export class UpdateTrainingStatusDto {
   @IsEnum(TrainingStatus) status: TrainingStatus;
 }
 
+export class UpdateTrainingDto {
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() subject?: string;
+  @IsOptional() @IsString() venue?: string;
+  @IsOptional() @IsString() duration?: string;
+  @IsOptional() @IsString() resourcePerson?: string;
+  @IsOptional() @IsString() agenda?: string;
+  @IsOptional() @IsEnum(TrainingStatus) status?: TrainingStatus;
+  @IsOptional() @IsDateString() conductedAt?: string;
+  @IsOptional() @IsArray() @IsEnum(Role, { each: true }) targetRoles?: Role[];
+  @IsOptional() @IsString() targetSchoolId?: string;
+}
+
 class AttendanceRecordDto {
   @IsString() userId: string;
   @IsBoolean() present: boolean;

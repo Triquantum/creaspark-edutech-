@@ -40,7 +40,7 @@ interface TrainingRow {
   venue: string | null; duration: string | null; resourcePerson: string | null; agenda: string | null;
   status: TrainingStatusValue;
   conductedAt: string;
-  targetRoles: string[]; targetSchool: { name: string } | null;
+  targetRoles: string[]; targetSchoolId: string | null; targetSchool: { name: string } | null;
   conductedBy: { fullName: string };
   _count?: { feedback: number };
   feedback?: { id: string }[];
@@ -59,18 +59,24 @@ interface FeedbackSummary {
   averages: { content: number | null; trainer: number | null; usefulness: number | null; overall: number | null };
 }
 
-function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[]; onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [subject, setSubject] = useState("");
-  const [status, setStatus] = useState<TrainingStatusValue>("SCHEDULED");
-  const [venue, setVenue] = useState("");
-  const [duration, setDuration] = useState("");
-  const [resourcePerson, setResourcePerson] = useState("");
-  const [agenda, setAgenda] = useState("");
-  const [conductedAt, setConductedAt] = useState("");
-  const [targetRoles, setTargetRoles] = useState<Set<string>>(new Set());
-  const [targetSchoolId, setTargetSchoolId] = useState("");
+function toDateInput(iso: string) {
+  return iso.slice(0, 10);
+}
+
+function TrainingFormModal({ schools, existing, onClose, onSaved }: {
+  schools: SchoolOpt[]; existing?: TrainingRow; onClose: () => void; onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [subject, setSubject] = useState(existing?.subject ?? "");
+  const [status, setStatus] = useState<TrainingStatusValue>(existing?.status ?? "SCHEDULED");
+  const [venue, setVenue] = useState(existing?.venue ?? "");
+  const [duration, setDuration] = useState(existing?.duration ?? "");
+  const [resourcePerson, setResourcePerson] = useState(existing?.resourcePerson ?? "");
+  const [agenda, setAgenda] = useState(existing?.agenda ?? "");
+  const [conductedAt, setConductedAt] = useState(existing ? toDateInput(existing.conductedAt) : "");
+  const [targetRoles, setTargetRoles] = useState<Set<string>>(new Set(existing?.targetRoles ?? []));
+  const [targetSchoolId, setTargetSchoolId] = useState(existing?.targetSchoolId ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,27 +93,29 @@ function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[];
     setError(null);
     setBusy(true);
     try {
-      await api("/trainings", {
-        method: "POST",
-        body: JSON.stringify({
-          title: title.trim(), description: description.trim() || undefined,
-          subject: subject.trim() || undefined, status,
-          venue: venue.trim() || undefined, duration: duration.trim() || undefined,
-          resourcePerson: resourcePerson.trim() || undefined, agenda: agenda.trim() || undefined,
-          conductedAt: new Date(conductedAt).toISOString(),
-          targetRoles: [...targetRoles], targetSchoolId: targetSchoolId || undefined,
-        }),
-      });
+      const body = {
+        title: title.trim(), description: description.trim() || undefined,
+        subject: subject.trim() || undefined, status,
+        venue: venue.trim() || undefined, duration: duration.trim() || undefined,
+        resourcePerson: resourcePerson.trim() || undefined, agenda: agenda.trim() || undefined,
+        conductedAt: new Date(conductedAt).toISOString(),
+        targetRoles: [...targetRoles], targetSchoolId: targetSchoolId || undefined,
+      };
+      if (existing) {
+        await api(`/trainings/${existing.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      } else {
+        await api("/trainings", { method: "POST", body: JSON.stringify(body) });
+      }
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create training");
+      setError(err instanceof Error ? err.message : `Could not ${existing ? "update" : "create"} training`);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title="New training" onClose={onClose} wide>
+    <Modal title={existing ? `Edit training · ${existing.title}` : "New training"} onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
         <Field id="tr-title" label="Title">
           <input id="tr-title" required value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
@@ -170,7 +178,9 @@ function NewTrainingModal({ schools, onClose, onSaved }: { schools: SchoolOpt[];
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create training"}</Button>
+          <Button type="submit" disabled={busy}>
+            {busy ? (existing ? "Saving…" : "Creating…") : existing ? "Save changes" : "Create training"}
+          </Button>
         </div>
       </form>
     </Modal>
@@ -377,6 +387,7 @@ export default function TrainingPage() {
   const [rows, setRows] = useState<TrainingRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [creating, setCreating] = useState(false);
+  const [editingFor, setEditingFor] = useState<TrainingRow | null>(null);
   const [feedbackFor, setFeedbackFor] = useState<{ training: TrainingRow; existing: FeedbackResponse | null } | null>(null);
   const [summaryFor, setSummaryFor] = useState<TrainingRow | null>(null);
   const [attendanceFor, setAttendanceFor] = useState<TrainingRow | null>(null);
@@ -407,6 +418,17 @@ export default function TrainingPage() {
       await api(`/trainings/${row.id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
     } catch {
       load();
+    }
+  }
+
+  async function deleteTraining(row: TrainingRow) {
+    if (!window.confirm(`Delete "${row.title}"? This also removes its attendance and feedback records.`)) return;
+    try {
+      await api(`/trainings/${row.id}`, { method: "DELETE" });
+      setToast("Training deleted");
+      load();
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not delete training");
     }
   }
 
@@ -481,6 +503,8 @@ export default function TrainingPage() {
                         <div className="flex justify-end gap-2">
                           <Button variant="ghost" onClick={() => setAttendanceFor(row)}>Attendance</Button>
                           <Button variant="ghost" onClick={() => setSummaryFor(row)}>View responses</Button>
+                          <Button variant="ghost" onClick={() => setEditingFor(row)}>Edit</Button>
+                          <Button variant="ghost" className="text-danger" onClick={() => deleteTraining(row)}>Delete</Button>
                         </div>
                       ) : (
                         <Button variant="ghost" onClick={() => openFeedback(row)}>
@@ -497,8 +521,12 @@ export default function TrainingPage() {
       </Card>
 
       {creating && (
-        <NewTrainingModal schools={schools} onClose={() => setCreating(false)}
+        <TrainingFormModal schools={schools} onClose={() => setCreating(false)}
           onSaved={() => { setCreating(false); setToast("Training created"); load(); }} />
+      )}
+      {editingFor && (
+        <TrainingFormModal schools={schools} existing={editingFor} onClose={() => setEditingFor(null)}
+          onSaved={() => { setEditingFor(null); setToast("Training updated"); load(); }} />
       )}
       {feedbackFor && (
         <FeedbackFormModal
