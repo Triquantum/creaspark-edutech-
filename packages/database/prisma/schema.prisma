@@ -840,8 +840,9 @@ model PortionReport {
   description     String?                         // what the chapter covers, independent of this period's topics
   topicsCovered   String
   percentComplete Int?                            // teacher's own 0–100 estimate
-  mode            PortionMode?                    // Practical (lab) vs Theory (classroom)
+  mode            PortionMode?                    // Practical (lab) vs Theory (classroom) vs Project
   completionStatus PortionCompletionStatus?        // progress on the chapter as a whole
+  projectStatus   ProjectStatus?                   // progress on the Project mode work specifically
   status          PortionStatus @default(SUBMITTED)
   reviewedBy      String?
   reviewer        User?    @relation("PortionReportsReviewed", fields: [reviewedBy], references: [id])
@@ -874,6 +875,12 @@ enum PortionMode {
 
 enum PortionCompletionStatus {
   PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ProjectStatus {
+  NOT_STARTED
   IN_PROGRESS
   COMPLETED
 }

@@ -28,6 +28,7 @@ export class CreatePortionReportDto {
   @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
   @IsIn(["PRACTICAL", "THEORY", "PROJECT"]) mode: "PRACTICAL" | "THEORY" | "PROJECT";
   @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  @IsOptional() @IsIn(["NOT_STARTED", "IN_PROGRESS", "COMPLETED"]) projectStatus?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 }
 
 export class QueryPortionReportsDto {
@@ -67,6 +68,7 @@ export class AdminUpdatePortionReportDto {
   @IsOptional() @IsInt() @Min(0) @Max(100) percentComplete?: number;
   @IsOptional() @IsIn(["PRACTICAL", "THEORY", "PROJECT"]) mode?: "PRACTICAL" | "THEORY" | "PROJECT";
   @IsOptional() @IsIn(["PENDING", "IN_PROGRESS", "COMPLETED"]) completionStatus?: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  @IsOptional() @IsIn(["NOT_STARTED", "IN_PROGRESS", "COMPLETED"]) projectStatus?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 }
 
 /** Same filters as QueryPortionReportsDto — the emailed report is exactly
@@ -119,7 +121,7 @@ export class PortionService {
         period: dto.period, periodDate: new Date(dto.periodDate),
         chapterName: dto.chapterName, description: dto.description,
         topicsCovered: dto.topicsCovered, percentComplete: dto.percentComplete,
-        mode: dto.mode, completionStatus: dto.completionStatus,
+        mode: dto.mode, completionStatus: dto.completionStatus, projectStatus: dto.projectStatus,
       },
       include: { subject: { select: { name: true } }, teacher: { select: { fullName: true } } },
     });
@@ -381,6 +383,7 @@ export class PortionService {
         ...(dto.percentComplete !== undefined && { percentComplete: dto.percentComplete }),
         ...(dto.mode !== undefined && { mode: dto.mode }),
         ...(dto.completionStatus !== undefined && { completionStatus: dto.completionStatus }),
+        ...(dto.projectStatus !== undefined && { projectStatus: dto.projectStatus }),
       },
       include: {
         teacher: { select: { fullName: true, email: true } },

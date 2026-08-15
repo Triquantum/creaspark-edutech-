@@ -11,8 +11,9 @@ interface PortionReport {
   id: string; period: "DAILY" | "WEEKLY"; periodDate: string;
   subjectId: string; classId: string | null; sectionId: string | null;
   chapterName: string | null; description: string | null; topicsCovered: string;
-  percentComplete: number | null; status: "SUBMITTED" | "REVIEWED" | "FLAGGED";
+  status: "SUBMITTED" | "REVIEWED" | "FLAGGED";
   mode: "PRACTICAL" | "THEORY" | "PROJECT" | null; completionStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | null;
+  projectStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | null;
   reviewNote: string | null;
   reviewComments: string | null;
   reviewRemarks: string | null;
@@ -45,6 +46,20 @@ const COMPLETION_LABEL: Record<NonNullable<PortionReport["completionStatus"]>, s
 function CompletionBadge({ status }: { status: PortionReport["completionStatus"] }) {
   if (!status) return <span className="text-slate-400">—</span>;
   return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${COMPLETION_STYLE[status]}`}>{COMPLETION_LABEL[status]}</span>;
+}
+
+const PROJECT_STATUS_STYLE: Record<NonNullable<PortionReport["projectStatus"]>, string> = {
+  NOT_STARTED: "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300",
+  IN_PROGRESS: "bg-accent/15 text-accent",
+  COMPLETED: "bg-success/15 text-success",
+};
+const PROJECT_STATUS_LABEL: Record<NonNullable<PortionReport["projectStatus"]>, string> = {
+  NOT_STARTED: "Not Started", IN_PROGRESS: "In Progress", COMPLETED: "Completed",
+};
+
+function ProjectStatusBadge({ status }: { status: PortionReport["projectStatus"] }) {
+  if (!status) return <span className="text-slate-400">—</span>;
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${PROJECT_STATUS_STYLE[status]}`}>{PROJECT_STATUS_LABEL[status]}</span>;
 }
 
 const MODE_STYLE: Record<NonNullable<PortionReport["mode"]>, string> = {
@@ -152,9 +167,9 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
   const [chapterName, setChapterName] = useState("");
   const [description, setDescription] = useState("");
   const [topicsCovered, setTopicsCovered] = useState("");
-  const [percentComplete, setPercentComplete] = useState("");
   const [mode, setMode] = useState<"PRACTICAL" | "THEORY" | "PROJECT">("THEORY");
   const [completionStatus, setCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
+  const [projectStatus, setProjectStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED">("NOT_STARTED");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -174,15 +189,14 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
         body: JSON.stringify({
           subjectId, classId: classId || undefined, sectionId: sectionId || undefined,
           period, periodDate, chapterName, description: description || undefined, topicsCovered,
-          percentComplete: percentComplete ? Number(percentComplete) : undefined,
-          mode, completionStatus,
+          mode, completionStatus, projectStatus,
         }),
       });
       setChapterName("");
       setDescription("");
       setTopicsCovered("");
-      setPercentComplete("");
       setCompletionStatus("IN_PROGRESS");
+      setProjectStatus("NOT_STARTED");
       onSubmitted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit");
@@ -225,10 +239,6 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
           <Field id="pf-date" label={period === "DAILY" ? "Date" : "Week starting"}>
             <input id="pf-date" type="date" required value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} className={inputCls} />
           </Field>
-          <Field id="pf-percent" label="Syllabus complete (%)" optional>
-            <input id="pf-percent" type="number" min={0} max={100} value={percentComplete}
-              onChange={(e) => setPercentComplete(e.target.value)} placeholder="e.g. 65" className={inputCls} />
-          </Field>
           <Field id="pf-chapter" label="Chapter / Portion name">
             <input id="pf-chapter" required value={chapterName} onChange={(e) => setChapterName(e.target.value)}
               placeholder="e.g. Chapter 4 — Fractions" className={inputCls} />
@@ -244,6 +254,14 @@ function SubmitForm({ onSubmitted }: { onSubmitted: () => void }) {
             <select id="pf-completion" value={completionStatus}
               onChange={(e) => setCompletionStatus(e.target.value as "PENDING" | "IN_PROGRESS" | "COMPLETED")} className={inputCls}>
               <option value="PENDING">Pending</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
+          </Field>
+          <Field id="pf-project-status" label="Project status">
+            <select id="pf-project-status" value={projectStatus}
+              onChange={(e) => setProjectStatus(e.target.value as "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED")} className={inputCls}>
+              <option value="NOT_STARTED">Not Started</option>
               <option value="IN_PROGRESS">In Progress</option>
               <option value="COMPLETED">Completed</option>
             </select>
@@ -310,9 +328,9 @@ function MyReports({ reloadKey }: { reloadKey: number }) {
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Subject</th>
               <th className="px-4 py-3 font-medium">Chapter</th>
-              <th className="px-4 py-3 font-medium">%</th>
               <th className="px-4 py-3 font-medium">Mode</th>
               <th className="px-4 py-3 font-medium">Portion status</th>
+              <th className="px-4 py-3 font-medium">Project status</th>
               <th className="px-4 py-3 font-medium">Review status</th>
               <th className="px-4 py-3 text-right font-medium">Details</th>
             </tr>
@@ -323,9 +341,9 @@ function MyReports({ reloadKey }: { reloadKey: number }) {
                 <td className="px-4 py-3 text-slate-500">{new Date(r.periodDate).toLocaleDateString("en-IN")} · {r.period === "DAILY" ? "Day" : "Week"}</td>
                 <td className="px-4 py-3 font-medium text-night dark:text-white">{r.subject?.name ?? "—"}</td>
                 <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.chapterName ?? undefined}>{r.chapterName ?? "—"}</td>
-                <td className="px-4 py-3 text-night dark:text-white">{r.percentComplete ?? "—"}</td>
                 <td className="px-4 py-3"><ModeBadge mode={r.mode} /></td>
                 <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
+                <td className="px-4 py-3"><ProjectStatusBadge status={r.projectStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 <td className="px-4 py-3 text-right">
                   <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => setViewing(r)}>View</Button>
@@ -406,9 +424,9 @@ function ReviewTable({ role }: { role: string }) {
   const [editChapterName, setEditChapterName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editTopicsCovered, setEditTopicsCovered] = useState("");
-  const [editPercentComplete, setEditPercentComplete] = useState("");
   const [editMode, setEditMode] = useState<"PRACTICAL" | "THEORY" | "PROJECT">("THEORY");
   const [editCompletionStatus, setEditCompletionStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">("IN_PROGRESS");
+  const [editProjectStatus, setEditProjectStatus] = useState<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETED">("NOT_STARTED");
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<PortionReport | null>(null);
@@ -514,9 +532,9 @@ function ReviewTable({ role }: { role: string }) {
     setEditChapterName(r.chapterName ?? "");
     setEditDescription(r.description ?? "");
     setEditTopicsCovered(r.topicsCovered);
-    setEditPercentComplete(r.percentComplete != null ? String(r.percentComplete) : "");
     setEditMode(r.mode ?? "THEORY");
     setEditCompletionStatus(r.completionStatus ?? "IN_PROGRESS");
+    setEditProjectStatus(r.projectStatus ?? "NOT_STARTED");
   }
 
   async function submitEdit(e: React.FormEvent) {
@@ -531,8 +549,7 @@ function ReviewTable({ role }: { role: string }) {
           subjectId: editSubjectId || undefined, classId: editClassId || undefined, sectionId: editSectionId || undefined,
           period: editPeriod, periodDate: editPeriodDate, chapterName: editChapterName || undefined,
           description: editDescription || undefined, topicsCovered: editTopicsCovered,
-          percentComplete: editPercentComplete ? Number(editPercentComplete) : undefined,
-          mode: editMode, completionStatus: editCompletionStatus,
+          mode: editMode, completionStatus: editCompletionStatus, projectStatus: editProjectStatus,
         }),
       });
       setEditing(null);
@@ -594,9 +611,9 @@ function ReviewTable({ role }: { role: string }) {
               <th className="px-4 py-3 font-medium">Subject / Class</th>
               <th className="px-4 py-3 font-medium">Chapter</th>
               <th className="px-4 py-3 font-medium">Topics</th>
-              <th className="px-4 py-3 font-medium">%</th>
               <th className="px-4 py-3 font-medium">Mode</th>
               <th className="px-4 py-3 font-medium">Portion status</th>
+              <th className="px-4 py-3 font-medium">Project status</th>
               <th className="px-4 py-3 font-medium">Review status</th>
               <th className="px-4 py-3 text-right font-medium">Action</th>
             </tr>
@@ -610,9 +627,9 @@ function ReviewTable({ role }: { role: string }) {
                 <td className="px-4 py-3 text-slate-500">{r.subject?.name}{r.class ? ` · ${r.class.name}` : ""}{r.section ? ` ${r.section.name}` : ""}</td>
                 <td className="px-4 py-3 max-w-[10rem] truncate text-slate-500" title={r.chapterName ?? undefined}>{r.chapterName ?? "—"}</td>
                 <td className="px-4 py-3 max-w-xs truncate text-slate-500" title={r.topicsCovered}>{r.topicsCovered}</td>
-                <td className="px-4 py-3 text-night dark:text-white">{r.percentComplete ?? "—"}</td>
                 <td className="px-4 py-3"><ModeBadge mode={r.mode} /></td>
                 <td className="px-4 py-3"><CompletionBadge status={r.completionStatus} /></td>
+                <td className="px-4 py-3"><ProjectStatusBadge status={r.projectStatus} /></td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                   <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => {
@@ -696,10 +713,6 @@ function ReviewTable({ role }: { role: string }) {
               <Field id="ef-date" label={editPeriod === "DAILY" ? "Date" : "Week starting"}>
                 <input id="ef-date" type="date" required value={editPeriodDate} onChange={(e) => setEditPeriodDate(e.target.value)} className={inputCls} />
               </Field>
-              <Field id="ef-percent" label="Syllabus complete (%)" optional>
-                <input id="ef-percent" type="number" min={0} max={100} value={editPercentComplete}
-                  onChange={(e) => setEditPercentComplete(e.target.value)} placeholder="e.g. 65" className={inputCls} />
-              </Field>
               <Field id="ef-chapter" label="Chapter / Portion name">
                 <input id="ef-chapter" value={editChapterName} onChange={(e) => setEditChapterName(e.target.value)}
                   placeholder="e.g. Chapter 4 — Fractions" className={inputCls} />
@@ -715,6 +728,14 @@ function ReviewTable({ role }: { role: string }) {
                 <select id="ef-completion" value={editCompletionStatus}
                   onChange={(e) => setEditCompletionStatus(e.target.value as "PENDING" | "IN_PROGRESS" | "COMPLETED")} className={inputCls}>
                   <option value="PENDING">Pending</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+              </Field>
+              <Field id="ef-project-status" label="Project status">
+                <select id="ef-project-status" value={editProjectStatus}
+                  onChange={(e) => setEditProjectStatus(e.target.value as "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED")} className={inputCls}>
+                  <option value="NOT_STARTED">Not Started</option>
                   <option value="IN_PROGRESS">In Progress</option>
                   <option value="COMPLETED">Completed</option>
                 </select>
