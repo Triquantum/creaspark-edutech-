@@ -69,7 +69,7 @@ export class TeachersService {
           },
         },
       },
-      orderBy: { fullName: "asc" },
+      orderBy: [{ staffProfile: { school: { name: "asc" } } }, { staffProfile: { employeeNo: "asc" } }],
       take: 100,
     });
   }

@@ -166,14 +166,19 @@ function TeachersPageInner() {
   const [toast, setToast] = useState<string | null>(null);
   const [schoolsError, setSchoolsError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const canManage = role !== null && role !== "STUDENT";
+  const [schoolFilter, setSchoolFilter] = useState("");
+  const canManage = role !== null && role !== "STUDENT" && role !== "ACADEMIC_ADMIN";
 
   const load = useCallback(() => {
     setState("loading");
-    api<TeacherRow[]>(`/teachers${q ? `?q=${encodeURIComponent(q)}` : ""}`)
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (schoolFilter) params.set("schoolId", schoolFilter);
+    const qs = params.toString();
+    api<TeacherRow[]>(`/teachers${qs ? `?${qs}` : ""}`)
       .then((r) => { setRows(r); setState("ready"); })
       .catch(() => setState("error"));
-  }, [q]);
+  }, [q, schoolFilter]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
   useEffect(() => { api<{ role: string }>("/auth/me").then((r) => setRole(r.role)).catch(() => setRole(null)); }, []);
@@ -216,12 +221,21 @@ function TeachersPageInner() {
       )}
 
       <Card className="p-0 overflow-hidden">
-        <div className="border-b border-slate-100 dark:border-white/5 p-4">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 dark:border-white/5 p-4">
           <input
             value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Search by name, email or employee no." aria-label="Search teachers"
             className="h-10 w-full max-w-sm rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
+          {schools.length > 0 && (
+            <select
+              value={schoolFilter} onChange={(e) => setSchoolFilter(e.target.value)} aria-label="Filter by school"
+              className="h-10 rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            >
+              <option value="">All schools</option>
+              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
         </div>
 
         {state === "error" && (
