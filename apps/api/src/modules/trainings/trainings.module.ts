@@ -5,8 +5,6 @@ import {
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Prisma, Role } from "@educore/database";
 import type { Response } from "express";
-import { readFileSync } from "fs";
-import { join } from "path";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -15,6 +13,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
+import { CREASPARK_LOGO_BASE64 } from "../employees/assets/inline-assets";
 import {
   CreateTrainingDto, EmailTrainingReportDto, MarkAttendanceDto, SubmitFeedbackDto,
   UpdateTrainingDto, UpdateTrainingStatusDto,
@@ -32,15 +31,6 @@ const SLATE = "#334155";
 const MUTED = "#64748b";
 const LINE = "#e2e8f0";
 
-// Reuses the same bundled letterhead logo as the Employee salary
-// certificate/slip (apps/api/src/modules/employees/assets) rather than
-// duplicating the asset. nest-cli's asset copier places it at
-// <dist>/modules/employees/assets, while `nest build`'s own tsc output
-// nests this file one level deeper at <dist>/src/modules/trainings -- so
-// __dirname needs three levels up (past src/) before descending back into
-// modules/employees/assets.
-const WATERMARK_LOGO_PATH = join(__dirname, "..", "..", "..", "modules", "employees", "assets", "creaspark-logo.jpeg");
-
 function roleLabel(role: string): string {
   return role.toLowerCase().split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
@@ -52,30 +42,14 @@ function statusLabel(status: string): string {
 export class TrainingsService {
   constructor(private prisma: PrismaService) {}
 
-  private assetCache = new Map<string, Buffer | null>();
-
-  /** Lazily read once per warm instance, matching employees.service.ts's
-   * own asset-loading pattern -- bundled assets never change between
-   * requests, and a missing file is cached as null so a report doesn't
-   * retry a failed disk read on every generation. */
-  private loadAsset(path: string): Buffer | null {
-    if (!this.assetCache.has(path)) {
-      try {
-        this.assetCache.set(path, readFileSync(path));
-      } catch {
-        this.assetCache.set(path, null);
-      }
-    }
-    return this.assetCache.get(path) ?? null;
-  }
-
   /** Faint, centered background mark drawn before any other content on the
    * page so text and table rows sit on top of it. Called again after each
    * addPage() so multi-page attendance rosters carry it on every page, not
-   * just the first. Silently skipped if the bundled asset is missing. */
+   * just the first. Decoded from an inline base64 constant (shared with
+   * the Employee salary documents) rather than read from disk -- see
+   * inline-assets.ts for why. */
   private drawWatermark(doc: PDFKit.PDFDocument) {
-    const logo = this.loadAsset(WATERMARK_LOGO_PATH);
-    if (!logo) return;
+    const logo = Buffer.from(CREASPARK_LOGO_BASE64, "base64");
     const size = 320;
     const x = (doc.page.width - size) / 2;
     const y = (doc.page.height - size) / 2;

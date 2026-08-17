@@ -1,25 +1,15 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { EmploymentType, Prisma, Role, SalaryPaidBy } from "@educore/database";
 import { randomBytes } from "crypto";
-import { readFileSync } from "fs";
-import { join } from "path";
 import PDFDocument from "pdfkit";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateEmployeeDto, GrantDto, SalaryCertificateDto, SalarySlipDto, UpdateEmployeeDto } from "./employees.dto";
+import { CREASPARK_LOGO_BASE64, SEAL_MAIN_BASE64 } from "./assets/inline-assets";
 
 const NON_STAFF_ROLES: Role[] = [Role.STUDENT, Role.PARENT, Role.GUEST];
-
-// Bundled build-time assets (see nest-cli.json's compilerOptions.assets) --
-// not user-uploaded files, so no fetch-arbitrary-URL risk like School.logoUrl.
-// nest-cli's asset copier places these at <dist>/modules/employees/assets,
-// while `nest build`'s own tsc output nests one level deeper at
-// <dist>/src/modules/employees -- so __dirname needs three levels up (past
-// src/) before descending back into modules/employees/assets, not one.
-const WATERMARK_LOGO_PATH = join(__dirname, "..", "..", "..", "modules", "employees", "assets", "creaspark-logo.jpeg");
-const SEAL_PATH = join(__dirname, "..", "..", "..", "modules", "employees", "assets", "seal-main.png");
 
 /** Generalized version of TeachersService covering every staff role (not
  * just TEACHER, which keeps its own dedicated page) -- an HR-facing
@@ -29,29 +19,14 @@ const SEAL_PATH = join(__dirname, "..", "..", "..", "modules", "employees", "ass
 export class EmployeesService {
   constructor(private prisma: PrismaService, private supabaseAdmin: SupabaseAdminService) {}
 
-  private assetCache = new Map<string, Buffer | null>();
-
-  /** Lazily read once per warm instance, not once per request -- bundled
-   * assets never change between requests. Cached failure (null) so a
-   * missing file doesn't retry a disk read on every certificate. */
-  private loadAsset(path: string): Buffer | null {
-    if (!this.assetCache.has(path)) {
-      try {
-        this.assetCache.set(path, readFileSync(path));
-      } catch {
-        this.assetCache.set(path, null);
-      }
-    }
-    return this.assetCache.get(path) ?? null;
-  }
-
   /** Faint, centered background mark -- drawn before any other content so
    * text and rules sit on top of it, matching a standard letterhead
-   * watermark. Silently skipped if the bundled asset is missing rather than
-   * failing certificate generation over a cosmetic detail. */
+   * watermark. Decoded from an inline base64 constant (not read from disk)
+   * because apps/api deploys to Vercel as a single serverless function
+   * bundled via @vercel/node, which doesn't preserve the same __dirname-
+   * relative filesystem layout as a local `nest build`. */
   private drawWatermark(doc: PDFKit.PDFDocument) {
-    const logo = this.loadAsset(WATERMARK_LOGO_PATH);
-    if (!logo) return;
+    const logo = Buffer.from(CREASPARK_LOGO_BASE64, "base64");
     const size = 340;
     const x = (doc.page.width - size) / 2;
     const y = (doc.page.height - size) / 2;
@@ -63,11 +38,11 @@ export class EmployeesService {
    * signature block started (sigTopY), not the current doc.y, so this can
    * run after the signature text without fighting its own layout. */
   private drawSignatureSeals(doc: PDFKit.PDFDocument, sigLeftX: number, sigTopY: number) {
-    const seal = this.loadAsset(SEAL_PATH);
+    const seal = Buffer.from(SEAL_MAIN_BASE64, "base64");
     const sealSize = 92;
     const sealX = sigLeftX + 150;
     const sealY = sigTopY - 8;
-    if (seal) doc.image(seal, sealX, sealY, { width: sealSize, height: sealSize });
+    doc.image(seal, sealX, sealY, { width: sealSize, height: sealSize });
   }
 
   /** SUPER_ADMIN has no real school of their own; tenantId is resolved from
