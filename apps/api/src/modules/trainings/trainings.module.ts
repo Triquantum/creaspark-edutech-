@@ -334,7 +334,7 @@ export class TrainingsService {
     classNames: string[],
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 54, size: "A4" });
+      const doc = new PDFDocument({ margin: 54, size: "A4", bufferPages: true });
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -346,8 +346,27 @@ export class TrainingsService {
 
       this.drawWatermark(doc);
 
-      doc.font("Helvetica-Bold").fontSize(17).fillColor(NAVY).text(training.title);
-      doc.font("Helvetica").fontSize(9).fillColor(MUTED).text(`Generated ${new Date().toLocaleString("en-IN")}`);
+      // Letterhead: a crisp (non-faded) logo top-right for brand identity --
+      // distinct from the faint full-page watermark, the way a standard
+      // institutional report header pairs an org mark with a document title
+      // and a reference/generated line for traceability.
+      const logoSize = 38;
+      const headerTopY = doc.y;
+      doc.image(Buffer.from(CREASPARK_LOGO_BASE64, "base64"), right - logoSize, headerTopY, { width: logoSize, height: logoSize });
+
+      const titleWidth = contentWidth - logoSize - 14;
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(MUTED)
+        .text("TRAINING / FDP REPORT", left, headerTopY, { characterSpacing: 1, width: titleWidth });
+      doc.font("Helvetica-Bold").fontSize(17).fillColor(NAVY).text(training.title, left, doc.y + 2, { width: titleWidth });
+      doc.y = Math.max(doc.y, headerTopY + logoSize) + 8;
+      doc.x = left;
+
+      const reportId = `TRN-${training.id.slice(-8).toUpperCase()}`;
+      doc.font("Helvetica").fontSize(9).fillColor(MUTED)
+        .text(`Report ID: ${reportId}`, left, doc.y, { continued: true, width: contentWidth })
+        .text(`Generated: ${new Date().toLocaleString("en-IN")}`, { align: "right" });
+
+      doc.x = left;
       doc.moveDown(0.5);
       doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor(NAVY).lineWidth(1.5).stroke();
       doc.lineWidth(1);
@@ -430,15 +449,43 @@ export class TrainingsService {
       if (feedback.responses.length === 0) {
         doc.font("Helvetica").fontSize(10).fillColor(MUTED).text("No feedback submitted yet.");
       } else {
+        // Bordered cards (accent bar + light fill) instead of plain flowing
+        // text -- matches the Attendance table's navy-accented, bounded
+        // visual language so every section of the report reads consistently.
+        const padX = 14;
+        const cardInnerW = contentWidth - padX * 2;
         for (const r of feedback.responses) {
+          const cardY = doc.y;
+          const nameH = doc.font("Helvetica-Bold").fontSize(10).heightOfString(r.respondent.fullName, { width: cardInnerW });
+          const ratingsText = `Content ${r.contentRating} · Trainer ${r.trainerRating} · Usefulness ${r.usefulnessRating} · Overall ${r.overallRating}`;
+          const ratingsH = doc.font("Helvetica").fontSize(9).heightOfString(ratingsText, { width: cardInnerW });
+          const commentH = r.comments
+            ? doc.font("Helvetica-Oblique").fontSize(9).heightOfString(r.comments, { width: cardInnerW })
+            : 0;
+          const cardH = 10 + nameH + 3 + ratingsH + (r.comments ? 4 + commentH : 0) + 10;
+
+          if (cardY + cardH > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+            this.drawWatermark(doc);
+            doc.y = doc.page.margins.top;
+          }
+          const drawY = doc.y;
+          doc.rect(left, drawY, contentWidth, cardH).fillColor("#f8fafc").fill();
+          doc.rect(left, drawY, 3, cardH).fillColor(NAVY).fill();
+
+          let textY = drawY + 10;
           doc.font("Helvetica-Bold").fontSize(10).fillColor(SLATE)
-            .text(`${r.respondent.fullName}  `, { continued: true })
-            .font("Helvetica").fontSize(9).fillColor(MUTED).text(`(${roleLabel(r.respondent.role)})`);
-          doc.font("Helvetica").fontSize(9).fillColor(SLATE).text(
-            `Content ${r.contentRating} · Trainer ${r.trainerRating} · Usefulness ${r.usefulnessRating} · Overall ${r.overallRating}`,
-          );
-          if (r.comments) doc.font("Helvetica-Oblique").fontSize(9).fillColor(MUTED).text(r.comments, { indent: 10 });
-          doc.moveDown(0.4);
+            .text(r.respondent.fullName, left + padX, textY, { continued: true, width: cardInnerW })
+            .font("Helvetica").fontSize(9).fillColor(MUTED).text(`  (${roleLabel(r.respondent.role)})`);
+          textY += nameH + 3;
+          doc.font("Helvetica").fontSize(9).fillColor(SLATE).text(ratingsText, left + padX, textY, { width: cardInnerW });
+          textY += ratingsH;
+          if (r.comments) {
+            textY += 4;
+            doc.font("Helvetica-Oblique").fontSize(9).fillColor(MUTED).text(r.comments, left + padX, textY, { width: cardInnerW });
+          }
+          doc.x = left;
+          doc.y = drawY + cardH + 8;
         }
       }
 
@@ -496,6 +543,27 @@ export class TrainingsService {
         });
         doc.x = left;
         doc.y = y + 10;
+      }
+
+      // Footer with page numbers on every page -- requires bufferPages so
+      // page count is known; drawn last, after all content, since it
+      // switches the "current" page as it iterates.
+      const pageRange = doc.bufferedPageRange();
+      for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
+        doc.switchToPage(i);
+        // pdfkit's width-based text layout checks each line against
+        // page.maxY() (derived from margins.bottom) and silently inserts a
+        // fresh blank page if the given y falls past it -- lineBreak:false
+        // does NOT suppress this check, only word-wrap within one call. The
+        // footer is deliberately placed below the normal content box (in the
+        // margin reserved for it), so zero out this page's bottom margin
+        // first -- nothing left to "overflow" past.
+        doc.page.margins.bottom = 0;
+        const footerY = doc.page.height - 40;
+        doc.moveTo(left, footerY - 6).lineTo(right, footerY - 6).strokeColor(LINE).lineWidth(1).stroke();
+        doc.font("Helvetica").fontSize(8).fillColor(MUTED)
+          .text("Creaspark EduCore — Computer-generated report", left, footerY, { width: contentWidth / 2 });
+        doc.text(`Page ${i - pageRange.start + 1} of ${pageRange.count}`, left, footerY, { width: contentWidth, align: "right" });
       }
 
       doc.end();
