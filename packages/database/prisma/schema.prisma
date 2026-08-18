@@ -90,6 +90,7 @@ model School {
   salesFollowUps   SalesFollowUp[]
   salesOpportunities SalesOpportunity[]
   yearlyPlanAssignments YearlyPlanAssignment[]
+  leaveApplications LeaveApplication[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -171,6 +172,10 @@ model User {
   salesTargetsCreatedBy       SalesTarget[] @relation("SalesTargetsCreatedBy")
   yearlyPlanGradesCreated     YearlyPlanGrade[] @relation("YearlyPlanGradesCreated")
   yearlyPlanTeacherAssignments YearlyPlanAssignment[] @relation("YearlyPlanTeacherAssignments")
+  leaveBalances               LeaveBalance[] @relation("LeaveBalancesFor")
+  leaveBalancesAssigned       LeaveBalance[] @relation("LeaveBalancesAssigned")
+  leaveApplications           LeaveApplication[] @relation("LeaveApplicant")
+  leaveApplicationsReviewed   LeaveApplication[] @relation("LeaveApplicationsReviewed")
 
   @@index([tenantId, role])
 }
@@ -485,6 +490,86 @@ model UserAccess {
   @@unique([userId, tenantId, schoolId, role])
   @@index([userId])
   @@index([tenantId, schoolId, role])
+}
+
+// ────────────────────────── Leave ──────────────────────────
+// Replaces the old GenericRecord-backed "Leave Apply"/"Leave Applications"
+// catch-all pages, which had no per-user or per-school scoping -- any staff
+// member could see, edit, and delete every other staff member's leave
+// request tenant-wide. LeaveApplication.schoolId is captured from the
+// applicant's own StaffProfile at creation time so reads can filter by
+// school directly instead of joining through StaffProfile every query.
+
+// Admin-defined leave categories (e.g. "Casual Leave", "Sick Leave") --
+// the "Leave Category" screen. Tenant-wide (an HR policy category), not
+// per-school, same as how Subject/Department are shared catalogs.
+model LeaveType {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  daysPerYear Int?                              // default entitlement shown when assigning a balance
+  createdAt   DateTime @default(now())
+
+  balances     LeaveBalance[]
+  applications LeaveApplication[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+// Per-staff-member, per-year entitlement -- the "Leave Assign" screen.
+// Days-remaining is derived at read time from approved applications rather
+// than stored, so it can never drift out of sync with actual usage.
+model LeaveBalance {
+  id           String    @id @default(cuid())
+  tenantId     String
+  userId       String
+  user         User      @relation("LeaveBalancesFor", fields: [userId], references: [id])
+  leaveTypeId  String
+  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id])
+  year         Int
+  allotted     Int
+  assignedById String
+  assignedBy   User      @relation("LeaveBalancesAssigned", fields: [assignedById], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, leaveTypeId, year])
+  @@index([tenantId])
+}
+
+enum LeaveApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// A staff member's own leave request -- "Leave Apply" to create,
+// "Leave Applications" to view (own for staff, all-for-review for admins).
+model LeaveApplication {
+  id            String   @id @default(cuid())
+  tenantId      String
+  schoolId      String?
+  school        School?  @relation(fields: [schoolId], references: [id])
+  applicantId   String
+  applicant     User     @relation("LeaveApplicant", fields: [applicantId], references: [id])
+  leaveTypeId   String
+  leaveType     LeaveType @relation(fields: [leaveTypeId], references: [id])
+  fromDate      DateTime @db.Date
+  toDate        DateTime @db.Date
+  days          Int
+  reason        String
+  status        LeaveApplicationStatus @default(PENDING)
+  reviewedById  String?
+  reviewedBy    User?    @relation("LeaveApplicationsReviewed", fields: [reviewedById], references: [id])
+  reviewRemarks String?
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([tenantId, applicantId])
+  @@index([tenantId, schoolId, status])
 }
 
 // ────────────────────────── Attendance ──────────────────────────

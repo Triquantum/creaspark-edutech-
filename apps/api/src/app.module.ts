@@ -34,6 +34,7 @@ import { AssetsModule } from "./modules/assets/assets.module";
 import { SalesModule } from "./modules/sales/sales.module";
 import { YearlyPlanModule } from "./modules/yearly-plan/yearly-plan.module";
 import { CircuitLabModule } from "./modules/circuit-lab/circuit-lab.module";
+import { LeaveModule } from "./modules/leave/leave.module";
 import { TenantMiddleware } from "./common/tenancy/tenant.middleware";
 import { HealthController } from "./modules/health.controller";
 
@@ -73,6 +74,7 @@ import { HealthController } from "./modules/health.controller";
     SalesModule,
     YearlyPlanModule,
     CircuitLabModule,
+    LeaveModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -105,7 +105,7 @@ export const NAV: NavGroup[] = [
     // half is relevant to Parent/Student — they aren't staff and don't take
     // leave from school.
     children: [
-      ...kids("leave", ["Leave Category", "Leave Assign"]).map((l) => ({ ...l, roles: SCHOOL_MANAGEMENT })),
+      ...kids("leave", ["Leave Category", "Leave Assign"]).map((l) => ({ ...l, roles: [...SCHOOL_MANAGEMENT, "FINANCE_HR_ADMIN" as const] })),
       ...kids("leave", ["Leave Apply", "Leave Applications"]),
     ],
   },
