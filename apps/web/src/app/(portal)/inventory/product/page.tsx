@@ -16,7 +16,7 @@ interface InventoryItemRow {
 }
 interface Me { role: string }
 
-const MANAGE_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "INVENTORY_MANAGER"]);
+const MANAGE_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR", "INVENTORY_MANAGER"]);
 
 async function uploadToInventoryBucket(file: File): Promise<string> {
   const ext = file.name.split(".").pop() ?? "bin";
