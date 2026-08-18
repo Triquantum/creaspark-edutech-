@@ -429,7 +429,6 @@ export class TrainingsService {
       doc.moveDown(1);
       this.sectionHeading(doc, "Feedback Summary");
       const stats: [string, number | null][] = [
-        ["Content", feedback.averages.content],
         ["Trainer", feedback.averages.trainer],
         ["Usefulness", feedback.averages.usefulness],
         ["Overall", feedback.averages.overall],
@@ -457,7 +456,7 @@ export class TrainingsService {
         for (const r of feedback.responses) {
           const cardY = doc.y;
           const nameH = doc.font("Helvetica-Bold").fontSize(10).heightOfString(r.respondent.fullName, { width: cardInnerW });
-          const ratingsText = `Content ${r.contentRating} · Trainer ${r.trainerRating} · Usefulness ${r.usefulnessRating} · Overall ${r.overallRating}`;
+          const ratingsText = `Trainer ${r.trainerRating} · Usefulness ${r.usefulnessRating} · Overall ${r.overallRating}`;
           const ratingsH = doc.font("Helvetica").fontSize(9).heightOfString(ratingsText, { width: cardInnerW });
           const commentH = r.comments
             ? doc.font("Helvetica-Oblique").fontSize(9).heightOfString(r.comments, { width: cardInnerW })
