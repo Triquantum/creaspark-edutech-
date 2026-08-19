@@ -498,7 +498,7 @@ export class TrainingsService {
         const footerY = doc.page.height - 40;
         doc.moveTo(left, footerY - 6).lineTo(right, footerY - 6).strokeColor(LINE).lineWidth(1).stroke();
         doc.font("Helvetica").fontSize(8).fillColor(MUTED)
-          .text("Creaspark EduCore — Computer-generated report", left, footerY, { width: contentWidth / 2 });
+          .text("Creaspark Future Tech Computer-generated report", left, footerY, { width: contentWidth / 2 });
         doc.text(`Page ${i - pageRange.start + 1} of ${pageRange.count}`, left, footerY, { width: contentWidth, align: "right" });
       }
 
