@@ -320,16 +320,15 @@ export class TrainingsService {
     return this.getAttendance(id);
   }
 
-  /** Single-training report: details, feedback summary + responses, and the
-   * attendance roster. Details/Feedback use a consistent label/value grid;
-   * Attendance -- the densest, most-reprinted section -- gets a real
-   * bordered table (sorted by school, then teacher name) rather than plain
-   * text lines. A faint Creaspark watermark repeats on every page. */
+  /** Single-training report: details and the attendance roster. Details use
+   * a consistent label/value grid; Attendance -- the densest, most-reprinted
+   * section -- gets a real bordered table (sorted by school, then teacher
+   * name) rather than plain text lines. A faint Creaspark watermark repeats
+   * on every page. */
   private buildTrainingReportPdf(
     training: Awaited<ReturnType<TrainingsService["findTraining"]>> & {
       conductedBy: { fullName: string }; targetSchool: { name: string } | null;
     },
-    feedback: Awaited<ReturnType<TrainingsService["getFeedback"]>>,
     attendance: Awaited<ReturnType<TrainingsService["getAttendance"]>>,
     classNames: string[],
   ): Promise<Buffer> {
@@ -427,68 +426,6 @@ export class TrainingsService {
       }
 
       doc.moveDown(1);
-      this.sectionHeading(doc, "Feedback Summary");
-      const stats: [string, number | null][] = [
-        ["Trainer", feedback.averages.trainer],
-        ["Usefulness", feedback.averages.usefulness],
-        ["Overall", feedback.averages.overall],
-      ];
-      const statW = contentWidth / stats.length;
-      const statY = doc.y;
-      stats.forEach(([label, val], i) => {
-        const x = left + i * statW;
-        doc.font("Helvetica").fontSize(8.5).fillColor(MUTED).text(label.toUpperCase(), x, statY, { width: statW, align: "center" });
-        doc.font("Helvetica-Bold").fontSize(16).fillColor(NAVY).text(val != null ? String(val) : "—", x, statY + 12, { width: statW, align: "center" });
-      });
-      doc.x = left;
-      doc.y = statY + 38;
-      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor(LINE).stroke();
-      doc.moveDown(0.6);
-
-      if (feedback.responses.length === 0) {
-        doc.font("Helvetica").fontSize(10).fillColor(MUTED).text("No feedback submitted yet.");
-      } else {
-        // Bordered cards (accent bar + light fill) instead of plain flowing
-        // text -- matches the Attendance table's navy-accented, bounded
-        // visual language so every section of the report reads consistently.
-        const padX = 14;
-        const cardInnerW = contentWidth - padX * 2;
-        for (const r of feedback.responses) {
-          const cardY = doc.y;
-          const nameH = doc.font("Helvetica-Bold").fontSize(10).heightOfString(r.respondent.fullName, { width: cardInnerW });
-          const ratingsText = `Trainer ${r.trainerRating} · Usefulness ${r.usefulnessRating} · Overall ${r.overallRating}`;
-          const ratingsH = doc.font("Helvetica").fontSize(9).heightOfString(ratingsText, { width: cardInnerW });
-          const commentH = r.comments
-            ? doc.font("Helvetica-Oblique").fontSize(9).heightOfString(r.comments, { width: cardInnerW })
-            : 0;
-          const cardH = 10 + nameH + 3 + ratingsH + (r.comments ? 4 + commentH : 0) + 10;
-
-          if (cardY + cardH > doc.page.height - doc.page.margins.bottom) {
-            doc.addPage();
-            this.drawWatermark(doc);
-            doc.y = doc.page.margins.top;
-          }
-          const drawY = doc.y;
-          doc.rect(left, drawY, contentWidth, cardH).fillColor("#f8fafc").fill();
-          doc.rect(left, drawY, 3, cardH).fillColor(NAVY).fill();
-
-          let textY = drawY + 10;
-          doc.font("Helvetica-Bold").fontSize(10).fillColor(SLATE)
-            .text(r.respondent.fullName, left + padX, textY, { continued: true, width: cardInnerW })
-            .font("Helvetica").fontSize(9).fillColor(MUTED).text(`  (${roleLabel(r.respondent.role)})`);
-          textY += nameH + 3;
-          doc.font("Helvetica").fontSize(9).fillColor(SLATE).text(ratingsText, left + padX, textY, { width: cardInnerW });
-          textY += ratingsH;
-          if (r.comments) {
-            textY += 4;
-            doc.font("Helvetica-Oblique").fontSize(9).fillColor(MUTED).text(r.comments, left + padX, textY, { width: cardInnerW });
-          }
-          doc.x = left;
-          doc.y = drawY + cardH + 8;
-        }
-      }
-
-      doc.moveDown(0.6);
       this.sectionHeading(doc, "Attendance");
       if (attendance.length === 0) {
         doc.font("Helvetica").fontSize(10).fillColor(MUTED).text("No one is targeted by this training yet.");
@@ -595,14 +532,13 @@ export class TrainingsService {
   async reportPdf(id: string): Promise<Buffer> {
     const training = await this.prisma.training.findUnique({ where: { id }, include: TRAINING_INCLUDE });
     if (!training) throw new NotFoundException("Training not found");
-    const [feedback, attendance, classes] = await Promise.all([
-      this.getFeedback(id),
+    const [attendance, classes] = await Promise.all([
       this.getAttendance(id),
       training.targetClassIds.length
         ? this.prisma.class.findMany({ where: { id: { in: training.targetClassIds } }, select: { name: true } })
         : Promise.resolve([]),
     ]);
-    return this.buildTrainingReportPdf(training, feedback, attendance, classes.map((c) => c.name));
+    return this.buildTrainingReportPdf(training, attendance, classes.map((c) => c.name));
   }
 
   async emailReport(id: string, toEmail: string): Promise<{ sent: boolean }> {
