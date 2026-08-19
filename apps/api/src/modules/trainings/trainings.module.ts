@@ -363,7 +363,7 @@ export class TrainingsService {
       const reportId = `TRN-${training.id.slice(-8).toUpperCase()}`;
       doc.font("Helvetica").fontSize(9).fillColor(MUTED)
         .text(`Report ID: ${reportId}`, left, doc.y, { continued: true, width: contentWidth })
-        .text(`Generated: ${new Date().toLocaleString("en-IN")}`, { align: "right" });
+        .text(`Generated: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`, { align: "right" });
 
       doc.x = left;
       doc.moveDown(0.5);
@@ -547,7 +547,7 @@ export class TrainingsService {
     await this.sendEmail(
       toEmail,
       `Training Report — ${training.title}`,
-      `Attached is the training report for "${training.title}", generated ${new Date().toLocaleString("en-IN")}.`,
+      `Attached is the training report for "${training.title}", generated ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.`,
       { filename: "training-report.pdf", content: pdf },
     );
     return { sent: true };

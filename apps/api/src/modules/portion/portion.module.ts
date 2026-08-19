@@ -242,7 +242,7 @@ export class PortionService {
 
       doc.fontSize(16).fillColor("#000").text("Portion Status Report");
       doc.fontSize(9).fillColor("#666")
-        .text(`Generated ${new Date().toLocaleString("en-IN")} · ${rows.length} record${rows.length === 1 ? "" : "s"}`);
+        .text(`Generated ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} · ${rows.length} record${rows.length === 1 ? "" : "s"}`);
       doc.moveDown();
 
       const columns = [
@@ -340,7 +340,7 @@ export class PortionService {
     await this.sendEmail(
       dto.toEmail,
       "Portion Status Report",
-      `Attached is the portion status report (${rows.length} record${rows.length === 1 ? "" : "s"}), generated ${new Date().toLocaleString("en-IN")}.`,
+      `Attached is the portion status report (${rows.length} record${rows.length === 1 ? "" : "s"}), generated ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.`,
       { filename: "portion-status-report.pdf", content: pdf },
     );
     return { sent: true };
