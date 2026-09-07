@@ -21,7 +21,7 @@ export function CtaBanner() {
             Partner with Creaspark for STEM labs, teacher training and a full-institution ERP — under your own brand.
           </p>
           <div className="relative mt-8 flex flex-wrap justify-center gap-4">
-            <Link href="/login"><Button className="h-12 bg-white px-8 text-primary hover:bg-white/90">Get in touch</Button></Link>
+            <Link href="/login"><Button className="h-12 !bg-white px-8 !text-primary hover:!bg-white/90">Get in touch</Button></Link>
             <a href="#domains"><Button variant="ghost" className="h-12 border border-white/40 px-8 text-white hover:bg-white/10">Partner with us</Button></a>
           </div>
         </motion.div>
@@ -63,7 +63,7 @@ export function SiteFooter() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Company</p>
             <ul className="mt-3 space-y-2 text-sm text-slate-500">
-              <li>connect@creasparkllp.in</li>
+              <li>hello@creaspark.in</li>
               <li>Privacy</li>
               <li>Terms</li>
             </ul>

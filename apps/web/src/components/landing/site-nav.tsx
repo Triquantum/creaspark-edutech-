@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const LINKS = [
   { href: "#domains", label: "STEM Labs" },
   { href: "#modules", label: "Platform" },
   { href: "#who-we-serve", label: "Who We Serve" },
+  { href: "#about", label: "About" },
   { href: "#contact", label: "Contact" },
 ];
 
@@ -32,7 +33,7 @@ export function SiteNav() {
         scrolled ? "glass shadow-card" : "bg-transparent"
       }`}
     >
-      <div className="mx-auto flex h-20 items-center justify-between px-6">
+      <div className="mx-auto flex h-20 items-center gap-8 px-6">
         <Link href="/" className="flex items-center gap-2.5 font-display text-lg font-semibold text-night dark:text-white">
           <img src="/creaspark-logo.png" alt="Creaspark logo" className="h-9 w-9 rounded-xl object-cover" />
           Creaspark<span className="align-super text-xs text-primary">™</span>
@@ -46,14 +47,19 @@ export function SiteNav() {
           ))}
         </nav>
 
-        <div className="hidden md:block">
-          <Link href="/login"><Button className="h-10">Sign in</Button></Link>
+        <div className="ml-auto hidden items-center gap-5 md:flex">
+          <a href="tel:+919037589945" className="flex items-center gap-1.5 text-sm text-ink/80 hover:text-primary dark:text-slate-300">
+            <Phone size={14} />
+            +91 90375 89945
+          </a>
+          <Link href="/login" className="text-sm text-ink/80 hover:text-primary dark:text-slate-300">Sign in</Link>
+          <a href="#contact"><Button className="h-10">Get in Touch</Button></a>
         </div>
 
         <button
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? "Close menu" : "Open menu"}
-          className="grid h-10 w-10 place-items-center rounded-xl text-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10 md:hidden"
+          className="ml-auto grid h-10 w-10 place-items-center rounded-xl text-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10 md:hidden"
         >
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -75,7 +81,8 @@ export function SiteNav() {
                   {l.label}
                 </a>
               ))}
-              <Link href="/login" onClick={() => setOpen(false)}><Button className="mt-2 h-10 w-full">Sign in</Button></Link>
+              <Link href="/login" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink hover:bg-black/5 dark:text-slate-200 dark:hover:bg-white/5">Sign in</Link>
+              <a href="#contact" onClick={() => setOpen(false)}><Button className="mt-2 h-10 w-full">Get in Touch</Button></a>
             </nav>
           </motion.div>
         )}

@@ -1,22 +1,18 @@
 "use client";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Cpu, Bot, Wifi, Printer, BrainCircuit, Lightbulb, Rocket } from "lucide-react";
+import { Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const FLOATERS = [
-  { Icon: Cpu, label: "AI", top: "8%", left: "4%", delay: 0 },
-  { Icon: Bot, label: "Robotics", top: "58%", left: "0%", delay: 0.6 },
-  { Icon: Wifi, label: "IoT", top: "14%", left: "88%", delay: 1.2 },
-  { Icon: Rocket, label: "Drones", top: "70%", left: "90%", delay: 1.8 },
-  { Icon: Printer, label: "3D Printing", top: "84%", left: "18%", delay: 2.4 },
-  { Icon: BrainCircuit, label: "ML", top: "4%", left: "48%", delay: 3.0 },
-  { Icon: Lightbulb, label: "Design", top: "40%", left: "94%", delay: 3.6 },
+const STATS = [
+  { value: "50+", label: "Institutions Served" },
+  { value: "25,000+", label: "Students Impacted" },
+  { value: "7", label: "STEM Programs" },
 ];
 
 export function Hero() {
   return (
-    <section className="relative isolate mx-auto overflow-hidden px-6 pb-24 pt-16 text-white md:pt-24">
+    <section className="relative isolate mx-auto flex min-h-[720px] items-center overflow-hidden px-6 py-24 text-white md:min-h-[100vh] md:py-32">
       <video
         className="absolute inset-0 -z-10 h-full w-full object-cover"
         src="/media/stem-lab-hero.mp4"
@@ -25,44 +21,26 @@ export function Hero() {
         muted
         playsInline
       />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-night/90 via-night/70 to-night/40" />
-      <div className="orb left-[-10%] top-[-10%] h-96 w-96 bg-accent/40" />
-      <div className="orb right-[-8%] top-[30%] h-80 w-80 bg-primary/30 [animation-delay:4s]" />
-      <div className="orb bottom-[5%] left-[35%] h-64 w-64 bg-warning/25 [animation-delay:8s]" />
-
-      {FLOATERS.map(({ Icon, label, top, left, delay }) => (
-        <motion.div
-          key={label}
-          className="pointer-events-none absolute z-0 hidden lg:block"
-          style={{ top, left }}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: [0, 1, 1, 0], y: [12, -8, -8, -20] }}
-          transition={{ duration: 6, delay, repeat: Infinity, repeatDelay: FLOATERS.length * 0.6, ease: "easeInOut" }}
-        >
-          <div className="glass flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-white shadow-card">
-            <Icon size={14} className="text-primary" />
-            {label}
-          </div>
-        </motion.div>
-      ))}
+      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-night/95 via-night/80 to-night/50" />
 
       <div className="relative z-10">
-        <motion.p
+        <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-sm font-medium uppercase tracking-[0.2em] text-primary"
+          className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-white"
         >
-          School ERP · LMS · STEM Innovation
-        </motion.p>
+          <Sparkles size={14} className="text-primary" />
+          STEM Innovation Labs &amp; Future Skills
+        </motion.div>
 
         <motion.h1
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1 }}
-          className="mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight text-white md:text-6xl"
+          className="mt-5 max-w-3xl font-display text-4xl font-semibold leading-tight text-white md:text-6xl"
         >
-          Igniting STEM innovation in every institution
+          Igniting <span className="text-primary">STEM innovation</span> in every institution
         </motion.h1>
 
         <motion.p
@@ -81,8 +59,22 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.3 }}
           className="mt-10 flex flex-wrap gap-4"
         >
-          <Link href="/login"><Button className="h-12 px-8">Book a demo</Button></Link>
-          <a href="#domains"><Button variant="ghost" className="h-12 border border-white/40 px-8 text-white hover:bg-white/10">Explore programs</Button></a>
+          <a href="#domains"><Button className="h-12 gap-2 px-8">Explore programs <ArrowRight size={16} /></Button></a>
+          <Link href="/login"><Button className="h-12 !bg-night !text-white px-8 hover:!bg-night/80">Book a demo</Button></Link>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.4 }}
+          className="mt-12 flex flex-wrap gap-x-10 gap-y-4"
+        >
+          {STATS.map(({ value, label }) => (
+            <div key={label}>
+              <p className="font-display text-3xl font-semibold text-white">{value}</p>
+              <p className="text-sm text-slate-300">{label}</p>
+            </div>
+          ))}
         </motion.div>
       </div>
     </section>

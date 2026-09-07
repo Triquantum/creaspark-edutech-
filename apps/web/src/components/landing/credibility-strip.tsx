@@ -1,5 +1,5 @@
 "use client";
-import { ShieldCheck, Award, Landmark, BookCheck } from "lucide-react";
+import { ShieldCheck, Award, Landmark, BookCheck, Building2, BrainCog, Trophy } from "lucide-react";
 import { Reveal, Stagger, staggerItem } from "./reveal";
 import { motion } from "framer-motion";
 
@@ -8,6 +8,9 @@ const BADGES = [
   { Icon: Landmark, label: "NITI Aayog ATL Partner" },
   { Icon: BookCheck, label: "CBSE Curriculum Compatible" },
   { Icon: Award, label: "DPIIT Recognised" },
+  { Icon: Building2, label: "Govt. of Kerala Partner" },
+  { Icon: BrainCog, label: "AAAI Affiliated" },
+  { Icon: Trophy, label: "Best STEM School Award" },
 ];
 
 export function CredibilityStrip() {
