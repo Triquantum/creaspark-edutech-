@@ -30,48 +30,76 @@ export function CtaBanner() {
   );
 }
 
+const SERVICES = ["Artificial Intelligence", "Robotics", "IoT Solutions", "Drone Technology", "3D Printing", "Machine Learning", "Design Thinking"];
+const AUDIENCES = ["Schools", "Colleges & Universities", "Working Professionals", "Industry Partners"];
+const COMPANY_LINKS = [
+  { label: "About Us", href: "#about" },
+  { label: "STEM Innovation Labs", href: "#domains" },
+  { label: "Industry Solutions", href: "#contact" },
+  { label: "Contact", href: "#contact" },
+];
+
 export function SiteFooter() {
   return (
-    <footer id="contact" className="border-t border-slate-200 bg-white/60 py-12 dark:border-white/10 dark:bg-transparent">
+    <footer id="contact" className="bg-night py-16 text-slate-300">
       <div className="mx-auto px-6">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div>
-            <span className="flex items-center gap-2 font-display text-base font-semibold text-night dark:text-white">
+            <span className="flex items-center gap-2 font-display text-base font-semibold text-white">
               <img src="/creaspark-logo.png" alt="Creaspark logo" className="h-8 w-8 rounded-lg object-cover" />
               Creaspark<span className="align-super text-xs text-primary">™</span>
             </span>
-            <p className="mt-3 text-sm text-slate-500">
-              Igniting STEM innovation in schools, colleges and industries through hands-on future-skills education.
+            <p className="mt-3 max-w-xs text-sm text-slate-400">
+              Igniting STEM innovation in schools, colleges and industries worldwide through hands-on
+              future-skills education.
             </p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Platform</p>
-            <ul className="mt-3 space-y-2 text-sm text-slate-500">
-              <li><a href="#modules" className="hover:text-primary">Modules</a></li>
-              <li><a href="#domains" className="hover:text-primary">STEM Labs</a></li>
-              <li><Link href="/login" className="hover:text-primary">Sign in</Link></li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Who We Serve</p>
-            <ul className="mt-3 space-y-2 text-sm text-slate-500">
-              <li><a href="#who-we-serve" className="hover:text-primary">Schools</a></li>
-              <li><a href="#who-we-serve" className="hover:text-primary">Colleges & Universities</a></li>
-              <li><a href="#who-we-serve" className="hover:text-primary">Industry Partners</a></li>
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Company</p>
-            <ul className="mt-3 space-y-2 text-sm text-slate-500">
+            <ul className="mt-4 space-y-1.5 text-sm text-slate-400">
               <li>hello@creaspark.in</li>
-              <li>Privacy</li>
-              <li>Terms</li>
+              <li>+91 90375 89945</li>
+              <li>creaspark.in</li>
+              <li>Global Operations</li>
             </ul>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Our Services</p>
+            <ul className="mt-3 space-y-2 text-sm">
+              {SERVICES.map((s) => <li key={s}><a href="#domains" className="hover:text-primary">{s}</a></li>)}
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Who We Serve</p>
+            <ul className="mt-3 space-y-2 text-sm">
+              {AUDIENCES.map((a) => <li key={a}><a href="#who-we-serve" className="hover:text-primary">{a}</a></li>)}
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Company</p>
+            <ul className="mt-3 space-y-2 text-sm">
+              {COMPANY_LINKS.map((c) => <li key={c.label}><a href={c.href} className="hover:text-primary">{c.label}</a></li>)}
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Partner With Us</p>
+            <p className="mt-3 text-sm text-slate-400">
+              Ready to set up a STEM Innovation Lab or launch a future skills program at your institution?
+            </p>
+            <a href="#contact" className="mt-4 inline-block"><Button className="h-10">Get in Touch</Button></a>
+            <div className="mt-4 flex gap-1.5">
+              <span className="h-1 w-8 rounded-full bg-primary" />
+              <span className="h-1 w-8 rounded-full bg-warning" />
+              <span className="h-1 w-8 rounded-full bg-accent" />
+            </div>
           </div>
         </div>
-        <p className="mt-10 border-t border-slate-100 pt-6 text-center text-xs text-slate-400 dark:border-white/10">
-          © {new Date().getFullYear()} Creaspark™ · All rights reserved.
-        </p>
+
+        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-slate-500 sm:flex-row">
+          <p>© {new Date().getFullYear()} Creaspark™ · All rights reserved.</p>
+          <p>Empowering the next generation of <span className="text-primary">STEM innovators</span></p>
+        </div>
       </div>
     </footer>
   );

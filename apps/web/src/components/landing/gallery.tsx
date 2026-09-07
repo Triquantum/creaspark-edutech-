@@ -24,14 +24,14 @@ export function Gallery() {
         </h2>
       </Reveal>
 
-      <Stagger className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {PHOTOS.map(({ src, alt }, i) => (
+      <Stagger className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {PHOTOS.map(({ src, alt }) => (
           <motion.div
             key={src}
             variants={staggerItem}
             whileHover={{ scale: 1.03 }}
             transition={{ duration: 0.2 }}
-            className={`overflow-hidden rounded-2xl shadow-card ${i === 0 ? "col-span-2 row-span-2" : ""}`}
+            className="aspect-square overflow-hidden rounded-xl shadow-card"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={src} alt={alt} className="h-full w-full object-cover" loading="lazy" />
