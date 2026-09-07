@@ -13,7 +13,7 @@ const BADGES = [
 export function CredibilityStrip() {
   return (
     <section className="relative border-y border-slate-100 bg-white/60 py-12 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
-      <div className="mx-auto max-w-6xl px-6">
+      <div className="mx-auto px-6">
         <Reveal>
           <p className="text-center text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
             Aligned with national and industry standards

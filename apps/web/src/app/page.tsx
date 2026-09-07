@@ -1,6 +1,7 @@
 import { SiteNav } from "@/components/landing/site-nav";
 import { Hero } from "@/components/landing/hero";
 import { TechDomains } from "@/components/landing/tech-domains";
+import { Gallery } from "@/components/landing/gallery";
 import { CredibilityStrip } from "@/components/landing/credibility-strip";
 import { ModulesGrid } from "@/components/landing/modules-grid";
 import { WhoWeServe } from "@/components/landing/who-we-serve";
@@ -12,6 +13,7 @@ export default function Landing() {
       <SiteNav />
       <Hero />
       <TechDomains />
+      <Gallery />
       <CredibilityStrip />
       <ModulesGrid />
       <WhoWeServe />

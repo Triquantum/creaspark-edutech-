@@ -12,7 +12,7 @@ const AUDIENCES = [
 
 export function WhoWeServe() {
   return (
-    <section id="who-we-serve" className="relative mx-auto max-w-6xl px-6 pb-28">
+    <section id="who-we-serve" className="relative mx-auto px-6 pb-28">
       <Reveal>
         <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">Who We Serve</p>
         <h2 className="mt-3 font-display text-2xl font-semibold text-night dark:text-white md:text-3xl">

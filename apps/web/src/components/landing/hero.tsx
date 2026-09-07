@@ -16,7 +16,16 @@ const FLOATERS = [
 
 export function Hero() {
   return (
-    <section className="relative mx-auto max-w-6xl overflow-hidden px-6 pb-24 pt-16 md:pt-24">
+    <section className="relative isolate mx-auto overflow-hidden px-6 pb-24 pt-16 text-white md:pt-24">
+      <video
+        className="absolute inset-0 -z-10 h-full w-full object-cover"
+        src="/media/stem-lab-hero.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+      />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-night/90 via-night/70 to-night/40" />
       <div className="orb left-[-10%] top-[-10%] h-96 w-96 bg-accent/40" />
       <div className="orb right-[-8%] top-[30%] h-80 w-80 bg-primary/30 [animation-delay:4s]" />
       <div className="orb bottom-[5%] left-[35%] h-64 w-64 bg-warning/25 [animation-delay:8s]" />
@@ -30,7 +39,7 @@ export function Hero() {
           animate={{ opacity: [0, 1, 1, 0], y: [12, -8, -8, -20] }}
           transition={{ duration: 6, delay, repeat: Infinity, repeatDelay: FLOATERS.length * 0.6, ease: "easeInOut" }}
         >
-          <div className="glass flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-ink shadow-card dark:text-white">
+          <div className="glass flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium text-white shadow-card">
             <Icon size={14} className="text-primary" />
             {label}
           </div>
@@ -51,7 +60,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1 }}
-          className="mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight text-night dark:text-white md:text-6xl"
+          className="mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight text-white md:text-6xl"
         >
           Igniting STEM innovation in every institution
         </motion.h1>
@@ -60,7 +69,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="mt-6 max-w-xl text-lg text-slate-500"
+          className="mt-6 max-w-xl text-lg text-slate-200"
         >
           One platform for schools, colleges and STEM academies — admissions, attendance, fees, exams,
           transport and AI-assisted learning, alongside hands-on AI, Robotics, IoT and Design Thinking labs.
@@ -73,7 +82,7 @@ export function Hero() {
           className="mt-10 flex flex-wrap gap-4"
         >
           <Link href="/login"><Button className="h-12 px-8">Book a demo</Button></Link>
-          <a href="#domains"><Button variant="ghost" className="h-12 px-8">Explore programs</Button></a>
+          <a href="#domains"><Button variant="ghost" className="h-12 border border-white/40 px-8 text-white hover:bg-white/10">Explore programs</Button></a>
         </motion.div>
       </div>
     </section>

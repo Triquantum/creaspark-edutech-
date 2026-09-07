@@ -13,7 +13,7 @@ const MODULES = [
 
 export function ModulesGrid() {
   return (
-    <section id="modules" className="relative mx-auto max-w-6xl px-6 pb-28">
+    <section id="modules" className="relative mx-auto px-6 pb-28">
       <Reveal>
         <h2 className="font-display text-2xl font-semibold text-night dark:text-white">Everything an institution runs on</h2>
       </Reveal>

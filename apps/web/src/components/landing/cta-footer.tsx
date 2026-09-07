@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export function CtaBanner() {
   return (
-    <section className="relative mx-auto max-w-6xl px-6 pb-28">
+    <section className="relative mx-auto px-6 pb-28">
       <Reveal>
         <motion.div
           whileHover={{ scale: 1.01 }}
@@ -33,7 +33,7 @@ export function CtaBanner() {
 export function SiteFooter() {
   return (
     <footer id="contact" className="border-t border-slate-200 bg-white/60 py-12 dark:border-white/10 dark:bg-transparent">
-      <div className="mx-auto max-w-6xl px-6">
+      <div className="mx-auto px-6">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <span className="flex items-center gap-2 font-display text-base font-semibold text-night dark:text-white">

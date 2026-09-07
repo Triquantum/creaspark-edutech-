@@ -32,7 +32,7 @@ export function SiteNav() {
         scrolled ? "glass shadow-card" : "bg-transparent"
       }`}
     >
-      <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-6">
+      <div className="mx-auto flex h-20 items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2.5 font-display text-lg font-semibold text-night dark:text-white">
           <img src="/creaspark-logo.png" alt="Creaspark logo" className="h-9 w-9 rounded-xl object-cover" />
           Creaspark<span className="align-super text-xs text-primary">™</span>
