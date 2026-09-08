@@ -52,9 +52,19 @@ export function Hero() {
             {HEADLINE.map((word, i) => (
               <motion.span
                 key={word.text}
-                initial={{ opacity: 0, y: 40, rotateX: -90 }}
-                animate={{ opacity: 1, y: 0, rotateX: 0 }}
-                transition={{ duration: 0.6, delay: 0.15 + i * 0.08, ease: "easeOut" }}
+                initial={{ opacity: 0, y: 60, rotateX: -100 }}
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                  rotateX: 0,
+                  ...(word.primary && { scale: [1, 1.06, 1] }),
+                }}
+                transition={{
+                  opacity: { duration: 0.9, delay: 0.3 + i * 0.18, ease: "easeOut" },
+                  y: { duration: 0.9, delay: 0.3 + i * 0.18, ease: "backOut" },
+                  rotateX: { duration: 0.9, delay: 0.3 + i * 0.18, ease: "backOut" },
+                  scale: { duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 2 },
+                }}
                 style={{ transformStyle: "preserve-3d", display: "inline-block" }}
                 className={word.primary ? "text-primary" : undefined}
               >
@@ -67,7 +77,7 @@ export function Hero() {
         <motion.p
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.7 }}
+          transition={{ duration: 0.7, delay: 1.4 }}
           className="mt-6 max-w-xl text-lg text-slate-200"
         >
           Hands-on future skills education in AI, Robotics, IoT, Drone Technology, 3D Printing, Machine
@@ -77,7 +87,7 @@ export function Hero() {
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.8 }}
+          transition={{ duration: 0.7, delay: 1.55 }}
           className="mt-10 flex flex-wrap gap-4 [perspective:800px]"
         >
           <motion.a href="#domains" whileHover={{ scale: 1.05, rotateX: 8, y: -2 }} style={{ transformStyle: "preserve-3d" }}>
@@ -94,7 +104,7 @@ export function Hero() {
               key={label}
               initial={{ opacity: 0, y: 24, rotateX: -30 }}
               animate={{ opacity: 1, y: 0, rotateX: 0 }}
-              transition={{ duration: 0.6, delay: 0.9 + i * 0.12, ease: "easeOut" }}
+              transition={{ duration: 0.6, delay: 1.7 + i * 0.12, ease: "easeOut" }}
               whileHover={{ y: -4, scale: 1.05 }}
               style={{ transformStyle: "preserve-3d" }}
             >
