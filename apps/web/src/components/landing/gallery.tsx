@@ -1,8 +1,10 @@
 "use client";
+import { useEffect, useState } from "react";
 import { Reveal, Stagger, staggerItem } from "./reveal";
 import { motion } from "framer-motion";
+import { api } from "@/lib/api";
 
-const PHOTOS = [
+const FALLBACK_PHOTOS = [
   { src: "/media/gallery-students-1.jpg", alt: "Students assembling robotics kits in a STEM lab" },
   { src: "/media/gallery-robotic-kit.jpg", alt: "Robotics kit components used in hands-on labs" },
   { src: "/media/gallery-3d-printers.jpg", alt: "3D printers running in a STEM innovation lab" },
@@ -14,7 +16,22 @@ const PHOTOS = [
   { src: "/media/gallery-lab-wall.jpg", alt: "STEM lab wall with educational displays" },
 ];
 
+interface HomepageMediaItem { id: string; url: string; title: string | null; type: "PHOTO" | "VIDEO" }
+
 export function Gallery() {
+  const [photos, setPhotos] = useState(FALLBACK_PHOTOS);
+
+  useEffect(() => {
+    api<HomepageMediaItem[]>("/public/homepage-media?section=GALLERY")
+      .then((items) => {
+        const uploaded = items
+          .filter((i) => i.type === "PHOTO")
+          .map((i) => ({ src: i.url, alt: i.title || "Creaspark STEM lab photo" }));
+        if (uploaded.length > 0) setPhotos(uploaded);
+      })
+      .catch(() => {}); // API unreachable or no uploads yet -- keep the static fallback photos
+  }, []);
+
   return (
     <section id="gallery" className="relative mx-auto px-6 pb-28">
       <Reveal>
@@ -25,7 +42,7 @@ export function Gallery() {
       </Reveal>
 
       <Stagger className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {PHOTOS.map(({ src, alt }) => (
+        {photos.map(({ src, alt }) => (
           <motion.div
             key={src}
             variants={staggerItem}

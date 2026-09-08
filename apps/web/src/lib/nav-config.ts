@@ -69,6 +69,7 @@ export const NAV: NavGroup[] = [
   { label: "Portion Status", icon: "percent", href: "/portion", hiddenFrom: ["PARENT", "STUDENT", "GUEST"] },
   { label: "Message", icon: "message", href: "/message" },
   { label: "Media", icon: "image", href: "/media" },
+  { label: "Website Gallery", icon: "image", href: "/homepage-media", roles: ["SUPER_ADMIN"] },
   { label: "Mail / SMS", icon: "mail", href: "/mail-sms", hiddenFrom: ["PARENT", "STUDENT"] },
   { label: "Online Exam", icon: "monitor", hiddenFrom: ["PARENT", "STUDENT"], children: kids("online-exam", ["Question Group", "Question Level", "Question Bank", "Online Exam", "Instruction"]) },
   { label: "Payroll", icon: "wallet", hiddenFrom: ["PARENT", "STUDENT", "ACADEMIC_ADMIN"], children: kids("payroll", ["Salary Template", "Hourly Template", "Manage Salary", "Make Payment", "Overtime"]) },

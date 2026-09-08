@@ -845,6 +845,28 @@ enum MediaType {
   VIDEO
 }
 
+// Public-website media — uploaded by Super Admin only, served unauthenticated
+// to the marketing site (gallery, hero video, etc). Not tenant/school scoped:
+// this is global site content, not a school's own media.
+model HomepageMedia {
+  id         String               @id @default(cuid())
+  section    HomepageMediaSection
+  type       MediaType
+  title      String?
+  url        String
+  sortOrder  Int                  @default(0)
+  uploadedBy String
+  createdAt  DateTime             @default(now())
+
+  @@index([section, sortOrder])
+}
+
+enum HomepageMediaSection {
+  GALLERY
+  HERO_VIDEO
+  STORY_PHOTO
+}
+
 // Physical stock tracked and distributed to a specific school/college/institute.
 model InventoryItem {
   id          String   @id @default(cuid())
