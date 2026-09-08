@@ -20,9 +20,17 @@ export function CtaBanner() {
           <p className="relative mx-auto mt-3 max-w-xl text-sm text-white/80">
             Partner with Creaspark for STEM labs, teacher training and a full-institution ERP — under your own brand.
           </p>
-          <div className="relative mt-8 flex flex-wrap justify-center gap-4">
-            <Link href="/login"><Button className="h-12 !bg-white px-8 !text-primary hover:!bg-white/90">Get in touch</Button></Link>
-            <a href="#domains"><Button variant="ghost" className="h-12 border border-white/40 px-8 text-white hover:bg-white/10">Partner with us</Button></a>
+          <div className="relative mt-8 flex flex-wrap justify-center gap-4 [perspective:800px]">
+            <Link href="/login">
+              <motion.div whileHover={{ scale: 1.05, rotateX: 8, y: -2 }} style={{ transformStyle: "preserve-3d" }}>
+                <Button className="h-12 !bg-white px-8 !text-primary hover:!bg-white/90">Get in touch</Button>
+              </motion.div>
+            </Link>
+            <a href="#domains">
+              <motion.div whileHover={{ scale: 1.05, rotateX: 8, y: -2 }} style={{ transformStyle: "preserve-3d" }}>
+                <Button variant="ghost" className="h-12 border border-white/40 px-8 text-white hover:bg-white/10">Partner with us</Button>
+              </motion.div>
+            </a>
           </div>
         </motion.div>
       </Reveal>
@@ -64,22 +72,22 @@ export function SiteFooter() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Our Services</p>
             <ul className="mt-3 space-y-2 text-sm">
-              {SERVICES.map((s) => <li key={s}><a href="#domains" className="hover:text-primary">{s}</a></li>)}
+              {SERVICES.map((s) => <li key={s}><a href="#domains" className="inline-block transition-transform duration-200 hover:translate-x-1 hover:text-primary">{s}</a></li>)}
             </ul>
           </div>
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Who We Serve</p>
             <ul className="mt-3 space-y-2 text-sm">
-              {AUDIENCES.map((a) => <li key={a}><a href="#who-we-serve" className="hover:text-primary">{a}</a></li>)}
+              {AUDIENCES.map((a) => <li key={a}><a href="#who-we-serve" className="inline-block transition-transform duration-200 hover:translate-x-1 hover:text-primary">{a}</a></li>)}
             </ul>
           </div>
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Company</p>
             <ul className="mt-3 space-y-2 text-sm">
-              {COMPANY_LINKS.map((c) => <li key={c.label}><a href={c.href} className="hover:text-primary">{c.label}</a></li>)}
-              <li><Link href="/login" className="hover:text-primary">Sign In</Link></li>
+              {COMPANY_LINKS.map((c) => <li key={c.label}><a href={c.href} className="inline-block transition-transform duration-200 hover:translate-x-1 hover:text-primary">{c.label}</a></li>)}
+              <li><Link href="/login" className="inline-block transition-transform duration-200 hover:translate-x-1 hover:text-primary">Sign In</Link></li>
             </ul>
           </div>
 

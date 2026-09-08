@@ -41,17 +41,19 @@ export function Gallery() {
         </h2>
       </Reveal>
 
-      <Stagger className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <Stagger className="mt-10 grid grid-cols-2 gap-3 [perspective:1000px] sm:grid-cols-3 lg:grid-cols-5">
         {photos.map(({ src, alt }) => (
           <motion.div
             key={src}
             variants={staggerItem}
-            whileHover={{ scale: 1.03 }}
-            transition={{ duration: 0.2 }}
-            className="aspect-square overflow-hidden rounded-xl shadow-card"
+            whileHover={{ scale: 1.06, rotateX: 5, rotateY: -5 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            style={{ transformStyle: "preserve-3d" }}
+            className="group relative aspect-square overflow-hidden rounded-xl shadow-card"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={alt} className="h-full w-full object-cover" loading="lazy" />
+            <img src={src} alt={alt} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" loading="lazy" />
+            <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-t from-night/40 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
           </motion.div>
         ))}
       </Stagger>

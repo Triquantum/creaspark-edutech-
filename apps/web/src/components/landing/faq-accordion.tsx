@@ -25,7 +25,12 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
         {items.map((item, i) => {
           const isOpen = openIndex === i;
           return (
-            <div key={item.question} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[#16213A]">
+            <motion.div
+              key={item.question}
+              whileHover={{ scale: 1.01, x: 2 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[#16213A]"
+            >
               <button
                 type="button"
                 onClick={() => setOpenIndex(isOpen ? null : i)}
@@ -50,7 +55,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+            </motion.div>
           );
         })}
       </div>

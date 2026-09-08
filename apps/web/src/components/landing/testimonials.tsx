@@ -29,12 +29,23 @@ export function Testimonials() {
         </h2>
       </Reveal>
 
-      <Stagger className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <Stagger className="mx-auto mt-10 grid max-w-5xl gap-5 [perspective:1200px] sm:grid-cols-2 lg:grid-cols-3">
         {QUOTES.map(({ quote, role }) => (
-          <motion.div key={role} variants={staggerItem} className="rounded-2xl bg-white p-6 shadow-card dark:bg-[#16213A]">
-            <Quote size={20} className="text-primary/40" />
-            <p className="mt-3 text-sm leading-relaxed text-slate-500">{quote}</p>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-primary">{role}</p>
+          <motion.div
+            key={role}
+            variants={staggerItem}
+            whileHover={{ y: -8, rotateX: 6, rotateY: -4, scale: 1.02 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            style={{ transformStyle: "preserve-3d" }}
+            className="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-card dark:bg-[#16213A]"
+          >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gradient-to-r from-primary to-accent transition-transform duration-300 group-hover:scale-x-100"
+            />
+            <Quote size={20} className="relative text-primary/40 transition-transform duration-300 group-hover:scale-110" />
+            <p className="relative mt-3 text-sm leading-relaxed text-slate-500">{quote}</p>
+            <p className="relative mt-4 text-xs font-semibold uppercase tracking-wide text-primary">{role}</p>
           </motion.div>
         ))}
       </Stagger>

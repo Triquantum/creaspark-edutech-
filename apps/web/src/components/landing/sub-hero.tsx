@@ -17,7 +17,11 @@ interface SubHeroProps {
 }
 
 function CtaLink({ cta, className }: { cta: SubHeroCta; className: string }) {
-  const button = <Button className={className}>{cta.label}</Button>;
+  const button = (
+    <motion.div whileHover={{ scale: 1.05, rotateX: 8, y: -2 }} style={{ transformStyle: "preserve-3d" }}>
+      <Button className={className}>{cta.label}</Button>
+    </motion.div>
+  );
   return cta.href.startsWith("/") ? (
     <Link href={cta.href}>{button}</Link>
   ) : (
@@ -28,8 +32,18 @@ function CtaLink({ cta, className }: { cta: SubHeroCta; className: string }) {
 export function SubHero({ eyebrow, title, description, primaryCta, secondaryCta }: SubHeroProps) {
   return (
     <section className="relative isolate overflow-hidden bg-night px-6 py-20 text-center text-white md:py-28">
-      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/30 blur-3xl" />
-      <div className="pointer-events-none absolute -right-24 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-accent/20 blur-3xl" />
+      <motion.div
+        aria-hidden
+        animate={{ y: [0, -20, 0], x: [0, 10, 0] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/30 blur-3xl"
+      />
+      <motion.div
+        aria-hidden
+        animate={{ y: [0, 20, 0], x: [0, -10, 0] }}
+        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute -right-24 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-accent/20 blur-3xl"
+      />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

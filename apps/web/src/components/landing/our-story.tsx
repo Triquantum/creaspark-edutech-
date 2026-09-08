@@ -1,4 +1,5 @@
 "use client";
+import { motion } from "framer-motion";
 import { Reveal } from "./reveal";
 
 export function OurStory() {
@@ -21,10 +22,12 @@ export function OurStory() {
           </p>
         </Reveal>
 
-        <Reveal delay={0.1} className="relative mx-auto w-full max-w-sm">
+        <Reveal delay={0.1} className="relative mx-auto w-full max-w-sm [perspective:1200px]">
           <div className="absolute -inset-3 -z-10 rounded-[1.75rem] bg-gradient-to-br from-primary/10 to-accent/10" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <motion.img
+            whileHover={{ rotateX: 6, rotateY: -6, scale: 1.03 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            style={{ transformStyle: "preserve-3d" }}
             src="/media/gallery-lab-interior.jpg"
             alt="Interior of a Creaspark STEM innovation lab"
             className="aspect-[4/3] w-full rounded-2xl object-cover shadow-lift"

@@ -16,6 +16,7 @@ export function StatsStrip({ stats }: { stats: Stat[] }) {
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            whileHover={{ y: -4, scale: 1.08 }}
             transition={{ duration: 0.5, delay: i * 0.08 }}
             className="text-center"
           >
