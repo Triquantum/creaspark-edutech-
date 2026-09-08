@@ -31,15 +31,26 @@ export function CredibilityStrip() {
           </p>
         </Reveal>
 
-        <Stagger className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <Stagger className="mt-10 grid gap-4 [perspective:1200px] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {PARTNERS.map(({ Icon, name, body, tag, tagClass }) => (
-            <motion.div key={name} variants={staggerItem} className="rounded-2xl bg-white p-5 text-center shadow-card dark:bg-[#16213A]">
-              <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
+            <motion.div
+              key={name}
+              variants={staggerItem}
+              whileHover={{ y: -8, rotateX: 6, rotateY: -4, scale: 1.03 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              style={{ transformStyle: "preserve-3d" }}
+              className="group relative overflow-hidden rounded-2xl bg-white p-5 text-center shadow-card dark:bg-[#16213A]"
+            >
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gradient-to-r from-primary to-accent transition-transform duration-300 group-hover:scale-x-100"
+              />
+              <span className="relative mx-auto grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110">
                 <Icon size={18} />
               </span>
-              <p className="mt-3 font-display text-sm font-semibold text-night dark:text-white">{name}</p>
-              <p className="mt-1 text-xs leading-relaxed text-slate-500">{body}</p>
-              <span className={`mt-3 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tagClass}`}>{tag}</span>
+              <p className="relative mt-3 font-display text-sm font-semibold text-night dark:text-white">{name}</p>
+              <p className="relative mt-1 text-xs leading-relaxed text-slate-500">{body}</p>
+              <span className={`relative mt-3 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tagClass}`}>{tag}</span>
             </motion.div>
           ))}
         </Stagger>

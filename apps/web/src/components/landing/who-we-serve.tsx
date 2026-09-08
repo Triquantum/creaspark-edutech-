@@ -20,20 +20,25 @@ export function WhoWeServe() {
         </h2>
       </Reveal>
 
-      <Stagger className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <Stagger className="mt-10 grid gap-5 [perspective:1200px] sm:grid-cols-2 lg:grid-cols-4">
         {AUDIENCES.map(({ Icon, title, body }) => (
           <motion.div
             key={title}
             variants={staggerItem}
-            whileHover={{ scale: 1.03 }}
-            transition={{ duration: 0.2 }}
-            className="rounded-2xl border border-slate-100 bg-white/60 p-6 backdrop-blur-sm dark:border-white/10 dark:bg-white/5"
+            whileHover={{ y: -8, rotateX: 6, rotateY: -4, scale: 1.02 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            style={{ transformStyle: "preserve-3d" }}
+            className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-white/60 p-6 backdrop-blur-sm dark:border-white/10 dark:bg-white/5"
           >
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent/10 text-accent">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gradient-to-r from-accent to-primary transition-transform duration-300 group-hover:scale-x-100"
+            />
+            <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-accent/10 text-accent transition-transform duration-300 group-hover:scale-110">
               <Icon size={20} />
             </span>
-            <h3 className="mt-4 font-display font-semibold text-night dark:text-white">{title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">{body}</p>
+            <h3 className="relative mt-4 font-display font-semibold text-night dark:text-white">{title}</h3>
+            <p className="relative mt-2 text-sm leading-relaxed text-slate-500">{body}</p>
           </motion.div>
         ))}
       </Stagger>

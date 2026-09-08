@@ -29,8 +29,14 @@ export function IndustryCurriculum() {
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-night dark:text-white">College Curriculum</h3>
           <Stagger className="space-y-3">
             {SUBJECTS.map(({ Icon, title, body }) => (
-              <motion.div key={title} variants={staggerItem} className="flex gap-3 rounded-xl bg-white p-4 shadow-card dark:bg-[#16213A]">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Icon size={16} /></span>
+              <motion.div
+                key={title}
+                variants={staggerItem}
+                whileHover={{ x: 4, y: -2, boxShadow: "0 12px 30px -12px rgba(47,111,184,0.25)" }}
+                transition={{ duration: 0.2 }}
+                className="group flex gap-3 rounded-xl bg-white p-4 shadow-card dark:bg-[#16213A]"
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110"><Icon size={16} /></span>
                 <div>
                   <p className="font-display text-sm font-semibold text-night dark:text-white">{title}</p>
                   <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{body}</p>
@@ -44,8 +50,14 @@ export function IndustryCurriculum() {
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-night dark:text-white">Professional Courses</h3>
           <Stagger className="space-y-3">
             {SUBJECTS.map(({ Icon, title }) => (
-              <motion.div key={title} variants={staggerItem} className="flex gap-3 rounded-xl bg-white p-4 shadow-card dark:bg-[#16213A]">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent"><Icon size={16} /></span>
+              <motion.div
+                key={title}
+                variants={staggerItem}
+                whileHover={{ x: 4, y: -2, boxShadow: "0 12px 30px -12px rgba(232,153,45,0.25)" }}
+                transition={{ duration: 0.2 }}
+                className="group flex gap-3 rounded-xl bg-white p-4 shadow-card dark:bg-[#16213A]"
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent transition-transform duration-300 group-hover:scale-110"><Icon size={16} /></span>
                 <div>
                   <p className="font-display text-sm font-semibold text-night dark:text-white">{title}</p>
                   <p className="mt-0.5 text-xs leading-relaxed text-slate-500">Applied, fast-track version for working professionals reskilling on the job.</p>

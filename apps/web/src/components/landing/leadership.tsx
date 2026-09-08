@@ -21,24 +21,31 @@ export function Leadership() {
         </h2>
       </Reveal>
 
-      <Stagger className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <Stagger className="mt-10 grid gap-5 [perspective:1200px] sm:grid-cols-2 lg:grid-cols-3">
         {TEAM.map(({ name, role, body, photo, initials }) => (
           <motion.div
             key={name}
             variants={staggerItem}
-            className="rounded-2xl bg-white p-6 shadow-card dark:bg-[#16213A]"
+            whileHover={{ y: -8, rotateX: 6, rotateY: -4, scale: 1.02 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            style={{ transformStyle: "preserve-3d" }}
+            className="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-card dark:bg-[#16213A]"
           >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gradient-to-r from-primary to-accent transition-transform duration-300 group-hover:scale-x-100"
+            />
             {photo ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={photo} alt={name} className="h-14 w-14 rounded-full object-cover" />
+              <img src={photo} alt={name} className="relative h-14 w-14 rounded-full object-cover shadow-md transition-transform duration-300 group-hover:scale-105" />
             ) : (
-              <span className="grid h-14 w-14 place-items-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary">
+              <span className="relative grid h-14 w-14 place-items-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary transition-transform duration-300 group-hover:scale-105">
                 {initials}
               </span>
             )}
-            <h3 className="mt-4 font-display font-semibold text-night dark:text-white">{name}</h3>
-            <p className="text-xs font-medium uppercase tracking-wide text-primary">{role}</p>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">{body}</p>
+            <h3 className="relative mt-4 font-display font-semibold text-night dark:text-white">{name}</h3>
+            <p className="relative text-xs font-medium uppercase tracking-wide text-primary">{role}</p>
+            <p className="relative mt-2 text-sm leading-relaxed text-slate-500">{body}</p>
           </motion.div>
         ))}
       </Stagger>
