@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,7 @@ const STATS = [
 
 export function Hero() {
   return (
-    <section className="relative isolate mx-auto flex min-h-[720px] items-center overflow-hidden px-6 py-24 text-white md:min-h-[100vh] md:py-32">
+    <section id="home" className="relative isolate mx-auto flex min-h-[720px] items-center overflow-hidden px-6 py-24 text-white md:min-h-[100vh] md:py-32">
       <video
         className="absolute inset-0 -z-10 h-full w-full object-cover"
         src="/media/stem-lab-hero.mp4"
@@ -40,7 +39,7 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.1 }}
           className="mt-5 max-w-3xl font-display text-4xl font-semibold leading-tight text-white md:text-6xl"
         >
-          Igniting <span className="text-primary">STEM innovation</span> in every institution
+          Igniting <span className="text-primary">STEM Innovation</span> in Every Institution
         </motion.h1>
 
         <motion.p
@@ -49,8 +48,8 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.2 }}
           className="mt-6 max-w-xl text-lg text-slate-200"
         >
-          One platform for schools, colleges and STEM academies — admissions, attendance, fees, exams,
-          transport and AI-assisted learning, alongside hands-on AI, Robotics, IoT and Design Thinking labs.
+          Hands-on future skills education in AI, Robotics, IoT, Drone Technology, 3D Printing, Machine
+          Learning and Design Thinking — for schools, colleges and working professionals.
         </motion.p>
 
         <motion.div
@@ -59,23 +58,32 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.3 }}
           className="mt-10 flex flex-wrap gap-4"
         >
-          <a href="#domains"><Button className="h-12 gap-2 px-8">Explore programs <ArrowRight size={16} /></Button></a>
-          <Link href="/login"><Button className="h-12 !bg-night !text-white px-8 hover:!bg-night/80">Book a demo</Button></Link>
+          <a href="#domains"><Button className="h-12 gap-2 px-8">Explore Programs <ArrowRight size={16} /></Button></a>
+          <a href="#contact"><Button className="h-12 !bg-night !text-white px-8 hover:!bg-night/80">Partner With Us</Button></a>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.4 }}
-          className="mt-12 flex flex-wrap gap-x-10 gap-y-4"
-        >
-          {STATS.map(({ value, label }) => (
-            <div key={label}>
-              <p className="font-display text-3xl font-semibold text-white">{value}</p>
-              <p className="text-sm text-slate-300">{label}</p>
-            </div>
+        <div className="mt-14 flex flex-wrap gap-5 [perspective:1200px]">
+          {STATS.map(({ value, label }, i) => (
+            <motion.div
+              key={label}
+              initial={{ opacity: 0, y: 30, rotateX: -25 }}
+              animate={{ opacity: 1, y: 0, rotateX: 0 }}
+              transition={{ duration: 0.7, delay: 0.45 + i * 0.12, ease: "easeOut" }}
+              whileHover={{ y: -8, rotateX: 10, rotateY: -8, scale: 1.06 }}
+              style={{ transformStyle: "preserve-3d" }}
+              className="glass min-w-[150px] rounded-2xl border border-white/10 px-6 py-5 text-center shadow-lift"
+            >
+              <motion.p
+                animate={{ y: [0, -4, 0] }}
+                transition={{ duration: 3 + i * 0.4, repeat: Infinity, ease: "easeInOut" }}
+                className="font-display text-3xl font-semibold text-white"
+              >
+                {value}
+              </motion.p>
+              <p className="mt-1 text-sm text-slate-300">{label}</p>
+            </motion.div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

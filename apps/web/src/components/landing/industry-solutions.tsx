@@ -13,7 +13,7 @@ const SOLUTIONS = [
 
 export function IndustrySolutions() {
   return (
-    <section className="relative mx-auto overflow-hidden rounded-3xl bg-night px-6 py-16 text-white sm:mx-6 lg:mx-auto lg:max-w-6xl">
+    <section id="industry-solutions" className="relative mx-4 overflow-hidden rounded-3xl bg-night px-6 py-16 text-white sm:mx-6 lg:mx-10 lg:px-12 lg:py-20 xl:mx-16">
       <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
         <Reveal>
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">Industry Solutions</p>

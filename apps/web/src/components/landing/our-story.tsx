@@ -4,7 +4,7 @@ import { Reveal } from "./reveal";
 export function OurStory() {
   return (
     <section id="about" className="relative mx-auto px-6 pb-28">
-      <div className="grid items-center gap-12 lg:grid-cols-2">
+      <div className="grid items-center gap-10 lg:grid-cols-[1.3fr_1fr] lg:gap-14">
         <Reveal>
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">Our Story</p>
           <h2 className="mt-3 font-display text-2xl font-semibold text-night dark:text-white md:text-3xl">
@@ -21,13 +21,13 @@ export function OurStory() {
           </p>
         </Reveal>
 
-        <Reveal delay={0.1} className="relative">
-          <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-primary/10 to-accent/10" />
+        <Reveal delay={0.1} className="relative mx-auto w-full max-w-sm">
+          <div className="absolute -inset-3 -z-10 rounded-[1.75rem] bg-gradient-to-br from-primary/10 to-accent/10" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/media/gallery-lab-interior.jpg"
             alt="Interior of a Creaspark STEM innovation lab"
-            className="aspect-[4/3] w-full rounded-3xl object-cover shadow-lift"
+            className="aspect-[4/3] w-full rounded-2xl object-cover shadow-lift"
           />
         </Reveal>
       </div>

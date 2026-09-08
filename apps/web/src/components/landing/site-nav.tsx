@@ -6,9 +6,10 @@ import { Menu, X, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const LINKS = [
+  { href: "#home", label: "Home" },
   { href: "#domains", label: "STEM Labs" },
-  { href: "#modules", label: "Platform" },
-  { href: "#who-we-serve", label: "Who We Serve" },
+  { href: "#training", label: "Training" },
+  { href: "#industry-solutions", label: "Industry Solutions" },
   { href: "#about", label: "About" },
   { href: "#contact", label: "Contact" },
 ];
