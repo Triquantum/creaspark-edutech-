@@ -35,7 +35,7 @@ const AUDIENCES = ["Schools", "Colleges & Universities", "Working Professionals"
 const COMPANY_LINKS = [
   { label: "About Us", href: "#about" },
   { label: "STEM Innovation Labs", href: "#domains" },
-  { label: "Industry Solutions", href: "#contact" },
+  { label: "Industry Solutions", href: "#industry-solutions" },
   { label: "Contact", href: "#contact" },
 ];
 
@@ -79,6 +79,7 @@ export function SiteFooter() {
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Company</p>
             <ul className="mt-3 space-y-2 text-sm">
               {COMPANY_LINKS.map((c) => <li key={c.label}><a href={c.href} className="hover:text-primary">{c.label}</a></li>)}
+              <li><Link href="/login" className="hover:text-primary">Sign In</Link></li>
             </ul>
           </div>
 

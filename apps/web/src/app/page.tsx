@@ -14,21 +14,23 @@ import { CtaBanner, SiteFooter } from "@/components/landing/cta-footer";
 
 export default function Landing() {
   return (
-    <div className="relative overflow-x-hidden bg-surface text-ink dark:bg-night dark:text-slate-200">
+    <div className="relative bg-surface text-ink dark:bg-night dark:text-slate-200">
       <SiteNav />
-      <Hero />
-      <TechDomains />
-      <Gallery />
-      <CredibilityStrip />
-      <OurStory />
-      <Leadership />
-      <ModulesGrid />
-      <WhoWeServe />
-      <IndustryCurriculum />
-      <IndustrySolutions />
-      <WhyCreaspark />
-      <CtaBanner />
-      <SiteFooter />
+      <div className="overflow-x-hidden">
+        <Hero />
+        <TechDomains />
+        <Gallery />
+        <CredibilityStrip />
+        <OurStory />
+        <Leadership />
+        <ModulesGrid />
+        <WhoWeServe />
+        <IndustryCurriculum />
+        <IndustrySolutions />
+        <WhyCreaspark />
+        <CtaBanner />
+        <SiteFooter />
+      </div>
     </div>
   );
 }
