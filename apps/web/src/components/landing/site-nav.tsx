@@ -1,20 +1,22 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const LINKS = [
-  { href: "#home", label: "Home" },
-  { href: "#domains", label: "STEM Labs" },
-  { href: "#training", label: "Training" },
-  { href: "#industry-solutions", label: "Industry Solutions" },
-  { href: "#about", label: "About" },
-  { href: "#contact", label: "Contact" },
+  { href: "/", label: "Home" },
+  { href: "/stem-labs", label: "STEM Labs" },
+  { href: "/training-programs", label: "Training" },
+  { href: "/industry-solutions", label: "Industry Solutions" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export function SiteNav() {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -41,11 +43,23 @@ export function SiteNav() {
         </Link>
 
         <nav className="hidden gap-8 text-sm md:flex" aria-label="Site">
-          {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="text-ink/80 transition-colors hover:text-primary dark:text-slate-300">
-              {l.label}
-            </a>
-          ))}
+          {LINKS.map((l) => {
+            const isActive = l.href === "/" ? pathname === "/" : pathname?.startsWith(l.href);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                aria-current={isActive ? "page" : undefined}
+                className={`border-b-2 pb-0.5 transition-colors ${
+                  isActive
+                    ? "border-primary font-medium text-primary"
+                    : "border-transparent text-ink/80 hover:text-primary dark:text-slate-300"
+                }`}
+              >
+                {l.label}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="ml-auto hidden items-center gap-5 md:flex">
@@ -54,7 +68,7 @@ export function SiteNav() {
             +91 90375 89945
           </a>
           <Link href="/login" className="text-sm text-ink/80 hover:text-primary dark:text-slate-300">Sign in</Link>
-          <a href="#contact"><Button className="h-10">Get in Touch</Button></a>
+          <Link href="/contact"><Button className="h-10">Get in Touch</Button></Link>
         </div>
 
         <button
@@ -76,14 +90,24 @@ export function SiteNav() {
             className="overflow-hidden md:hidden"
           >
             <nav className="glass flex flex-col gap-1 px-6 pb-6 pt-2" aria-label="Site mobile">
-              {LINKS.map((l) => (
-                <a key={l.href} href={l.href} onClick={() => setOpen(false)}
-                  className="rounded-lg px-3 py-2.5 text-sm text-ink hover:bg-black/5 dark:text-slate-200 dark:hover:bg-white/5">
-                  {l.label}
-                </a>
-              ))}
+              {LINKS.map((l) => {
+                const isActive = l.href === "/" ? pathname === "/" : pathname?.startsWith(l.href);
+                return (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    onClick={() => setOpen(false)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`rounded-lg px-3 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/5 ${
+                      isActive ? "font-medium text-primary" : "text-ink dark:text-slate-200"
+                    }`}
+                  >
+                    {l.label}
+                  </Link>
+                );
+              })}
               <Link href="/login" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm text-ink hover:bg-black/5 dark:text-slate-200 dark:hover:bg-white/5">Sign in</Link>
-              <a href="#contact" onClick={() => setOpen(false)}><Button className="mt-2 h-10 w-full">Get in Touch</Button></a>
+              <Link href="/contact" onClick={() => setOpen(false)}><Button className="mt-2 h-10 w-full">Get in Touch</Button></Link>
             </nav>
           </motion.div>
         )}
