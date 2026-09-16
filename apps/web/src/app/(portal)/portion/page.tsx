@@ -22,7 +22,7 @@ interface PortionReport {
   teacher?: { fullName: string; email: string }; reviewer?: { fullName: string } | null;
 }
 
-const REVIEW_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR"]);
+const REVIEW_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "COORDINATOR", "ACADEMIC_ADMIN"]);
 
 const STATUS_STYLE: Record<PortionReport["status"], string> = {
   SUBMITTED: "bg-warning/15 text-warning",

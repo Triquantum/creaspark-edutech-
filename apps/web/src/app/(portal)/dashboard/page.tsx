@@ -76,12 +76,12 @@ const SELF_QUICK: QuickTile[] = [
 
 const STAFF_ROLES = new Set([
   "SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL",
-  "COORDINATOR", "ACCOUNTANT", "RECEPTION", "HR",
+  "COORDINATOR", "ACCOUNTANT", "RECEPTION", "HR", "ACADEMIC_ADMIN",
 ]);
 
 // Matches the @Roles list on GET /students/birthdays/today — anyone outside
 // this set would just get a 403, so don't bother fetching for them.
-const BIRTHDAY_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "TEACHER"]);
+const BIRTHDAY_ROLES = new Set(["SUPER_ADMIN", "ORG_ADMIN", "SCHOOL_ADMIN", "TEACHER", "ACADEMIC_ADMIN"]);
 
 // GET /tasks has no @Roles guard (scoped server-side to assignee/assigner/
 // admin), but the Task Manager nav entry itself is hidden from these roles
@@ -123,7 +123,7 @@ function QuickAccess({ tiles }: { tiles: QuickTile[] }) {
   );
 }
 
-function PlatformOverview({ data }: { data: PlatformSummary }) {
+function PlatformOverview({ data, canManage }: { data: PlatformSummary; canManage: boolean }) {
   return (
     <div className="space-y-5">
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
@@ -137,6 +137,7 @@ function PlatformOverview({ data }: { data: PlatformSummary }) {
         title="Registered Schools" icon={School}
         typeFilter={(t) => t === "SCHOOL"}
         emptyMessage="No schools registered yet."
+        canManage={canManage}
       />
     </div>
   );
@@ -362,7 +363,7 @@ export default function Dashboard() {
       api<MyFees>("/fees/my").then(setMyFees).catch(() => {});
       api<ProgressOverall>("/exams/progress").then(setMyProgress).catch(() => {});
     }
-    if (me.role === "SUPER_ADMIN") {
+    if (me.role === "SUPER_ADMIN" || me.role === "ACADEMIC_ADMIN") {
       loadPlatform();
     }
     if (BIRTHDAY_ROLES.has(me.role)) {
@@ -392,7 +393,9 @@ export default function Dashboard() {
         <p className="text-sm text-slate-500">{today}{me?.tenantName ? ` · ${me.tenantName}` : ""}</p>
       </div>
 
-      {me?.role === "SUPER_ADMIN" && platform && <PlatformOverview data={platform} />}
+      {(me?.role === "SUPER_ADMIN" || me?.role === "ACADEMIC_ADMIN") && platform && (
+        <PlatformOverview data={platform} canManage={me.role === "SUPER_ADMIN"} />
+      )}
 
       {!isTeacher && !isSelf && (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">

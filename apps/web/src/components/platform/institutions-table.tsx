@@ -20,8 +20,8 @@ interface PlatformSummary { schools: InstitutionRow[] }
  * Institutes page. */
 const STATUS_OPTIONS = ["ACTIVE", "SUSPENDED", "TRIAL"] as const;
 
-export function InstitutionsTable({ title, icon: Icon, typeFilter, emptyMessage }: {
-  title: string; icon: LucideIcon; typeFilter: (institutionType: string) => boolean; emptyMessage: string;
+export function InstitutionsTable({ title, icon: Icon, typeFilter, emptyMessage, canManage = true }: {
+  title: string; icon: LucideIcon; typeFilter: (institutionType: string) => boolean; emptyMessage: string; canManage?: boolean;
 }) {
   const router = useRouter();
   const [allRows, setAllRows] = useState<InstitutionRow[]>([]);
@@ -117,8 +117,8 @@ export function InstitutionsTable({ title, icon: Icon, typeFilter, emptyMessage 
                 <td className="px-4 py-3">
                   <RowActions
                     onView={() => router.push(`/admin/schools/${s.id}`)}
-                    onEdit={() => setEditingId(s.id)}
-                    onDelete={() => setDeleting(s)}
+                    onEdit={canManage ? () => setEditingId(s.id) : undefined}
+                    onDelete={canManage ? () => setDeleting(s) : undefined}
                   />
                 </td>
               </tr>
