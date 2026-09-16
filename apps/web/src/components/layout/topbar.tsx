@@ -332,6 +332,9 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const hasMultipleGrants = (me?.grants?.length ?? 0) > 1;
 
   async function signOut() {
+    // Must fire before signOut() -- once the Supabase session is cleared,
+    // there's no valid token left to authenticate this call with.
+    await api("/auth/log-logout", { method: "POST" }).catch(() => {});
     clearActiveGrantToken();
     await supabase.auth.signOut();
     router.push("/login");

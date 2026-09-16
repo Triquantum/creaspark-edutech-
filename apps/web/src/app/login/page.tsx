@@ -29,6 +29,7 @@ function EmailLoginForm() {
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw new Error(signInError.message);
+      api("/auth/log-login", { method: "POST", skipAuthRedirect: true }).catch(() => {});
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
@@ -107,6 +108,7 @@ function AdmissionLoginForm() {
         access_token: res.access_token, refresh_token: res.refresh_token,
       });
       if (sessionError) throw new Error(sessionError.message);
+      api("/auth/log-login", { method: "POST", skipAuthRedirect: true }).catch(() => {});
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");

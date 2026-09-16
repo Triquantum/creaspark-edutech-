@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import type { Request } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
 import { AuthService } from "./auth.service";
@@ -7,6 +8,14 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
+
+/** Best-effort client IP behind Vercel's proxy -- there's no trust-proxy
+ * config, so req.ip alone would return an internal address. */
+function clientIp(req: Request): string | undefined {
+  const forwarded = req.headers["x-forwarded-for"];
+  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
+  return first?.trim() ?? req.ip;
+}
 
 @ApiTags("auth")
 @Controller("auth")
@@ -26,6 +35,20 @@ export class AuthController {
   @ApiBearerAuth()
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user);
+  }
+
+  @Post("log-login")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  logLogin(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.auth.logLogin(user, clientIp(req));
+  }
+
+  @Post("log-logout")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  logLogout(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.auth.logLogout(user, clientIp(req));
   }
 
   /** Mints the X-Active-Grant pointer token for one of the caller's own

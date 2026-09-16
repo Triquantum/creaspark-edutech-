@@ -35,13 +35,17 @@ export class HomepageMediaService {
     });
   }
 
-  async create(dto: CreateHomepageMediaDto, actorId: string) {
-    return this.prisma.homepageMedia.create({
+  async create(dto: CreateHomepageMediaDto, actorId: string, actorTenantId: string) {
+    const item = await this.prisma.homepageMedia.create({
       data: {
         section: dto.section, type: dto.type, title: dto.title,
         url: dto.url, sortOrder: dto.sortOrder ?? 0, uploadedBy: actorId,
       },
     });
+    await this.prisma.auditLog.create({
+      data: { tenantId: actorTenantId, userId: actorId, action: "homepage-media.upload", entity: "HomepageMedia", entityId: item.id },
+    });
+    return item;
   }
 
   async update(id: string, dto: UpdateHomepageMediaDto) {
@@ -56,10 +60,13 @@ export class HomepageMediaService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorId: string, actorTenantId: string) {
     const existing = await this.prisma.homepageMedia.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Homepage media item not found");
     await this.prisma.homepageMedia.delete({ where: { id } });
+    await this.prisma.auditLog.create({
+      data: { tenantId: actorTenantId, userId: actorId, action: "homepage-media.delete", entity: "HomepageMedia", entityId: id },
+    });
     return { deleted: true };
   }
 }
@@ -82,7 +89,7 @@ export class HomepageMediaController {
   @Post()
   @Roles(Role.SUPER_ADMIN)
   create(@Body() dto: CreateHomepageMediaDto, @CurrentUser() user: AuthUser) {
-    return this.svc.create(dto, user.id);
+    return this.svc.create(dto, user.id, user.tenantId);
   }
 
   @Patch(":id")
@@ -93,8 +100,8 @@ export class HomepageMediaController {
 
   @Delete(":id")
   @Roles(Role.SUPER_ADMIN)
-  remove(@Param("id") id: string) {
-    return this.svc.remove(id);
+  remove(@Param("id") id: string, @CurrentUser() user: AuthUser) {
+    return this.svc.remove(id, user.id, user.tenantId);
   }
 }
 

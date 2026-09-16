@@ -63,6 +63,7 @@ export const NAV: NavGroup[] = [
       { label: "Register Institute", href: "/admin/register-institute", roles: SUPER_ADMIN_ONLY },
       { label: "View Registered Institutes", href: "/admin/registered-institutes" },
     ] },
+  { label: "Activity Log", icon: "history", href: "/admin/audit-logs", roles: SUPER_ADMIN_ONLY },
   { label: "Attendance", icon: "calendar-check", hiddenFrom: ["PARENT", "STUDENT"], children: kids("attendance", ["Student Attendance", "Teacher Attendance", "Exam Attendance"]) },
   { label: "Exam", icon: "clipboard", hiddenFrom: ["PARENT", "STUDENT"], children: kids("exam", ["Exam", "Exam Schedule", "Exam Grade", "Admit Card"]) },
   { label: "Mark", icon: "percent", hiddenFrom: ["PARENT", "STUDENT"], children: kids("mark", ["Mark Entry", "Mark Distribution", "Promotion"]) },

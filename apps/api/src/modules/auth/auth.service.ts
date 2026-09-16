@@ -30,6 +30,26 @@ export class AuthService {
     return { ...user, fullName: dbUser?.fullName, tenantName: tenant?.name, grants, activeGrantId };
   }
 
+  /** Called by the frontend right after a successful Supabase sign-in --
+   * Supabase auth itself never touches our backend, so this is the only
+   * place a login event can be recorded for the Super Admin activity log. */
+  async logLogin(user: AuthUser, ip?: string) {
+    await this.prisma.auditLog.create({
+      data: { tenantId: user.tenantId, userId: user.id, action: "auth.login", entity: "User", entityId: user.id, ip },
+    });
+    return { logged: true };
+  }
+
+  /** Called by the frontend right before supabase.auth.signOut() -- the
+   * session token is still valid at that point, so this still authenticates
+   * normally; logging it after sign-out would have no valid session left. */
+  async logLogout(user: AuthUser, ip?: string) {
+    await this.prisma.auditLog.create({
+      data: { tenantId: user.tenantId, userId: user.id, action: "auth.logout", entity: "User", entityId: user.id, ip },
+    });
+    return { logged: true };
+  }
+
   /** Switching only mints a pointer token {userId, grantId} -- no role/
    * tenant/school travels in the token itself, so a grant deactivated after
    * this call stops working on the very next request (TenantMiddleware
