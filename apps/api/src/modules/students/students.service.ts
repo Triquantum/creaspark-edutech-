@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { BulkUpsertStudentsDto, CreateStudentDto, QueryStudentsDto, UpdateStudentDto } from "./dto/create-student.dto";
@@ -117,7 +117,7 @@ export class StudentsService {
       data: { ...dto, dob: dto.dob ? new Date(dto.dob) : undefined, tenantId },
     });
     await this.prisma.auditLog.create({
-      data: { tenantId, userId: actorId, action: "student.create", entity: "Student", entityId: student.id },
+      data: { tenantId, userId: actorId, action: "student.create", entity: "Student", entityId: student.id, ip: currentIp() },
     });
     return student;
   }
@@ -146,7 +146,7 @@ export class StudentsService {
       data: { ...dto, dob: dto.dob ? new Date(dto.dob) : undefined },
     });
     await this.prisma.auditLog.create({
-      data: { tenantId, userId: actorId, action: "student.update", entity: "Student", entityId: id },
+      data: { tenantId, userId: actorId, action: "student.update", entity: "Student", entityId: id, ip: currentIp() },
     });
     return student;
   }
@@ -176,7 +176,7 @@ export class StudentsService {
       this.prisma.student.delete({ where: { id } }), // guardians cascade
       this.prisma.auditLog.create({
         data: {
-          tenantId, userId: actorId, action: "student.delete", entity: "Student", entityId: id,
+          tenantId, userId: actorId, action: "student.delete", entity: "Student", entityId: id, ip: currentIp(),
           metadata: { admissionNo: existing.admissionNo, name: `${existing.firstName} ${existing.lastName}` },
         },
       }),
@@ -246,7 +246,7 @@ export class StudentsService {
 
     await this.prisma.auditLog.create({
       data: {
-        tenantId, userId: actorId, action: "student.bulk-upsert", entity: "Student", entityId: dto.schoolId,
+        tenantId, userId: actorId, action: "student.bulk-upsert", entity: "Student", entityId: dto.schoolId, ip: currentIp(),
         metadata: { schoolId: dto.schoolId, created, updated, errorCount: errors.length },
       },
     });
@@ -334,7 +334,7 @@ export class StudentsService {
       });
       await tx.student.update({ where: { id }, data: { userId: authUser.id } });
       await tx.auditLog.create({
-        data: { tenantId, userId: actorId, action: "student.create-login", entity: "Student", entityId: id },
+        data: { tenantId, userId: actorId, action: "student.create-login", entity: "Student", entityId: id, ip: currentIp() },
       });
     });
 

@@ -6,7 +6,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
 import { ArrayMinSize, IsArray, IsDateString, IsOptional, IsString } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -65,7 +65,7 @@ export class AcademicService {
   }
 
   private audit(userId: string, action: string, entity: string, entityId: string, tenantId: string) {
-    return this.prisma.auditLog.create({ data: { tenantId, userId, action, entity, entityId } });
+    return this.prisma.auditLog.create({ data: { tenantId, userId, action, entity, entityId, ip: currentIp() } });
   }
 
   // ── Schools (picker) ──

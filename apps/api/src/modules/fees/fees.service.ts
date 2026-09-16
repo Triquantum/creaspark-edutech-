@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PaymentMode, Prisma } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { resolveViewableStudentId } from "../../common/access/student-access";
 
@@ -41,7 +41,7 @@ export class FeesService {
         data: { status: nowPaid.gte(total) ? "PAID" : "PARTIAL" },
       });
       await tx.auditLog.create({
-        data: { tenantId, userId: receivedBy, action: "fees.payment", entity: "Payment", entityId: payment.id, metadata: { amount, mode } },
+        data: { tenantId, userId: receivedBy, action: "fees.payment", entity: "Payment", entityId: payment.id, ip: currentIp(), metadata: { amount, mode } },
       });
       return payment;
     });

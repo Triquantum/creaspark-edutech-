@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma, Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateParentDto, QueryParentsDto, UpdateParentDto } from "./parents.dto";
@@ -92,7 +92,7 @@ export class ParentsService {
         })),
       });
       await tx.auditLog.create({
-        data: { tenantId, userId: actorId, action: "parent.create", entity: "User", entityId: u.id, metadata: { studentIds } },
+        data: { tenantId, userId: actorId, action: "parent.create", entity: "User", entityId: u.id, ip: currentIp(), metadata: { studentIds } },
       });
       return u;
     });
@@ -140,7 +140,7 @@ export class ParentsService {
           })]
         : []),
       this.prisma.auditLog.create({
-        data: { tenantId, userId: actorId, action: "parent.update", entity: "User", entityId: id },
+        data: { tenantId, userId: actorId, action: "parent.update", entity: "User", entityId: id, ip: currentIp() },
       }),
     ]);
     return this.findParent(id, user);
@@ -157,7 +157,7 @@ export class ParentsService {
         this.prisma.user.delete({ where: { id } }),
         this.prisma.auditLog.create({
           data: {
-            tenantId, userId: actorId, action: "parent.delete", entity: "User", entityId: id,
+            tenantId, userId: actorId, action: "parent.delete", entity: "User", entityId: id, ip: currentIp(),
             metadata: { email: target.email, name: target.fullName },
           },
         }),

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { resolveViewableStudentId } from "../../common/access/student-access";
 import { CreateExamDto, RecordResultsDto } from "./exams.dto";
@@ -39,7 +39,7 @@ export class ExamsService {
       include: { subjects: { include: { subject: true } } },
     });
     await this.prisma.auditLog.create({
-      data: { tenantId, userId: actorId, action: "exam.create", entity: "Exam", entityId: exam.id },
+      data: { tenantId, userId: actorId, action: "exam.create", entity: "Exam", entityId: exam.id, ip: currentIp() },
     });
     return exam;
   }
@@ -65,7 +65,7 @@ export class ExamsService {
     await this.prisma.auditLog.create({
       data: {
         tenantId, userId: actorId, action: "exam.results.record", entity: "ExamSubject",
-        entityId: dto.examSubjectId, metadata: { count: dto.entries.length },
+        entityId: dto.examSubjectId, ip: currentIp(), metadata: { count: dto.entries.length },
       },
     });
     return { recorded: dto.entries.length };

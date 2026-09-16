@@ -8,14 +8,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
-
-/** Best-effort client IP behind Vercel's proxy -- there's no trust-proxy
- * config, so req.ip alone would return an internal address. */
-function clientIp(req: Request): string | undefined {
-  const forwarded = req.headers["x-forwarded-for"];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
-  return first?.trim() ?? req.ip;
-}
+import { clientIp } from "../../common/http/client-ip";
 
 @ApiTags("auth")
 @Controller("auth")

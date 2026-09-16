@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma, Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateUserDto, QueryUsersDto, UpdateUserDto } from "./users.dto";
@@ -151,7 +151,7 @@ export class UsersService {
         });
       }
       await tx.auditLog.create({
-        data: { tenantId, userId: actorId, action: "user.register", entity: "User", entityId: u.id, metadata: { role: dto.role } },
+        data: { tenantId, userId: actorId, action: "user.register", entity: "User", entityId: u.id, ip: currentIp(), metadata: { role: dto.role } },
       });
       return u;
     });
@@ -252,7 +252,7 @@ export class UsersService {
           })()
         : []),
       this.prisma.auditLog.create({
-        data: { tenantId: newTenantId ?? target.tenantId, userId: actorId, action: "user.update", entity: "User", entityId: id },
+        data: { tenantId: newTenantId ?? target.tenantId, userId: actorId, action: "user.update", entity: "User", entityId: id, ip: currentIp() },
       }),
     ]);
     return this.findUser(id);
@@ -266,7 +266,7 @@ export class UsersService {
 
     await this.supabaseAdmin.setPassword(id, tempPassword);
     await this.prisma.auditLog.create({
-      data: { tenantId: target.tenantId, userId: actorId, action: "user.reset-password", entity: "User", entityId: id },
+      data: { tenantId: target.tenantId, userId: actorId, action: "user.reset-password", entity: "User", entityId: id, ip: currentIp() },
     });
     return { tempPassword };
   }
@@ -283,7 +283,7 @@ export class UsersService {
         this.prisma.user.delete({ where: { id } }),
         this.prisma.auditLog.create({
           data: {
-            tenantId: target.tenantId, userId: actorId, action: "user.delete", entity: "User", entityId: id,
+            tenantId: target.tenantId, userId: actorId, action: "user.delete", entity: "User", entityId: id, ip: currentIp(),
             metadata: { email: target.email, name: target.fullName, role: target.role },
           },
         }),

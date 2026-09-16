@@ -10,6 +10,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthUser, CurrentUser } from "../../common/decorators/current-user.decorator";
+import { currentIp } from "../../common/tenancy/tenant-context";
 
 export class CreateHomepageMediaDto {
   @IsEnum(HomepageMediaSection) section: HomepageMediaSection;
@@ -43,7 +44,7 @@ export class HomepageMediaService {
       },
     });
     await this.prisma.auditLog.create({
-      data: { tenantId: actorTenantId, userId: actorId, action: "homepage-media.upload", entity: "HomepageMedia", entityId: item.id },
+      data: { tenantId: actorTenantId, userId: actorId, action: "homepage-media.upload", entity: "HomepageMedia", entityId: item.id, ip: currentIp() },
     });
     return item;
   }
@@ -65,7 +66,7 @@ export class HomepageMediaService {
     if (!existing) throw new NotFoundException("Homepage media item not found");
     await this.prisma.homepageMedia.delete({ where: { id } });
     await this.prisma.auditLog.create({
-      data: { tenantId: actorTenantId, userId: actorId, action: "homepage-media.delete", entity: "HomepageMedia", entityId: id },
+      data: { tenantId: actorTenantId, userId: actorId, action: "homepage-media.delete", entity: "HomepageMedia", entityId: id, ip: currentIp() },
     });
     return { deleted: true };
   }

@@ -6,7 +6,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@educore/database";
 import { IsString } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -96,7 +96,7 @@ export class TeacherAssignmentsService {
       include: ASSIGNMENT_INCLUDE,
     });
     await this.prisma.auditLog.create({
-      data: { tenantId, userId: actorId, action: "teacherAssignment.assign", entity: "TeacherAssignment", entityId: assignment.id },
+      data: { tenantId, userId: actorId, action: "teacherAssignment.assign", entity: "TeacherAssignment", entityId: assignment.id, ip: currentIp() },
     });
     return assignment;
   }
@@ -110,7 +110,7 @@ export class TeacherAssignmentsService {
     if (existing.tenantId !== tenantId) throw new NotFoundException("Assignment not found");
     await this.prisma.teacherAssignment.delete({ where: { id } });
     await this.prisma.auditLog.create({
-      data: { tenantId, userId: actorId, action: "teacherAssignment.remove", entity: "TeacherAssignment", entityId: id },
+      data: { tenantId, userId: actorId, action: "teacherAssignment.remove", entity: "TeacherAssignment", entityId: id, ip: currentIp() },
     });
     return { deleted: true };
   }

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { AssetTransactionType, Prisma, Role } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import {
   AdjustStockDto, CreateAllocationDto, CreateAssetCategoryDto, CreateAssetItemDto, CreateLocationDto,
@@ -29,7 +29,7 @@ export class AssetsService {
 
   private async audit(user: AuthUser, action: string, entity: string, entityId: string, metadata?: Record<string, unknown>) {
     await this.prisma.auditLog.create({
-      data: { tenantId: currentTenant().tenantId, userId: user.id, action, entity, entityId, metadata: metadata as Prisma.InputJsonValue },
+      data: { tenantId: currentTenant().tenantId, userId: user.id, action, entity, entityId, ip: currentIp(), metadata: metadata as Prisma.InputJsonValue },
     });
   }
 
@@ -318,7 +318,7 @@ export class AssetsService {
       this.prisma.assetItem.update({ where: { id }, data: { totalQuantity: dto.newTotalQuantity, updatedById: user.id } }),
       this.prisma.auditLog.create({
         data: {
-          tenantId: currentTenant().tenantId, userId: user.id, action: "asset.item.adjust_stock", entity: "AssetItem", entityId: id,
+          tenantId: currentTenant().tenantId, userId: user.id, action: "asset.item.adjust_stock", entity: "AssetItem", entityId: id, ip: currentIp(),
           metadata: { previous: item.totalQuantity, next: dto.newTotalQuantity, reason: dto.reason },
         },
       }),

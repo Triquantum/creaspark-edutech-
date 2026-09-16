@@ -6,7 +6,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { EventCategory, Role } from "@educore/database";
 import { IsArray, IsDateString, IsEnum, IsOptional, IsString } from "class-validator";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -118,7 +118,7 @@ export class EventsService {
       },
     });
     await this.prisma.auditLog.create({
-      data: { tenantId, userId: actorId, action: "event.create", entity: "Event", entityId: event.id },
+      data: { tenantId, userId: actorId, action: "event.create", entity: "Event", entityId: event.id, ip: currentIp() },
     });
     return event;
   }
@@ -144,7 +144,7 @@ export class EventsService {
       },
     });
     await this.prisma.auditLog.create({
-      data: { tenantId: existing.tenantId, userId: actorId, action: "event.update", entity: "Event", entityId: id },
+      data: { tenantId: existing.tenantId, userId: actorId, action: "event.update", entity: "Event", entityId: id, ip: currentIp() },
     });
     return event;
   }
@@ -156,7 +156,7 @@ export class EventsService {
 
     await this.prisma.event.delete({ where: { id } });
     await this.prisma.auditLog.create({
-      data: { tenantId: existing.tenantId, userId: actorId, action: "event.delete", entity: "Event", entityId: id },
+      data: { tenantId: existing.tenantId, userId: actorId, action: "event.delete", entity: "Event", entityId: id, ip: currentIp() },
     });
     return { deleted: true };
   }

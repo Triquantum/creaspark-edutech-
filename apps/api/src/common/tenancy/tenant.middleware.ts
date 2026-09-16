@@ -4,6 +4,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { tenantStorage } from "./tenant-context";
 import { SupabaseJwtVerifier } from "../supabase/verify-jwt";
 import { verifySwitchToken } from "../auth/switch-context-token";
+import { clientIp } from "../http/client-ip";
 
 export interface ActiveGrantOverride {
   tenantId: string;
@@ -63,7 +64,7 @@ export class TenantMiddleware implements NestMiddleware {
         where: { id: tenantId }, select: { id: true, slug: true, status: true },
       });
       if (!tenant || tenant.status === "SUSPENDED") throw new NotFoundException("Unknown or suspended tenant");
-      return tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug, schoolId: activeGrant?.schoolId }, () => next());
+      return tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug, schoolId: activeGrant?.schoolId, ip: clientIp(req) }, () => next());
     }
 
     const slug = (req.headers["x-tenant"] as string | undefined)?.toLowerCase();
@@ -72,6 +73,6 @@ export class TenantMiddleware implements NestMiddleware {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true, slug: true, status: true } });
     if (!tenant || tenant.status === "SUSPENDED") throw new NotFoundException("Unknown or suspended tenant");
 
-    tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => next());
+    tenantStorage.run({ tenantId: tenant.id, tenantSlug: tenant.slug, ip: clientIp(req) }, () => next());
   }
 }

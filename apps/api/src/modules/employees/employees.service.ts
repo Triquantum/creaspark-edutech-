@@ -3,7 +3,7 @@ import { EmploymentType, Prisma, Role, SalaryPaidBy } from "@educore/database";
 import { randomBytes } from "crypto";
 import PDFDocument from "pdfkit";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateEmployeeDto, GrantDto, SalaryCertificateDto, SalarySlipDto, UpdateEmployeeDto } from "./employees.dto";
@@ -191,7 +191,7 @@ export class EmployeesService {
       const extra = (dto.grants ?? []).filter((g) => !(g.schoolId === dto.schoolId && g.role === dto.role));
       if (extra.length) await this.createExtraGrants(tx, u.id, tenantId, user.role === Role.SUPER_ADMIN, extra);
       await tx.auditLog.create({
-        data: { tenantId, userId: actorId, action: "employee.create", entity: "User", entityId: u.id },
+        data: { tenantId, userId: actorId, action: "employee.create", entity: "User", entityId: u.id, ip: currentIp() },
       });
       return u;
     }, { timeout: 20000 });
@@ -349,7 +349,7 @@ export class EmployeesService {
       }
 
       await tx.auditLog.create({
-        data: { tenantId, userId: actorId, action: "employee.update", entity: "User", entityId: id },
+        data: { tenantId, userId: actorId, action: "employee.update", entity: "User", entityId: id, ip: currentIp() },
       });
     }, { timeout: 20000 });
 
@@ -571,7 +571,7 @@ export class EmployeesService {
         this.prisma.user.delete({ where: { id } }),
         this.prisma.auditLog.create({
           data: {
-            tenantId, userId: actorId, action: "employee.delete", entity: "User", entityId: id,
+            tenantId, userId: actorId, action: "employee.delete", entity: "User", entityId: id, ip: currentIp(),
             metadata: { email: target.email, name: target.fullName },
           },
         }),

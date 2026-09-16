@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, Role, SalesActivityType, SalesFollowUpStatus, TaskStatus } from "@educore/database";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { TasksService } from "../tasks/tasks.module";
 import {
@@ -36,7 +36,7 @@ export class SalesService {
 
   private async audit(user: AuthUser, action: string, entity: string, entityId: string, metadata?: Record<string, unknown>) {
     await this.prisma.auditLog.create({
-      data: { tenantId: currentTenant().tenantId, userId: user.id, action, entity, entityId, metadata: metadata as Prisma.InputJsonValue },
+      data: { tenantId: currentTenant().tenantId, userId: user.id, action, entity, entityId, ip: currentIp(), metadata: metadata as Prisma.InputJsonValue },
     });
   }
 

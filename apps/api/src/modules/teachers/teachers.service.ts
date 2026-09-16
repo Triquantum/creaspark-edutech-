@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma, Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
-import { currentTenant } from "../../common/tenancy/tenant-context";
+import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
 import { SupabaseAdminService } from "../../common/supabase/supabase-admin.service";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { CreateTeacherDto, UpdateTeacherDto } from "./teachers.dto";
@@ -102,7 +102,7 @@ export class TeachersService {
         },
       });
       await tx.auditLog.create({
-        data: { tenantId, userId: actorId, action: "teacher.create", entity: "User", entityId: u.id },
+        data: { tenantId, userId: actorId, action: "teacher.create", entity: "User", entityId: u.id, ip: currentIp() },
       });
       return u;
     });
@@ -192,7 +192,7 @@ export class TeachersService {
         });
       }
       await tx.auditLog.create({
-        data: { tenantId, userId: actorId, action: "teacher.update", entity: "User", entityId: id },
+        data: { tenantId, userId: actorId, action: "teacher.update", entity: "User", entityId: id, ip: currentIp() },
       });
     });
     return this.findTeacher(id);
@@ -238,7 +238,7 @@ export class TeachersService {
         this.prisma.user.delete({ where: { id } }),
         this.prisma.auditLog.create({
           data: {
-            tenantId, userId: actorId, action: "teacher.delete", entity: "User", entityId: id,
+            tenantId, userId: actorId, action: "teacher.delete", entity: "User", entityId: id, ip: currentIp(),
             metadata: { email: target.email, name: target.fullName },
           },
         }),

@@ -6,6 +6,7 @@ import { SupabaseAdminService } from "../../common/supabase/supabase-admin.servi
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { signSwitchToken } from "../../common/auth/switch-context-token";
 import { RegisterSchoolDto, SwitchContextDto } from "./dto/login.dto";
+import { currentIp } from "../../common/tenancy/tenant-context";
 
 const LOGIN_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes — just long enough to pick an account and type a password
 
@@ -59,7 +60,7 @@ export class AuthService {
     if (!grant || grant.userId !== user.id || !grant.isActive) throw new NotFoundException("Grant not found");
     const token = signSwitchToken({ userId: user.id, grantId: grant.id });
     await this.prisma.auditLog.create({
-      data: { tenantId: grant.tenantId, userId: user.id, action: "auth.switch_context", entity: "UserAccess", entityId: grant.id },
+      data: { tenantId: grant.tenantId, userId: user.id, action: "auth.switch_context", entity: "UserAccess", entityId: grant.id, ip: currentIp() },
     });
     return { token, grant };
   }
@@ -103,7 +104,7 @@ export class AuthService {
         data: { id: authUser.id, tenantId: tenant.id, email, fullName: dto.adminFullName.trim(), role: Role.SCHOOL_ADMIN },
       });
       await this.prisma.auditLog.create({
-        data: { tenantId: tenant.id, userId: user.id, action: "tenant.register", entity: "Tenant", entityId: tenant.id },
+        data: { tenantId: tenant.id, userId: user.id, action: "tenant.register", entity: "Tenant", entityId: tenant.id, ip: currentIp() },
       });
       return { tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name } };
     } catch (err) {
