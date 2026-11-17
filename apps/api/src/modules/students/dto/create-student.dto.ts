@@ -17,7 +17,17 @@ export class QueryStudentsDto {
   @IsOptional() @IsString() sectionId?: string;
   @IsOptional() @IsString() cursor?: string;
   @IsOptional() @IsString() schoolId?: string;
-  @IsOptional() @IsIn(["name", "admissionNo", "class", "school"]) sortBy?: "name" | "admissionNo" | "class" | "school";
+  @IsOptional() @IsIn(["name", "fullName", "admissionNo", "registerNo", "class", "school"])
+  sortBy?: "name" | "fullName" | "admissionNo" | "registerNo" | "class" | "school";
+  @IsOptional() @IsIn(["asc", "desc"]) sortDir?: "asc" | "desc";
+  /** Presence of `page` switches the list to numbered pagination (page/
+   * pageSize/totalPages in the response) instead of the cursor mode that the
+   * pickers (topbar search, attendance roster, ...) still use. */
+  @IsOptional() @IsString() page?: string;
+  @IsOptional() @IsString() pageSize?: string;
+  @IsOptional() @IsString() classId?: string;
+  /** Comma/space/newline-separated admission numbers; matches any of them. */
+  @IsOptional() @IsString() admissionNos?: string;
   /** "true" restricts to status: ACTIVE — used by pickers/search (topbar,
    * attendance roster, parent registration) so inactive/transferred/alumni
    * students don't show up as selectable. The full People Directory list

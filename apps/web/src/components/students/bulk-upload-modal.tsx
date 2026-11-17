@@ -10,7 +10,10 @@ interface ParsedRow {
   admissionNo: string; firstName: string; lastName: string;
   gender?: string; dob?: string; className?: string; sectionName?: string;
 }
-interface BulkResult { created: number; updated: number; errors: { row: number; admissionNo: string; message: string }[] }
+export interface BulkResult {
+  created: number; updated: number; total: number; schoolName: string;
+  errors: { row: number; admissionNo: string; message: string }[];
+}
 
 const TEMPLATE_HEADERS = ["Admission No", "First Name", "Last Name", "Gender", "Date of Birth (YYYY-MM-DD)", "Class", "Division"];
 
@@ -65,7 +68,7 @@ function parseWorkbook(file: File): Promise<ParsedRow[]> {
 }
 
 export function BulkUploadModal({ schools, onClose, onDone }: {
-  schools: SchoolOpt[]; onClose: () => void; onDone: () => void;
+  schools: SchoolOpt[]; onClose: () => void; onDone: (result: BulkResult) => void;
 }) {
   const [schoolId, setSchoolId] = useState("");
   // `schools` is still fetching when this modal can mount, so seeding
@@ -169,9 +172,20 @@ export function BulkUploadModal({ schools, onClose, onDone }: {
 
         {result && (
           <div className="rounded-xl border border-success/30 bg-success/5 p-4 text-sm">
-            <p className="font-medium text-night dark:text-white">
-              {result.created} created, {result.updated} updated{result.errors.length ? `, ${result.errors.length} failed` : ""}.
-            </p>
+            <p className="font-medium text-night dark:text-white">Upload complete — {result.schoolName}</p>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                ["Newly uploaded", result.created],
+                ["Existing (updated)", result.updated],
+                ["Failed", result.errors.length],
+                ["Total students now", result.total],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-white/60 p-3 dark:bg-white/5">
+                  <p className="text-xs text-slate-400">{label}</p>
+                  <p className="mt-0.5 text-lg font-semibold text-night dark:text-white">{Number(value).toLocaleString("en-IN")}</p>
+                </div>
+              ))}
+            </div>
             {result.errors.length > 0 && (
               <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-danger">
                 {result.errors.map((e) => (
@@ -183,7 +197,7 @@ export function BulkUploadModal({ schools, onClose, onDone }: {
         )}
 
         <div className="flex justify-end gap-3 pt-1">
-          <Button type="button" variant="ghost" onClick={result ? onDone : onClose}>{result ? "Close" : "Cancel"}</Button>
+          <Button type="button" variant="ghost" onClick={result ? () => onDone(result) : onClose}>{result ? "Close" : "Cancel"}</Button>
           {!result && (
             <Button type="button" onClick={upload} disabled={uploading || rows.length === 0 || !schoolId}>
               {uploading ? "Uploading…" : `Upload ${rows.length || ""} student${rows.length === 1 ? "" : "s"}`}

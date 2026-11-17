@@ -1,11 +1,13 @@
 "use client";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal, ConfirmDialog, RowActions, Field, inputCls } from "@/components/ui/modal";
-import { BulkUploadModal } from "@/components/students/bulk-upload-modal";
+import { BulkUploadModal, type BulkResult } from "@/components/students/bulk-upload-modal";
+import { Pagination } from "@/components/ui/pagination";
+import { StatCard } from "@/components/ui/stat-card";
 
 interface StudentRow {
   id: string; admissionNo: string; registerNo: string; firstName: string; lastName: string;
@@ -22,6 +24,27 @@ interface StudentDetail extends StudentRow {
 interface SectionOpt { id: string; label: string; schoolId: string }
 interface SchoolOpt { id: string; name: string; tenantName?: string }
 interface Me { role: string }
+interface ClassOpt { id: string; name: string; schoolId: string; schoolName: string; sections: { id: string; name: string }[] }
+interface StudentPage {
+  items: StudentRow[]; total: number; matched: number; recentlyAdded: number; recentDays: number;
+  page: number; pageSize: number; totalPages: number;
+}
+type SortKey = "fullName" | "admissionNo" | "registerNo" | "class";
+const SORT_LABELS: Record<SortKey, string> = {
+  admissionNo: "Admission no.", registerNo: "Register no.", fullName: "Name", class: "Class",
+};
+const countNumbers = (raw: string) => raw.split(/[\s,;]+/).filter(Boolean).length;
+
+function SortableTh({ label, active, dir, onClick }: { label: string; active: boolean; dir: "asc" | "desc"; onClick: () => void }) {
+  return (
+    <th className="px-4 py-3 font-medium" aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={onClick} className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-night dark:hover:text-white">
+        {label}
+        <span aria-hidden className={active ? "text-primary" : "text-slate-300"}>{active ? (dir === "asc" ? "▲" : "▼") : "↕"}</span>
+      </button>
+    </th>
+  );
+}
 
 function StudentDialog({ mode, initial, schools, sections, onClose, onSaved }: {
   mode: "add" | "edit"; initial?: StudentRow; schools: SchoolOpt[]; sections: SectionOpt[];
@@ -274,25 +297,76 @@ function StudentsPageInner() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const [schoolIdFilter, setSchoolIdFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [sortBy, setSortBy] = useState<SortKey>("admissionNo");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [classes, setClasses] = useState<ClassOpt[]>([]);
+  const [classId, setClassId] = useState("");
+  const [sectionId, setSectionId] = useState("");
+  const [admissionNos, setAdmissionNos] = useState("");
+  const [admissionDraft, setAdmissionDraft] = useState("");
+  const [admissionPanelOpen, setAdmissionPanelOpen] = useState(false);
+  const [meta, setMeta] = useState<Pick<StudentPage, "total" | "matched" | "recentlyAdded" | "recentDays" | "totalPages"> | null>(null);
+  const [lastUpload, setLastUpload] = useState<BulkResult | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   const load = useCallback(() => {
     setState("loading");
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), sortBy, sortDir });
     if (q) params.set("q", q);
     if (schoolIdFilter) params.set("schoolId", schoolIdFilter);
-    const qs = params.toString() ? `?${params.toString()}` : "";
-    api<{ items: StudentRow[] }>(`/students${qs}`)
-      .then((r) => { setRows(r.items); setSelected(new Set()); setState("ready"); })
+    if (classId) params.set("classId", classId);
+    if (sectionId) params.set("sectionId", sectionId);
+    if (admissionNos) params.set("admissionNos", admissionNos);
+    api<StudentPage>(`/students?${params.toString()}`)
+      .then((r) => {
+        // Filtering or deleting can leave the current page beyond the new last page.
+        if (r.page > r.totalPages) { setPage(r.totalPages); return; }
+        setRows(r.items); setMeta(r); setSelected(new Set()); setState("ready");
+      })
       .catch(() => setState("error"));
-  }, [q, schoolIdFilter]);
+    // reloadTick only exists to force a refetch when no other dependency changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, schoolIdFilter, classId, sectionId, admissionNos, page, pageSize, sortBy, sortDir, reloadTick]);
 
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
   useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
   useEffect(() => { api<SectionOpt[]>("/academic/sections").then(setSections).catch(() => setSections([])); }, []);
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
+  useEffect(() => {
+    const qs = schoolIdFilter ? `?schoolId=${encodeURIComponent(schoolIdFilter)}` : "";
+    api<{ classes: ClassOpt[] }>(`/students/filter-options${qs}`).then((r) => setClasses(r.classes)).catch(() => setClasses([]));
+  }, [schoolIdFilter]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
   const isSuperAdmin = me?.role === "SUPER_ADMIN" || me?.role === "ORG_ADMIN";
+
+  const sortedClasses = useMemo(
+    () => [...classes].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }) || a.schoolName.localeCompare(b.schoolName)),
+    [classes],
+  );
+  const multiSchool = new Set(classes.map((c) => c.schoolId)).size > 1;
+  const divisions = sortedClasses.find((c) => c.id === classId)?.sections ?? [];
+  const filtersActive = Boolean(q.trim() || classId || sectionId || admissionNos);
+  const admissionCount = countNumbers(admissionNos);
+
+  function toggleSort(key: SortKey) {
+    if (sortBy === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortBy(key); setSortDir("asc"); }
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setQ(""); setClassId(""); setSectionId(""); setAdmissionNos(""); setAdmissionDraft("");
+    setAdmissionPanelOpen(false); setPage(1);
+  }
+
+  function applyAdmissionNos() {
+    setAdmissionNos(admissionDraft.trim());
+    setAdmissionPanelOpen(false);
+    setPage(1);
+  }
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -352,21 +426,102 @@ function StudentsPageInner() {
         </div>
       </div>
 
+      {meta && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="Total students" value={meta.total.toLocaleString("en-IN")} />
+          <StatCard label={`Added in the last ${meta.recentDays} days`} value={meta.recentlyAdded.toLocaleString("en-IN")} />
+          <StatCard
+            label={filtersActive ? "Matching current filters" : "Showing all students"}
+            value={meta.matched.toLocaleString("en-IN")}
+          />
+        </div>
+      )}
+
+      {lastUpload && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-success/30 bg-success/5 px-4 py-3 text-sm">
+          <p className="text-slate-600 dark:text-slate-300">
+            <span className="font-medium text-night dark:text-white">Last upload ({lastUpload.schoolName}): </span>
+            {lastUpload.created.toLocaleString("en-IN")} newly uploaded · {lastUpload.updated.toLocaleString("en-IN")} existing updated
+            {lastUpload.errors.length > 0 && ` · ${lastUpload.errors.length} failed`} · {lastUpload.total.toLocaleString("en-IN")} students in the school now
+          </p>
+          <button type="button" onClick={() => setLastUpload(null)} className="text-xs font-medium text-primary hover:underline">Dismiss</button>
+        </div>
+      )}
+
       <Card className="p-0 overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 dark:border-white/5 p-4">
           <input
-            value={q} onChange={(e) => setQ(e.target.value)}
+            value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }}
             placeholder="Search by name or admission no." aria-label="Search students"
             className="h-10 w-full max-w-sm rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
           {isSuperAdmin && (
-            <select value={schoolIdFilter} onChange={(e) => setSchoolIdFilter(e.target.value)} aria-label="Filter by school"
+            <select value={schoolIdFilter}
+              onChange={(e) => { setSchoolIdFilter(e.target.value); setClassId(""); setSectionId(""); setPage(1); }}
+              aria-label="Filter by school"
               className="h-10 max-w-xs rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20">
               <option value="">All schools</option>
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}{s.tenantName ? ` — ${s.tenantName}` : ""}</option>)}
             </select>
           )}
+          <select value={classId} onChange={(e) => { setClassId(e.target.value); setSectionId(""); setPage(1); }} aria-label="Filter by class"
+            className="h-10 max-w-[12rem] rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20">
+            <option value="">All classes</option>
+            {sortedClasses.map((c) => <option key={c.id} value={c.id}>{multiSchool ? `${c.name} (${c.schoolName})` : c.name}</option>)}
+          </select>
+          <select value={sectionId} onChange={(e) => { setSectionId(e.target.value); setPage(1); }} aria-label="Filter by division"
+            disabled={!classId}
+            className="h-10 max-w-[10rem] rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50">
+            <option value="">{classId ? "All divisions" : "Pick a class first"}</option>
+            {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <button type="button" onClick={() => { setAdmissionDraft(admissionNos); setAdmissionPanelOpen((o) => !o); }}
+            aria-expanded={admissionPanelOpen}
+            className={`h-10 rounded-xl border px-4 text-sm transition-colors ${admissionNos
+              ? "border-primary bg-primary/5 font-medium text-primary"
+              : "border-slate-200 text-slate-600 hover:bg-surface dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"}`}>
+            Admission nos.{admissionCount > 0 ? ` (${admissionCount})` : ""}
+          </button>
+
+          <div className="ml-auto flex items-center gap-2">
+            <label htmlFor="student-sort" className="text-xs text-slate-400">Sort by</label>
+            <select id="student-sort" value={sortBy} onChange={(e) => { setSortBy(e.target.value as SortKey); setPage(1); }}
+              className="h-10 rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20">
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
+            </select>
+            <button type="button" onClick={() => { setSortDir((d) => (d === "asc" ? "desc" : "asc")); setPage(1); }}
+              aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
+              className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-600 hover:bg-surface dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">
+              {sortDir === "asc" ? "A → Z" : "Z → A"}
+            </button>
+            {filtersActive && (
+              <button type="button" onClick={clearFilters} className="px-2 text-sm font-medium text-primary hover:underline">Clear filters</button>
+            )}
+          </div>
         </div>
+
+        {admissionPanelOpen && (
+          <div className="space-y-2 border-b border-slate-100 bg-surface/50 p-4 dark:border-white/5 dark:bg-white/[0.02]">
+            <label htmlFor="admission-filter" className="block text-xs font-medium text-slate-500">
+              Paste admission numbers — separated by commas, spaces or one per line
+            </label>
+            <textarea id="admission-filter" rows={4} value={admissionDraft} onChange={(e) => setAdmissionDraft(e.target.value)}
+              placeholder={"ADM-1001\nADM-1002, ADM-1010"}
+              className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 font-mono text-xs outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-white/10" />
+            <div className="flex items-center gap-2">
+              <Button type="button" onClick={applyAdmissionNos}>Apply</Button>
+              <Button type="button" variant="ghost" onClick={() => { setAdmissionDraft(""); setAdmissionNos(""); setAdmissionPanelOpen(false); setPage(1); }}>Clear</Button>
+              <span className="text-xs text-slate-400">{countNumbers(admissionDraft)} number{countNumbers(admissionDraft) === 1 ? "" : "s"} (max 500)</span>
+            </div>
+          </div>
+        )}
+
+        {admissionCount > 0 && meta && state === "ready" && (
+          <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-white/5">
+            Found {meta.matched.toLocaleString("en-IN")} of {admissionCount.toLocaleString("en-IN")} admission number{admissionCount === 1 ? "" : "s"}
+            {meta.matched < admissionCount && " — the rest don't exist (or are hidden by another filter)."}
+          </p>
+        )}
 
         {state === "error" && (
           <p className="p-6 text-sm text-slate-500">
@@ -374,7 +529,7 @@ function StudentsPageInner() {
           </p>
         )}
         {state === "ready" && rows.length === 0 && (
-          <p className="p-6 text-sm text-slate-500">{q.trim() ? "No students match this search." : "No students yet."}</p>
+          <p className="p-6 text-sm text-slate-500">{filtersActive ? "No students match these filters." : "No students yet."}</p>
         )}
 
         {rows.length > 0 && (
@@ -388,11 +543,11 @@ function StudentsPageInner() {
                     onChange={toggleSelectAll}
                   />
                 </th>
-                <th className="px-4 py-3 font-medium">Admission no.</th>
-                <th className="px-4 py-3 font-medium">Register no.</th>
-                <th className="px-4 py-3 font-medium">Name</th>
+                {(["admissionNo", "registerNo", "fullName"] as SortKey[]).map((k) => (
+                  <SortableTh key={k} label={SORT_LABELS[k]} active={sortBy === k} dir={sortDir} onClick={() => toggleSort(k)} />
+                ))}
                 {isSuperAdmin && <th className="px-4 py-3 font-medium">School</th>}
-                <th className="px-4 py-3 font-medium">Class</th>
+                <SortableTh label={SORT_LABELS.class} active={sortBy === "class"} dir={sortDir} onClick={() => toggleSort("class")} />
                 <th className="px-4 py-3 font-medium">Primary guardian</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -426,6 +581,14 @@ function StudentsPageInner() {
             </tbody>
           </table>
         )}
+
+        {meta && (
+          <Pagination
+            page={page} totalPages={meta.totalPages} pageSize={pageSize} matched={meta.matched}
+            onPage={setPage}
+            onPageSize={(n) => { setPageSize(n); setPage(1); }}
+          />
+        )}
       </Card>
 
       {dialog && (
@@ -443,7 +606,15 @@ function StudentsPageInner() {
         <BulkUploadModal
           schools={schools}
           onClose={() => setBulkUploadOpen(false)}
-          onDone={() => { setBulkUploadOpen(false); setToast("Bulk upload complete"); setQ(""); load(); }}
+          onDone={(result) => {
+            setBulkUploadOpen(false);
+            setLastUpload(result);
+            setToast(`Bulk upload complete — ${result.created} new, ${result.updated} existing updated`);
+            // Newest first, so the freshly uploaded students are right at the top (register no. is assigned in creation order).
+            clearFilters();
+            setSortBy("registerNo"); setSortDir("desc");
+            setReloadTick((t) => t + 1);
+          }}
         />
       )}
       {deleting && (

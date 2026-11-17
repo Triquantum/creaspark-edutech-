@@ -23,6 +23,12 @@ export class StudentsController {
     return this.students.list(user, query);
   }
 
+  @Get("filter-options")
+  @Roles(Role.SUPER_ADMIN, Role.ORG_ADMIN, Role.SCHOOL_ADMIN, Role.PRINCIPAL, Role.TEACHER, Role.COORDINATOR, Role.RECEPTION, Role.ACADEMIC_ADMIN, Role.FINANCE_HR_ADMIN)
+  filterOptions(@CurrentUser() user: AuthUser, @Query("schoolId") schoolId?: string) {
+    return this.students.filterOptions(user, schoolId);
+  }
+
   /** No @Roles: every student a STUDENT/PARENT account may view — powers the
    * frontend child picker. activeOnly: a suspended/transferred child's own
    * records are still reachable directly, just not offered as a fresh pick. */

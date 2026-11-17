@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { Role } from "@educore/database";
+import { Prisma, Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { currentTenant, currentIp } from "../../common/tenancy/tenant-context";
@@ -8,6 +8,21 @@ import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { BulkUpsertStudentsDto, CreateStudentDto, QueryStudentsDto, UpdateStudentDto } from "./dto/create-student.dto";
 
 const PAGE = 25;
+const MAX_PAGE_SIZE = 100;
+const RECENT_DAYS = 7;
+const MAX_ADMISSION_FILTER = 500;
+
+/** "ADM-1, adm-2\nADM-3" -> ["ADM-1", "adm-2", "ADM-3"] (de-duplicated, capped). */
+function parseAdmissionNos(raw?: string): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  for (const part of raw.split(/[\s,;]+/)) {
+    const v = part.trim();
+    if (v) seen.add(v);
+    if (seen.size >= MAX_ADMISSION_FILTER) break;
+  }
+  return Array.from(seen);
+}
 
 @Injectable()
 export class StudentsService {
@@ -39,23 +54,31 @@ export class StudentsService {
   /** Defaults to admissionNo — the school's own roll order — since that's
    * what admins scan for day to day; the other options cover the People
    * Directory's explicit sort picker. */
-  private studentOrderBy(sortBy?: QueryStudentsDto["sortBy"]) {
+  private studentOrderBy(sortBy?: QueryStudentsDto["sortBy"], dir: "asc" | "desc" = "asc"): Prisma.StudentOrderByWithRelationInput[] {
+    // `id` is the final tie-breaker so numbered pages stay stable when sort keys repeat.
     switch (sortBy) {
-      case "name": return [{ lastName: "asc" as const }, { firstName: "asc" as const }];
-      case "class": return { section: { class: { name: "asc" as const } } };
-      case "school": return { school: { name: "asc" as const } };
+      case "name": return [{ lastName: dir }, { firstName: dir }, { id: "asc" }];
+      case "fullName": return [{ firstName: dir }, { lastName: dir }, { id: "asc" }];
+      case "registerNo": return [{ registerNo: dir }, { id: "asc" }];
+      case "class": return [{ section: { class: { name: dir } } }, { section: { name: dir } }, { admissionNo: "asc" }, { id: "asc" }];
+      case "school": return [{ school: { name: dir } }, { admissionNo: "asc" }, { id: "asc" }];
       case "admissionNo":
       default:
-        return { admissionNo: "asc" as const };
+        return [{ admissionNo: dir }, { id: "asc" }];
     }
   }
 
   async list(user: AuthUser, query: QueryStudentsDto) {
     const scope = await this.readScope(user, query.schoolId);
-    const where = {
+    const admissionNos = parseAdmissionNos(query.admissionNos);
+    const where: Prisma.StudentWhereInput = {
       ...(scope.tenantId && { tenantId: scope.tenantId }),
       ...(scope.schoolId && { schoolId: scope.schoolId }),
       ...(query.sectionId && { sectionId: query.sectionId }),
+      ...(query.classId && { section: { classId: query.classId } }),
+      ...(admissionNos.length > 0 && {
+        AND: [{ OR: admissionNos.map((n) => ({ admissionNo: { equals: n, mode: "insensitive" as const } })) }],
+      }),
       ...(query.activeOnly === "true" && { status: "ACTIVE" as const }),
       ...(query.q && {
         OR: [
@@ -66,18 +89,44 @@ export class StudentsService {
         ],
       }),
     };
+    const scopeWhere: Prisma.StudentWhereInput = {
+      ...(scope.tenantId && { tenantId: scope.tenantId }),
+      ...(scope.schoolId && { schoolId: scope.schoolId }),
+    };
+    const include = {
+      section: { include: { class: true } }, guardians: { where: { isPrimary: true } },
+      school: { select: { name: true } },
+    } satisfies Prisma.StudentInclude;
+    const orderBy = this.studentOrderBy(query.sortBy, query.sortDir);
+
+    // Numbered pagination: opted into by sending `page`. `total` keeps its
+    // meaning (every student in scope) because the dashboard reads it;
+    // `matched` is the count after the filters, which drives the page count.
+    if (query.page !== undefined) {
+      const page = Math.max(1, parseInt(query.page, 10) || 1);
+      const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(query.pageSize ?? "", 10) || PAGE));
+      const since = new Date(Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000);
+      const [items, matched, total, recentlyAdded] = await Promise.all([
+        this.prisma.student.findMany({ where, orderBy, include, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.student.count({ where }),
+        this.prisma.student.count({ where: scopeWhere }),
+        this.prisma.student.count({ where: { ...scopeWhere, createdAt: { gte: since } } }),
+      ]);
+      return {
+        items, nextCursor: null, total, matched, recentlyAdded, recentDays: RECENT_DAYS,
+        page, pageSize, totalPages: Math.max(1, Math.ceil(matched / pageSize)),
+      };
+    }
+
     const [items, total] = await Promise.all([
       this.prisma.student.findMany({
         where,
         take: PAGE + 1,
         ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
-        orderBy: this.studentOrderBy(query.sortBy),
-        include: {
-          section: { include: { class: true } }, guardians: { where: { isPrimary: true } },
-          school: { select: { name: true } },
-        },
+        orderBy,
+        include,
       }),
-      this.prisma.student.count({ where: { ...(scope.tenantId && { tenantId: scope.tenantId }), ...(scope.schoolId && { schoolId: scope.schoolId }) } }),
+      this.prisma.student.count({ where: scopeWhere }),
     ]);
     const nextCursor = items.length > PAGE ? items.pop()!.id : null;
     return { items, nextCursor, total };
@@ -99,6 +148,25 @@ export class StudentsService {
       throw new NotFoundException("Student not found");
     }
     return student;
+  }
+
+  /** Classes + divisions for the list's filter dropdowns. Deliberately not
+   * narrowed to a teacher's assigned classes (unlike /academic/classes): the
+   * student list itself is tenant-wide for teachers, so its filters must be too. */
+  async filterOptions(user: AuthUser, schoolId?: string) {
+    const scope = await this.readScope(user, schoolId);
+    const classes = await this.prisma.class.findMany({
+      where: {
+        ...(scope.tenantId && { tenantId: scope.tenantId }),
+        ...(scope.schoolId && { schoolId: scope.schoolId }),
+      },
+      select: {
+        id: true, name: true, schoolId: true, school: { select: { name: true } },
+        sections: { select: { id: true, name: true }, orderBy: { name: "asc" } },
+      },
+      orderBy: { name: "asc" },
+    });
+    return { classes: classes.map(({ school, ...c }) => ({ ...c, schoolName: school.name })) };
   }
 
   async create(dto: CreateStudentDto, user: AuthUser, actorId: string) {
@@ -259,7 +327,8 @@ export class StudentsService {
       },
     });
 
-    return { created, updated, errors };
+    const total = await this.prisma.student.count({ where: { schoolId: dto.schoolId } });
+    return { created, updated, errors, total, schoolName: school.name };
   }
 
   /**
