@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -310,27 +310,38 @@ function StudentsPageInner() {
   const [meta, setMeta] = useState<Pick<StudentPage, "total" | "matched" | "recentlyAdded" | "recentDays" | "totalPages"> | null>(null);
   const [lastUpload, setLastUpload] = useState<BulkResult | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  // Only the search box needs a delay; dropdowns/sort/pages should apply at once.
+  const [debouncedQ, setDebouncedQ] = useState(q);
+  const inFlight = useRef<AbortController | null>(null);
 
   const load = useCallback(() => {
+    // A newer filter change supersedes the previous request, so a slow earlier
+    // response can never land after (and overwrite) the one the user is waiting for.
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
     setState("loading");
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), sortBy, sortDir });
-    if (q) params.set("q", q);
+    if (debouncedQ) params.set("q", debouncedQ);
     if (schoolIdFilter) params.set("schoolId", schoolIdFilter);
     if (classId) params.set("classId", classId);
     if (sectionId) params.set("sectionId", sectionId);
     if (admissionNos) params.set("admissionNos", admissionNos);
-    api<StudentPage>(`/students?${params.toString()}`)
+    api<StudentPage>(`/students?${params.toString()}`, { signal: controller.signal })
       .then((r) => {
+        if (controller.signal.aborted) return;
         // Filtering or deleting can leave the current page beyond the new last page.
         if (r.page > r.totalPages) { setPage(r.totalPages); return; }
         setRows(r.items); setMeta(r); setSelected(new Set()); setState("ready");
       })
-      .catch(() => setState("error"));
+      .catch(() => { if (!controller.signal.aborted) setState("error"); });
     // reloadTick only exists to force a refetch when no other dependency changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, schoolIdFilter, classId, sectionId, admissionNos, page, pageSize, sortBy, sortDir, reloadTick]);
+  }, [debouncedQ, schoolIdFilter, classId, sectionId, admissionNos, page, pageSize, sortBy, sortDir, reloadTick]);
 
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const t = setTimeout(() => setDebouncedQ(q), 300); return () => clearTimeout(t); }, [q]);
+  useEffect(() => () => inFlight.current?.abort(), []);
   useEffect(() => { api<SchoolOpt[]>("/academic/schools").then(setSchools).catch(() => setSchools([])); }, []);
   useEffect(() => { api<SectionOpt[]>("/academic/sections").then(setSections).catch(() => setSections([])); }, []);
   useEffect(() => { api<Me>("/auth/me").then(setMe).catch(() => setMe(null)); }, []);
@@ -358,7 +369,7 @@ function StudentsPageInner() {
   }
 
   function clearFilters() {
-    setQ(""); setClassId(""); setSectionId(""); setAdmissionNos(""); setAdmissionDraft("");
+    setQ(""); setDebouncedQ(""); setClassId(""); setSectionId(""); setAdmissionNos(""); setAdmissionDraft("");
     setAdmissionPanelOpen(false); setPage(1);
   }
 
@@ -532,8 +543,9 @@ function StudentsPageInner() {
           <p className="p-6 text-sm text-slate-500">{filtersActive ? "No students match these filters." : "No students yet."}</p>
         )}
 
+        {state === "loading" && <div role="progressbar" aria-label="Loading students" className="h-0.5 w-full animate-pulse bg-primary/70" />}
         {rows.length > 0 && (
-          <table className="w-full text-sm">
+          <table aria-busy={state === "loading"} className={`w-full text-sm transition-opacity ${state === "loading" ? "opacity-50" : ""}`}>
             <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
               <tr className="border-b border-slate-100 dark:border-white/5">
                 <th className="w-10 px-4 py-3 font-medium">
