@@ -56,7 +56,7 @@ export class StudentsController {
   }
 
   @Post("bulk")
-  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION, Role.ACADEMIC_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.SCHOOL_ADMIN, Role.RECEPTION, Role.ACADEMIC_ADMIN, Role.TEACHER)
   bulkUpsert(@Body() dto: BulkUpsertStudentsDto, @CurrentUser() user: AuthUser) {
     return this.students.bulkUpsert(dto, user, user.id);
   }

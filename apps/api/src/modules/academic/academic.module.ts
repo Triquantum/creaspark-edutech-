@@ -82,8 +82,13 @@ export class AcademicService {
       return rows.map((r) => ({ id: r.id, name: r.name, code: r.code, institutionType: r.institutionType, tenantName: r.tenant.name }));
     }
     const { tenantId } = currentTenant();
+    // A teacher belongs to one school; if it can't be determined, fall back to
+    // the tenant list rather than an empty picker (writes are still guarded server-side).
+    const ownSchoolId = user.role === Role.TEACHER
+      ? user.schoolId ?? (await this.prisma.staffProfile.findUnique({ where: { userId: user.id }, select: { schoolId: true } }))?.schoolId
+      : undefined;
     return this.prisma.school.findMany({
-      where: { tenantId, tenant: { status: { not: "SUSPENDED" } } },
+      where: { tenantId, tenant: { status: { not: "SUSPENDED" } }, ...(ownSchoolId && { id: ownSchoolId }) },
       select: { id: true, name: true, code: true, institutionType: true }, orderBy: { name: "asc" },
     });
   }

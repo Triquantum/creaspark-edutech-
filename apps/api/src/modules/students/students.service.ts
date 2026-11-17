@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@educore/database";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -197,6 +197,14 @@ export class StudentsService {
     const { tenantId } = await this.resolveTenant(user, dto.schoolId);
     const school = await this.prisma.school.findFirst({ where: { id: dto.schoolId, tenantId } });
     if (!school) throw new NotFoundException("School not found in this tenant");
+
+    if (user.role === Role.TEACHER) {
+      const ownSchoolId = user.schoolId
+        ?? (await this.prisma.staffProfile.findUnique({ where: { userId: user.id }, select: { schoolId: true } }))?.schoolId;
+      if (ownSchoolId !== dto.schoolId) {
+        throw new ForbiddenException("Teachers can only upload students to their own school");
+      }
+    }
 
     const sectionCache = new Map<string, string | null>();
     const resolveSectionId = async (className?: string, sectionName?: string): Promise<string | null> => {
